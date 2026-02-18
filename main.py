@@ -1,0 +1,1 @@
+print("Personal Ai is Starting...")
