@@ -1,18 +1,19 @@
+import asyncio
 from ceo import CEO
 
-def main():
-    print("Personal Ai is Starting...")
+async def main():
+    print("Personal AI is Starting...")
     ceo = CEO()
 
     while True:
-        user_input = input("you: ")
+        user_input = input("You: ")
 
         if user_input.lower() in ["exit", "quit"]:
-            print("Exiting Personal Ai.")
+            print("Exiting Personal AI.")
             break
 
-        response = ceo.receive_command(user_input)
-        print("AI: ", response)
+        response = await ceo.receive_command(user_input)
+        print("AI:", response)
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
