@@ -10,29 +10,34 @@ class CEO:
         print("[system] CEO Initialized")
 
     def receive_command(self, command: str):
-        intent = self.process_command(command)           # intent means goal or purpose behind action
-        response = self.generate_response(intent, command)
+        intent = self.detect_intent(command)
+        response = self.route_task(intent, command)
         return response
-
-    def process_command(self, command: str):
-        command = command.lower()
-
-        if "write" in command:
-            return "writing"
-        
-        elif "research" in command:
-            return "research"
-        
-        else:
-            return "general"
-        
-    def generate_response(self, intent, command):
+    
+    def route_task(self, intent, command):
 
         if intent in self.workers:
             worker = self.workers[intent]
             return worker.execute(command)
 
-        return "General Command Received"
+        return self.fallback_response(command)
+    
+    def fallback_response(self, command):        # Fallback = Backup plan - Jab main system fail ho jaye, tab use hone wala option 
+        return f"No suitable worker found for: {command}"
+        
+    def detect_intent(self, command: str):
+        command = command.lower()
 
+        routing_rules = {
+            "writing": ["write", "blog", "content", "article"],
+            "research": ["research", "find", "search", "info"]
+        }
+        for intent, keywords in routing_rules.items():
+            for keyword in keywords:
+                if keyword in command:
+                    return intent
+
+        return "general"
+        
         
 # print(CEO())
