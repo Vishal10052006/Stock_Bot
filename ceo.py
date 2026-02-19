@@ -1,5 +1,12 @@
+from workers.writing_worker import WritingWorker
+from workers.research_worker import ResearchWorker
+
 class CEO:
     def __init__(self):
+        self.workers = {
+            "writing": WritingWorker(),
+            "research": ResearchWorker()
+        }
         print("[system] CEO Initialized")
 
     def receive_command(self, command: str):
@@ -11,7 +18,7 @@ class CEO:
         command = command.lower()
 
         if "write" in command:
-            return "wrting"
+            return "writing"
         
         elif "research" in command:
             return "research"
@@ -20,13 +27,12 @@ class CEO:
             return "general"
         
     def generate_response(self, intent, command):
-        if intent == "writing":
-            return "Detected Writing Task."
-        
-        elif intent == "research":
-            return "Detected Research Task."
-        
-        else:
-            return "General Command Received"
+
+        if intent in self.workers:
+            worker = self.workers[intent]
+            return worker.execute(command)
+
+        return "General Command Received"
+
         
 # print(CEO())
