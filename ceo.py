@@ -2,6 +2,8 @@ from workers.writing_worker import WritingWorker
 from workers.research_worker import ResearchWorker
 import asyncio
 from memory.session_memory import SessionMemory
+from utils.formatter import format_success, format_error
+from utils.logger import log
 
 class CEO:
     def __init__(self):
@@ -13,19 +15,22 @@ class CEO:
         print("[system] CEO Initialized")
 
     async def receive_command(self, command: str):
+        try:
+            if command.lower() in ["expand it", "continue", "elaborate"]:
+                last = self.memory.get_last_interaction()
+                if last:
+                    command = last["command"] + " (expanded)"
 
-        if command.lower() in ["expand it", "continue", "elaborate"]:
-            last = self.memory.get_last_interaction()
-            if last:
-                command = last["command"] + " (expanded)"
+            intents = self.detect_multiple_intents(command)
+            response = await self.route_task(intents, command)
 
-        intents = self.detect_multiple_intents(command)
-        response = await self.route_tasks(intents, command)
+            self.memory.add_interaction(command, response)
 
-        # Store interaction
-        self.memory.add_interaction(command, response)
+            return response
 
-        return response
+        except Exception as e:
+            log(f"ERROR: {str(e)}")
+            return format_error("Unexpected system failure.")
     
     def detect_multiple_intents(self, command: str):
         command = command.lower()
@@ -64,14 +69,15 @@ class CEO:
 
             for result in results:
                 if isinstance(result, Exception):
-                    final_results.append("Worker failed safely.")
+                    final_results.append(format_error("Worker execution failed."))
                 else:
                     final_results.append(result)
 
-            return " | ".join(final_results)
+            combined = " | ".join(final_results)
+            return format_success("Multi-Task", combined)
     
     def fallback_response(self, command):        # Fallback = Backup plan - Jab main system fail ho jaye, tab use hone wala option 
-        return f"No suitable worker found for: {command}"
+        return format_error("No suitable worker found.")
         
         
 # print(CEO())
