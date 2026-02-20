@@ -3,7 +3,7 @@ def format_success(task_type, result):
         f"\n=== TASK RESULT ===\n"
         f"Task Type : {task_type}\n"
         f"Status    : Success\n"
-        f"Output    ; \n{result}\n"
+        f"Output    : \n{result}\n"
         f"=====================\n"
     )
 
