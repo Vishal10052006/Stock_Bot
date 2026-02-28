@@ -16,7 +16,24 @@ class CEO:
         self.memory = SessionMemory()
         self.router = TaskRouter()
         self.executor = TaskExecutor()
-        print("[system] CEO Initialized")
+
+    def create_plan(self, command: str):
+        command_lower = command.lower()
+
+        # Rule-based multi-step planning
+        if "create and publish" in command_lower:
+            return [
+                {"step": 1, "intent": "research", "task": "Research topic: " + command},
+                {"step": 2, "intent": "writing", "task": "Write content"},
+                {"step": 3, "intent": "writing", "task": "Optimize SEO"},
+                {"step": 4, "intent": "writing", "task": "Publish blog"}
+            ]
+
+        # Default → single step plan
+        intents = self.router.detect(command)
+        return [
+            {"step": 1, "intent": intents[0], "task": command}
+        ]
 
     async def receive_command(self, command: str):
         try:
@@ -25,29 +42,34 @@ class CEO:
                 if last:
                     command = last["command"] + " (expanded)"
 
-            intents = self.router.detect(command)
-            results = await self.executor.execute(self.workers, intents, command)
+            plan = self.create_plan(command)
 
-            if results is None:
-                final_response = format_error("No suitable worker found.")
-            else:
-                final_outputs = []
+            final_outputs = []
 
-                for result in results:
-                    if isinstance(result, Exception):
-                        final_outputs.append("Worker failed safely.")
-                    else:
-                        final_outputs.append(result)
+            for step in plan:
+                intents = [step["intent"]]
+                results = await self.executor.execute(
+                    self.workers,
+                    intents,
+                    step["task"]
+                )
+
+                if results:
+                    for result in results:
+                        if isinstance(result, Exception):
+                            final_outputs.append("Worker failed safely.")
+                        else:
+                            final_outputs.append(result)
 
                 # 👇 ADD THIS HERE
-                if len(intents) > 1:
-                    task_type = "Multi-Task"
+                if len(plan) > 1:
+                    task_type = "Multi-Task plan"
                 else:
-                    task_type = intents[0].capitalize()
+                    task_type = plan[0]["intent"].capitalize()
 
                 final_response = format_success(
                     task_type,
-                    " | ".join(final_outputs)
+                    "\n".join(final_outputs)
                 )
 
             self.memory.add_interaction(command, final_response)
@@ -59,6 +81,23 @@ class CEO:
     
     def fallback_response(self, command):        # Fallback = Backup plan - Jab main system fail ho jaye, tab use hone wala option 
         return format_error("No suitable worker found.")
+    
+    def create_plan(self, command: str):
+        command_lower = command.lower()
+
+        # Example rule-based planning
+        if "create and publish" in command_lower:
+            return[
+                {"step": 1, "intent": "research", "task": "Research topic"},
+                {"step": 2, "intent": "writing", "task": "Writing content"},
+                {"step": 3, "intent": "writing", "task": "Optimize SEO"},
+                {"step": 4, "intent": "writing", "task": "Publish blog"}
+            ]
+        # Default: single step
+        intents = self.router.detect(command)
+        return[
+            {"step": 1, "intent": intents[0], "task": command}
+        ]
         
         
 # print(CEO())

@@ -6,5 +6,41 @@
     {
         "command": "write blog (expanded)",
         "response": "\n=== TASK RESULT ===\nTask Type : Writing\nStatus    : Success\nOutput    : \n[WritingWorker] Writing content for: write blog (expanded)\n=====================\n"
+    },
+    {
+        "command": "create and publish a blog about AI",
+        "response": "\n=== TASK RESULT ===\nTask Type : Writing\nStatus    : Success\nOutput    : \nWriting content for: Research topic | Writing content for: Writing content | Writing content for: Optimize SEO | Writing content for: Publish blog\n=====================\n"
+    },
+    {
+        "command": "c:\\Users\\vasis\\OneDrive\\Desktop\\Vishal_Singh\\VISHAL_SINGH_PERSONAL\\Personal_AI-AGI\\personal_ai\\venv\\Scripts\\python.exe c:/Users/vasis/OneDrive/Desktop/Vishal_Singh/VISHAL_SINGH_PERSONAL/Personal_AI-AGI/personal_ai/main.py",
+        "response": "\n=== TASK RESULT ===\nTask Type : General\nStatus    : Success\nOutput    : \n\n=====================\n"
+    },
+    {
+        "command": "c:\\Users\\vasis\\OneDrive\\Desktop\\Vishal_Singh\\VISHAL_SINGH_PERSONAL\\Personal_AI-AGI\\personal_ai\\venv\\Scripts\\python.exe c:/Users/vasis/OneDrive/Desktop/Vishal_Singh/VISHAL_SINGH_PERSONAL/Personal_AI-AGI/personal_ai/main.py",
+        "response": "\n=== TASK RESULT ===\nTask Type : General\nStatus    : Success\nOutput    : \n\n=====================\n"
+    },
+    {
+        "command": "create and publish a blog about AI",
+        "response": "\n=== TASK RESULT ===\nTask Type : Writing\nStatus    : Success\nOutput    : \nWriting content for: Research topic | Writing content for: Writing content | Writing content for: Optimize SEO | Writing content for: Publish blog\n=====================\n"
+    },
+    {
+        "command": "create and publish a blog about AI",
+        "response": "\n=== TASK RESULT ===\nTask Type : Multi-Task plan\nStatus    : Success\nOutput    : \nWriting content for: Research topic \n Writing content for: Writing content \n Writing content for: Optimize SEO \n Writing content for: Publish blog\n=====================\n"
+    },
+    {
+        "command": "create and publish a blog about AI",
+        "response": "\n=== TASK RESULT ===\nTask Type : Multi-Task plan\nStatus    : Success\nOutput    : \nWriting content for: Research topic\nWriting content for: Writing content\nWriting content for: Optimize SEO\nWriting content for: Publish blog\n=====================\n"
+    },
+    {
+        "command": "hi",
+        "response": "\n=== TASK RESULT ===\nTask Type : General\nStatus    : Success\nOutput    : \n\n=====================\n"
+    },
+    {
+        "command": "ai",
+        "response": "\n=== TASK RESULT ===\nTask Type : General\nStatus    : Success\nOutput    : \n\n=====================\n"
+    },
+    {
+        "command": "analyze and summarize",
+        "response": "\n=== TASK RESULT ===\nTask Type : General\nStatus    : Success\nOutput    : \n\n=====================\n"
     }
 ]
