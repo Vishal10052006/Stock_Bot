@@ -1,0 +1,10 @@
+[
+    {
+        "command": "write blog",
+        "response": "\n=== TASK RESULT ===\nTask Type : Writing\nStatus    : Success\nOutput    : \n[WritingWorker] Writing content for: write blog\n=====================\n"
+    },
+    {
+        "command": "write blog (expanded)",
+        "response": "\n=== TASK RESULT ===\nTask Type : Writing\nStatus    : Success\nOutput    : \n[WritingWorker] Writing content for: write blog (expanded)\n=====================\n"
+    }
+]

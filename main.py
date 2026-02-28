@@ -13,7 +13,7 @@ async def main():
             break
 
         response = await ceo.receive_command(user_input)
-        print("AI:", response)
+        print(response)
 
 if __name__ == "__main__":
     asyncio.run(main())

@@ -7,4 +7,4 @@ class ResearchWorker(BaseWorker):
 
     async def execute(self, task: str):
         await asyncio.sleep(1)  # simulate work
-        return f"[ResearchWorker] Researching topic: {task}"
+        return f"Writing content for: {task}"
