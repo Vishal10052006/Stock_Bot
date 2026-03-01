@@ -94,5 +94,9 @@
     {
         "command": "\"DEBUG",
         "response": "\n=== TASK RESULT ===\nTask Type : General\nStatus    : Success\nOutput    : \n\n=====================\n"
+    },
+    {
+        "command": "write blog about AI ethics",
+        "response": "\n=== TASK RESULT ===\nTask Type : Writing\nStatus    : Success\nOutput    : \nWriting content for: write blog about AI ethics\n=====================\n"
     }
 ]

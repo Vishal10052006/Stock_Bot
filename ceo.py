@@ -6,6 +6,7 @@ from utils.formatter import format_success, format_error
 from utils.logger import log
 from core.router import TaskRouter
 from core.executor import TaskExecutor
+from core.critic import CriticAgent
 
 class CEO:
     def __init__(self):
@@ -16,6 +17,7 @@ class CEO:
         self.memory = SessionMemory()
         self.router = TaskRouter()
         self.executor = TaskExecutor()
+        self.critic = CriticAgent()
 
     def create_plan(self, command: str):
         command_lower = command.lower()
@@ -60,6 +62,8 @@ class CEO:
 
             final_outputs = []
 
+
+
             for step in plan:
                 intents = [step["intent"]]
                 results = await self.executor.execute(
@@ -75,11 +79,24 @@ class CEO:
                         else:
                             final_outputs.append(result)
 
-                # 👇 ADD THIS HERE
                 if len(plan) > 1:
                     task_type = "Multi-Task plan"
                 else:
                     task_type = plan[0]["intent"].capitalize()
+
+                # CRITIC CHECK START
+                review = self.critic.review(task_type, final_outputs)
+
+                if review["decision"] == "reject":
+                    final_response = format_error(
+                        f"Critic rejected output: {review['reason']}"
+                    )
+                    return final_response
+
+                elif review["decision"] == "retry":
+                    final_outputs.append(
+                        f"[Critic Suggestion] {review['reason']}"
+                    )
 
                 final_response = format_success(
                     task_type,
