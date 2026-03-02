@@ -8,4 +8,5 @@ class WritingWorker(BaseWorker):
 
     async def execute(self, task: str):
         await asyncio.sleep(1)  # simulate work
-        return f"Writing content for: {task}"
+        #return f"Writing content for: {task}"
+        return task

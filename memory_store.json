@@ -118,5 +118,25 @@
     {
         "command": "write",
         "response": "\n=== TASK RESULT ===\nTask Type : Writing\nStatus    : Success\nOutput    : \nWriting content for: write\n=====================\n"
+    },
+    {
+        "command": "write hi",
+        "response": "\n=== TASK RESULT ===\nTask Type : Writing\nStatus    : Success\nOutput    : \nWriting content for: write hi\n=====================\n"
+    },
+    {
+        "command": "write hi",
+        "response": "\n=== TASK RESULT ===\nTask Type : Writing\nStatus    : Success\nOutput    : \nWriting content for: write hi\n=====================\n"
+    },
+    {
+        "command": "write hi",
+        "response": "\n=== TASK RESULT ===\nTask Type : Writing\nStatus    : Success\nOutput    : \nwrite hi (expand with more detail)\n=====================\n"
+    },
+    {
+        "command": "research AI and write blog about it",
+        "response": "\n=== TASK RESULT ===\nTask Type : Multi-Task plan\nStatus    : Success\nOutput    : \nResearching topic: research AI\nwrite blog about it\n=====================\n"
+    },
+    {
+        "command": "RESEARCH",
+        "response": "\n=== TASK RESULT ===\nTask Type : Research\nStatus    : Success\nOutput    : \nResearching topic: RESEARCH\n=====================\n"
     }
 ]

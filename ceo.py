@@ -85,7 +85,7 @@ class CEO:
                     task_type = plan[0]["intent"].capitalize()
 
                 # CRITIC CHECK START
-                review = self.critic.review(task_type, final_outputs)
+                review = self.critic.review(plan, task_type, final_outputs)
 
                 if review["decision"] == "reject":
                     final_response = format_error(
@@ -94,9 +94,26 @@ class CEO:
                     return final_response
 
                 elif review["decision"] == "retry":
-                    final_outputs.append(
-                        f"[Critic Suggestion] {review['reason']}"
-                    )
+
+                    # Retry once with refinement
+                    refined_outputs = []
+
+                    for step in plan:
+                        refined_task = step["task"] + " (expand with more detail)"
+                        intents = [step["intent"]]
+
+                        results = await self.executor.execute(
+                            self.workers,
+                            intents,
+                            refined_task
+                        )
+
+                        if results:
+                            for result in results:
+                                if not isinstance(result, Exception):
+                                    refined_outputs.append(result)
+
+                    final_outputs = refined_outputs
 
                 final_response = format_success(
                     task_type,
