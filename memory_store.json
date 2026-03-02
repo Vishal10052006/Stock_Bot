@@ -98,5 +98,25 @@
     {
         "command": "write blog about AI ethics",
         "response": "\n=== TASK RESULT ===\nTask Type : Writing\nStatus    : Success\nOutput    : \nWriting content for: write blog about AI ethics\n=====================\n"
+    },
+    {
+        "command": "write hi",
+        "response": "\n=== TASK RESULT ===\nTask Type : Writing\nStatus    : Success\nOutput    : \nWriting content for: write hi\n=====================\n"
+    },
+    {
+        "command": "research quantum computing",
+        "response": "\n=== TASK RESULT ===\nTask Type : Research\nStatus    : Success\nOutput    : \nWriting content for: research quantum computing\n=====================\n"
+    },
+    {
+        "command": "research quantum computing",
+        "response": "\n=== TASK RESULT ===\nTask Type : Research\nStatus    : Success\nOutput    : \nWriting content for: research quantum computing\n=====================\n"
+    },
+    {
+        "command": "research quantum computing",
+        "response": "\n=== TASK RESULT ===\nTask Type : Research\nStatus    : Success\nOutput    : \nResearching topic: research quantum computing\n=====================\n"
+    },
+    {
+        "command": "write",
+        "response": "\n=== TASK RESULT ===\nTask Type : Writing\nStatus    : Success\nOutput    : \nWriting content for: write\n=====================\n"
     }
 ]
