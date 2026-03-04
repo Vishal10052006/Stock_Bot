@@ -8,13 +8,14 @@ from core.router import TaskRouter
 from core.executor import TaskExecutor
 from core.critic import CriticAgent
 from core.worker_registry import WorkerRegistry
+from core.worker_loader import WorkerLoader
 
 class CEO:
     def __init__(self):
         self.registry = WorkerRegistry()
 
-        self.registry.register("writing", WritingWorker())
-        self.registry.register("research", ResearchWorker())
+        loader = WorkerLoader(self.registry)
+        loader.load_workers()
 
         self.memory = SessionMemory()
         self.router = TaskRouter()
