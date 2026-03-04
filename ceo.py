@@ -7,13 +7,15 @@ from utils.logger import log
 from core.router import TaskRouter
 from core.executor import TaskExecutor
 from core.critic import CriticAgent
+from core.worker_registry import WorkerRegistry
 
 class CEO:
     def __init__(self):
-        self.workers = {
-            "writing": WritingWorker(),
-            "research": ResearchWorker()
-        }
+        self.registry = WorkerRegistry()
+
+        self.registry.register("writing", WritingWorker())
+        self.registry.register("research", ResearchWorker())
+
         self.memory = SessionMemory()
         self.router = TaskRouter()
         self.executor = TaskExecutor()
@@ -31,7 +33,7 @@ class CEO:
 
             for part in parts:
                 intents = self.router.detect(part)
-                intent = intents[0] if intents else "writing"
+                intent = intents[0].lower() if intents else "writing"
 
                 plan.append({
                     "step": step_number,
@@ -66,11 +68,13 @@ class CEO:
 
             for step in plan:
                 intents = [step["intent"]]
+
                 results = await self.executor.execute(
-                    self.workers,
+                    self.registry.all_workers(),
                     intents,
                     step["task"]
                 )
+                print("EXECUTOR RESULTS:", results)
 
                 if results:
                     for result in results:
@@ -82,7 +86,7 @@ class CEO:
                 if len(plan) > 1:
                     task_type = "Multi-Task plan"
                 else:
-                    task_type = plan[0]["intent"].capitalize()
+                    task_type = plan[0]["intent"].title()
 
                 # CRITIC CHECK START
                 review = self.critic.review(plan, task_type, final_outputs)
@@ -99,13 +103,16 @@ class CEO:
                     refined_outputs = []
 
                     for step in plan:
-                        refined_task = step["task"] + " (expand with more detail)"
                         intents = [step["intent"]]
 
+                        print("PLAN STEP:", step)
+                        print("WORKERS:", self.registry.all_workers().keys())
+                        print("INTENTS:", intents)
+
                         results = await self.executor.execute(
-                            self.workers,
+                            self.registry.all_workers(),
                             intents,
-                            refined_task
+                            step["task"]
                         )
 
                         if results:

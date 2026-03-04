@@ -1,6 +1,9 @@
 class BaseWorker:
-    def __init__(self, name: str):
-        self.name = name
 
-    def execute(self, task: str):
-        raise NotImplementedError("Execute method must be implemented by subclass.")
+    def __init__(self, name: str, capabilities: list, risk_level: str = "low"):
+        self.name = name
+        self.capabilities = capabilities
+        self.risk_level = risk_level
+
+    async def execute(self, task: str):
+        raise NotImplementedError("Worker must implement execute()")

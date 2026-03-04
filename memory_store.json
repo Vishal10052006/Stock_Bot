@@ -138,5 +138,9 @@
     {
         "command": "RESEARCH",
         "response": "\n=== TASK RESULT ===\nTask Type : Research\nStatus    : Success\nOutput    : \nResearching topic: RESEARCH\n=====================\n"
+    },
+    {
+        "command": "research ai",
+        "response": "\n=== TASK RESULT ===\nTask Type : Research\nStatus    : Success\nOutput    : \nResearching topic: research ai\n=====================\n"
     }
 ]

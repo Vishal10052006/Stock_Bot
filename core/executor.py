@@ -1,6 +1,5 @@
 import asyncio
 
-
 class TaskExecutor:
 
     async def execute(self, workers, intents, command):
