@@ -1,18 +1,21 @@
 class TaskRouter:
-    def __init__(self):
-        self.routing_rules = {
-            "writing": ["write", "blog", "article"],
-            "research": ["research", "find", "search", "info"]
-        }
+
+    def __init__(self, registry):
+        self.registry = registry
 
     def detect(self, command: str):
+
         command = command.lower()
         intents = []
 
-        for intent, keywords in self.routing_rules.items():
-            for keyword in keywords:
-                if keyword in command:
-                    intents.append(intent)
+        workers = self.registry.all_workers()
+
+        for name, worker in workers.items():
+
+            for capability in worker.capabilities:
+
+                if capability in command:
+                    intents.append(name)
                     break
 
         if not intents:
