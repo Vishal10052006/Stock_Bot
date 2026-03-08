@@ -1,6 +1,25 @@
-import datetime
+import logging
 
-def log(message):
-    time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    with open("system.log", "a") as f:
-        f.write(f"[{time}] {message}\n")
+
+def setup_logger():
+
+    logger = logging.getLogger("PersonalAI")
+
+    logger.setLevel(logging.INFO)
+
+    if not logger.handlers:
+
+        handler = logging.StreamHandler()
+
+        formatter = logging.Formatter(
+            "%(asctime)s | %(levelname)s | %(message)s"
+        )
+
+        handler.setFormatter(formatter)
+
+        logger.addHandler(handler)
+
+    return logger
+
+
+logger = setup_logger()

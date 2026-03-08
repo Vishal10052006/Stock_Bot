@@ -1,5 +1,5 @@
 import asyncio
-from ceo import CEO
+from core.ceo import CEO
 
 async def main():
     print("Personal AI is Starting...")

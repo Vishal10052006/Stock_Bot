@@ -11,7 +11,9 @@ class WorkerLoader:
 
     def load_workers(self):
 
-        workers_path = "workers"
+        from config import SYSTEM_CONFIG
+
+        workers_path = SYSTEM_CONFIG["workers_folder"]
 
         for filename in os.listdir(workers_path):
 

@@ -3,7 +3,7 @@ from workers.research_worker import ResearchWorker
 import asyncio
 from memory.session_memory import SessionMemory
 from utils.formatter import format_success, format_error
-from utils.logger import log
+from utils.logger import logger
 from core.router import TaskRouter
 from core.executor import TaskExecutor
 from core.critic import CriticAgent
@@ -64,7 +64,7 @@ class CEO:
                     command = last["command"] + " (expanded)"
 
             plan = self.planner.create_plan(command)
-            print("PLAN:", plan)
+            logger.info(f"Plan created: {plan}")
 
             final_outputs = []
 
@@ -156,7 +156,7 @@ class CEO:
             return final_response
         
         except Exception as e:
-            log(f"ERROR: {str(e)}")
+            logger.error(str(e))
             return format_error("Unexpected system failure.")
     
     def fallback_response(self, command):        # Fallback = Backup plan - Jab main system fail ho jaye, tab use hone wala option 
