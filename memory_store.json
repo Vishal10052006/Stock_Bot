@@ -146,5 +146,13 @@
     {
         "command": "research ai",
         "response": "\n=== TASK RESULT ===\nTask Type : Research\nStatus    : Success\nOutput    : \nResearching topic: research ai\n=====================\n"
+    },
+    {
+        "command": "research ai",
+        "response": "\n=== TASK RESULT ===\nTask Type : Research\nStatus    : Success\nOutput    : \nResearching topic: research ai\n=====================\n"
+    },
+    {
+        "command": "write blog about AI",
+        "response": "\n=== TASK RESULT ===\nTask Type : Writing\nStatus    : Success\nOutput    : \nWriting content for: write blog about AI\n=====================\n"
     }
 ]
