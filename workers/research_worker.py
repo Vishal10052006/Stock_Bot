@@ -6,7 +6,8 @@ class ResearchWorker(BaseWorker):
     def __init__(self):
         super().__init__(
             name="research",
-            capabilities=["research", "find", "search", "info"]
+            capabilities=["research", "find", "search", "info"],
+            risk_level="low"
         )
 
     async def execute(self, task: str):

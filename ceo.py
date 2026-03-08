@@ -65,17 +65,38 @@ class CEO:
 
             final_outputs = []
 
-
-
             for step in plan:
-                intents = [step["intent"]]
+
+                intent = step["intent"]
+                worker = self.registry.get_worker(intent)
+
+                if not worker:
+                    final_outputs.append("No worker available.")
+                    continue
+
+                if intent == "general":
+                    final_outputs.append("I don't know how to handle this task yet.")
+                    continue
+
+                # ----- RISK CONTROL -----
+
+                if worker.risk_level == "high":
+                    confirm = input(f"⚠ High risk task detected: {step['task']}. Continue? (yes/no): ")
+                    if confirm.lower() != "yes":
+                        return format_error("Execution cancelled by user.")
+
+                if worker.risk_level == "medium":
+                    review = self.critic.review(step["task"])
+                    if review["decision"] == "reject":
+                        return format_error("Critic rejected unsafe task.")
+
+                # ----- EXECUTE -----
 
                 results = await self.executor.execute(
                     self.registry.all_workers(),
-                    intents,
+                    [intent],
                     step["task"]
                 )
-                print("EXECUTOR RESULTS:", results)
 
                 if results:
                     for result in results:

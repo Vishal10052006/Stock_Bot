@@ -154,5 +154,9 @@
     {
         "command": "write blog about AI",
         "response": "\n=== TASK RESULT ===\nTask Type : Writing\nStatus    : Success\nOutput    : \nWriting content for: write blog about AI\n=====================\n"
+    },
+    {
+        "command": "WRITE A BLOG ABOUT AI",
+        "response": "\n=== TASK RESULT ===\nTask Type : Writing\nStatus    : Success\nOutput    : \nWriting content for: WRITE A BLOG ABOUT AI\n=====================\n"
     }
 ]
