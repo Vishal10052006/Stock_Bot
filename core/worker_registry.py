@@ -7,7 +7,7 @@ class WorkerRegistry:
         self._workers[name] = worker
 
     def get_worker(self, intent: str):
-        return self._worker.get(intent)
-    
+        return self._workers.get(intent)
+
     def all_workers(self):
         return self._workers
