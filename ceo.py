@@ -9,6 +9,7 @@ from core.executor import TaskExecutor
 from core.critic import CriticAgent
 from core.worker_registry import WorkerRegistry
 from core.worker_loader import WorkerLoader
+from core.planner import TaskPlanner
 
 class CEO:
     def __init__(self):
@@ -21,6 +22,7 @@ class CEO:
         self.router = TaskRouter(self.registry)
         self.executor = TaskExecutor()
         self.critic = CriticAgent()
+        self.planner = TaskPlanner()
 
     def create_plan(self, command: str):
         command_lower = command.lower()
@@ -61,7 +63,8 @@ class CEO:
                 if last:
                     command = last["command"] + " (expanded)"
 
-            plan = self.create_plan(command)
+            plan = self.planner.create_plan(command)
+            print("PLAN:", plan)
 
             final_outputs = []
 
