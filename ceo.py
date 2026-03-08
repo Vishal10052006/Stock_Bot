@@ -18,7 +18,7 @@ class CEO:
         loader.load_workers()
 
         self.memory = SessionMemory()
-        self.router = TaskRouter()
+        self.router = TaskRouter(self.registry)
         self.executor = TaskExecutor()
         self.critic = CriticAgent()
 
