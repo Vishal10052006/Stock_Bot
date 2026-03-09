@@ -1,3 +1,4 @@
+from core import executor
 from workers.writing_worker import WritingWorker
 from workers.research_worker import ResearchWorker
 import asyncio
@@ -10,6 +11,7 @@ from core.critic import CriticAgent
 from core.worker_registry import WorkerRegistry
 from core.worker_loader import WorkerLoader
 from core.planner import TaskPlanner
+from core.decision_engine import make_decision
 
 class CEO:
     def __init__(self):
@@ -92,6 +94,28 @@ class CEO:
                     review = self.critic.review(step["task"])
                     if review["decision"] == "reject":
                         return format_error("Critic rejected unsafe task.")
+
+                decision = make_decision(
+                    worker_name="blog_writer",
+                    task_type="write_blog",
+                    critic_score=0.85
+                )
+                print("CONFIDENCE:", decision.confidence)
+                print("RISK:", decision.risk)
+                print("DECISION:", decision.decision)
+
+                if decision.decision == "AUTO_EXECUTE":
+                    executor.run()
+
+                elif decision.decision == "ASK_USER":
+                    user_input = input("❓ Decision requires user approval. Proceed? (yes/no): ")
+                    if user_input.lower() == "yes":
+                        executor.run()
+                    else:
+                        return format_error("Execution cancelled by user.")
+
+                else:
+                    print("Task blocked due to high risk.")
 
                 # ----- EXECUTE -----
 
