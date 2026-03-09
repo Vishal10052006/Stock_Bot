@@ -3,13 +3,12 @@ import asyncio
 
 class ResearchWorker(BaseWorker):
 
-    def __init__(self):
-        super().__init__(
-            name="research",
-            capabilities=["research", "find", "search", "info"],
-            risk_level="low"
-        )
+    name = "research_worker"
 
-    async def execute(self, task: str):
-        await asyncio.sleep(1)
-        return f"Researching topic: {task}"
+    capabilities = ["research", "search"]
+
+    def run(self, task):
+
+        topic = task["input"]
+
+        return f"Research result for {topic}"

@@ -1,24 +1,13 @@
-class TaskRouter:
+class Router:
 
     def __init__(self, registry):
+
         self.registry = registry
 
-    def detect(self, command: str):
+    def route(self, task):
 
-        command = command.lower()
-        intents = []
+        task_type = task["type"]
 
-        workers = self.registry.all_workers()
+        worker = self.registry.get_worker(task_type)
 
-        for name, worker in workers.items():
-
-            for capability in worker.capabilities:
-
-                if capability in command:
-                    intents.append(name)
-                    break
-
-        if not intents:
-            intents.append("general")
-
-        return intents
+        return worker

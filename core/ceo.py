@@ -17,6 +17,7 @@ from core.trace_logger import log_execution
 from core.execution_trace import ExecutionTrace
 from datetime import datetime
 class CEO:
+    # Constructor (__init__)
     def __init__(self):
         self.registry = WorkerRegistry()
 
@@ -29,10 +30,11 @@ class CEO:
         self.critic = CriticAgent()
         self.planner = TaskPlanner()
 
+    # Plan Creation Function
     def create_plan(self, command: str):
         command_lower = command.lower()
 
-        # Split compound commands
+        # Multi-command Splitting
         if " and " in command_lower:
             parts = command.split(" and ")   # <-- use original command here
 
@@ -53,7 +55,7 @@ class CEO:
 
             return plan
 
-        # Default single-step
+        # Default single-step plan
         intents = self.router.detect(command)
         return [{
             "step": 1,
@@ -61,22 +63,32 @@ class CEO:
             "task": command
         }]
 
+    # Receive Command Function
     async def receive_command(self, command: str):
         try:
+            # Expand Command Logic
             if command.lower() in ["expand it", "continue", "elaborate"]:
                 last = self.memory.get_last_interaction()
                 if last:
                     command = last["command"] + " (expanded)"
 
+            # Planner
             plan = self.planner.create_plan(command)
             logger.info(f"Plan created: {plan}")
 
             final_outputs = []
 
             for step in plan:
-
+                
+                # Worker Selection
                 intent = step["intent"]
-                worker = self.registry.get_worker(intent)
+
+                # ROUTER SELECTS WORKER
+                worker = self.router.route(step["task"])
+
+                if not worker:
+                    final_outputs.append("No worker available.")
+                    continue
 
                 if not worker:
                     final_outputs.append("No worker available.")
@@ -88,21 +100,26 @@ class CEO:
 
                 # ----- RISK CONTROL -----
 
+                # Safety Check
                 if worker.risk_level == "high":
                     confirm = input(f"⚠ High risk task detected: {step['task']}. Continue? (yes/no): ")
                     if confirm.lower() != "yes":
                         return format_error("Execution cancelled by user.")
 
+                # Critic Review (Medium Risk)
                 if worker.risk_level == "medium":
                     review = self.critic.review(step["task"])
                     if review["decision"] == "reject":
                         return format_error("Critic rejected unsafe task.")
-
+                
+                # Decision Engine
                 decision = make_decision(
                     worker_name="blog_writer",
                     task_type="write_blog",
                     critic_score=0.85
                 )
+
+                # Decision Logging
                 print("CONFIDENCE:", decision.confidence)
                 print("RISK:", decision.risk)
                 print("DECISION:", decision.decision)
@@ -187,15 +204,18 @@ class CEO:
                                     refined_outputs.append(result)
 
                     final_outputs = refined_outputs
-
+                
+                # Final Response
                 final_response = format_success(
                     task_type,
                     "\n".join(final_outputs)
                 )
 
+            # Memory Storage
             self.memory.add_interaction(command, final_response)
             return final_response
         
+        # Error Handling
         except Exception as e:
             logger.error(str(e))
             return format_error("Unexpected system failure.")

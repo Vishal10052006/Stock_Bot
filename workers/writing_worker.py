@@ -3,13 +3,12 @@ import asyncio
 
 class WritingWorker(BaseWorker):
 
-    def __init__(self):
-        super().__init__(
-            name="writing",
-            capabilities=["write", "blog", "article"],
-            risk_level="low"
-        )
+    name = "writing_worker"
 
-    async def execute(self, task: str):
-        await asyncio.sleep(1)
-        return f"Writing content for: {task}"
+    capabilities = ["write", "blog"]
+
+    def run(self, task):
+
+        topic = task["input"]
+
+        return f"Blog about {topic}"

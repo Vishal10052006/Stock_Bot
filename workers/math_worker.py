@@ -3,13 +3,10 @@ from workers.base_worker import BaseWorker
 
 class MathWorker(BaseWorker):
 
-    def __init__(self):
-        super().__init__(
-            name="math",
-            capabilities=["calculate", "math"],
-            risk_level="low"
-        )
+    name = "math_worker"
 
-    async def execute(self, task: str):
-        return f"Solving math task: {task}"
-    
+    capabilities = ["math", "calculate"]
+
+    def run(self, task):
+        expression = task["input"]
+        return eval(expression)

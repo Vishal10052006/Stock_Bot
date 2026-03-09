@@ -1,13 +1,14 @@
 class WorkerRegistry:
 
     def __init__(self):
-        self._workers = {}
+        self.workers = {}
 
-    def register(self, name: str, worker):
-        self._workers[name] = worker
+    def register(self, worker):
 
-    def get_worker(self, intent: str):
-        return self._workers.get(intent)
+        for capability in worker.capabilities:
 
-    def all_workers(self):
-        return self._workers
+            self.workers[capability] = worker
+
+    def get_worker(self, task_type):
+
+        return self.workers.get(task_type)
