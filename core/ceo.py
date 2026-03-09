@@ -13,6 +13,9 @@ from core.worker_loader import WorkerLoader
 from core.planner import TaskPlanner
 from core.decision_engine import make_decision
 
+from core.trace_logger import log_execution
+from core.execution_trace import ExecutionTrace
+from datetime import datetime
 class CEO:
     def __init__(self):
         self.registry = WorkerRegistry()
@@ -124,6 +127,25 @@ class CEO:
                     [intent],
                     step["task"]
                 )
+                
+                worker_name = step["worker"]
+
+                if len(plan) > 1:
+                    task_type = "Multi-Task plan"
+                else:
+                    task_type = plan[0]["intent"].title()
+
+                trace = ExecutionTrace(
+                    task_type=task_type,
+                    worker=worker_name,
+                    confidence=decision.confidence,
+                    risk=decision.risk,
+                    decision=decision.decision,
+                    result="SUCCESS" if results else "FAILED",
+                    timestamp=str(datetime.now())
+                )
+
+                log_execution(trace)
 
                 if results:
                     for result in results:
@@ -131,11 +153,6 @@ class CEO:
                             final_outputs.append("Worker failed safely.")
                         else:
                             final_outputs.append(result)
-
-                if len(plan) > 1:
-                    task_type = "Multi-Task plan"
-                else:
-                    task_type = plan[0]["intent"].title()
 
                 # CRITIC CHECK START
                 review = self.critic.review(plan, task_type, final_outputs)
