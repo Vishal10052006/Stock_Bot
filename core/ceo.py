@@ -90,10 +90,6 @@ class CEO:
                     final_outputs.append("No worker available.")
                     continue
 
-                if not worker:
-                    final_outputs.append("No worker available.")
-                    continue
-
                 if intent == "general":
                     final_outputs.append("I don't know how to handle this task yet.")
                     continue
@@ -111,13 +107,6 @@ class CEO:
                     review = self.critic.review(step["task"])
                     if review["decision"] == "reject":
                         return format_error("Critic rejected unsafe task.")
-                
-                # Decision Engine
-                decision = make_decision(
-                    worker_name="blog_writer",
-                    task_type="write_blog",
-                    critic_score=0.85
-                )
 
                 # Decision Logging
                 print("CONFIDENCE:", decision.confidence)
@@ -139,16 +128,57 @@ class CEO:
 
                 # ----- EXECUTE -----
 
-                results = await self.executor.execute(
-                    self.registry.all_workers(),
-                    [intent],
-                    step["task"]
+                workers = self.registry.all_workers()
+
+                import asyncio
+
+                tasks = [
+                    self.executor.execute(
+                        [worker],
+                        [intent],
+                        step["task"]
+                    )
+                    for worker in workers
+                ]
+
+                outputs = await asyncio.gather(*tasks, return_exceptions=True)
+
+                worker_outputs = []
+
+                for worker, output in zip(workers, outputs):
+
+                    if isinstance(output, Exception):
+                        worker_outputs.append({
+                            "worker": worker.name,
+                            "output": str(output),
+                            "score": 0
+                        })
+                    else:
+                        score = self.critic.score(output)
+
+                        worker_outputs.append({
+                            "worker": worker.name,
+                            "output": output,
+                            "score": score
+                        })
+
+                best_result = max(worker_outputs, key=lambda x: x["score"])
+
+                results = [best_result["output"]]
+
+                worker_name = best_result["worker"]
+
+                critic_score = best_result["score"]
+
+                # Decision Engine
+                decision = make_decision(
+                    worker_name=worker_name,
+                    task_type=task_type,
+                    critic_score=critic_score
                 )
-                
-                worker_name = step["worker"]
 
                 if len(plan) > 1:
-                    task_type = "Multi-Task plan"
+                    task_type = step["intent"]
                 else:
                     task_type = plan[0]["intent"].title()
 
@@ -158,7 +188,7 @@ class CEO:
                     confidence=decision.confidence,
                     risk=decision.risk,
                     decision=decision.decision,
-                    result="SUCCESS" if results else "FAILED",
+                    result = "SUCCESS" if critic_score > 0 else "FAILED",
                     timestamp=str(datetime.now())
                 )
 
@@ -223,7 +253,6 @@ class CEO:
     def fallback_response(self, command):        # Fallback = Backup plan - Jab main system fail ho jaye, tab use hone wala option 
         return format_error("No suitable worker found.")
     
-    
         
-        
+        task_type 
 # print(CEO())
