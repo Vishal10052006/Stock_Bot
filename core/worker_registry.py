@@ -1,14 +1,19 @@
 class WorkerRegistry:
 
     def __init__(self):
-        self.workers = {}
+        self.workers = []
 
     def register(self, worker):
 
-        for capability in worker.capabilities:
+        self.workers.append(worker)
 
-            self.workers[capability] = worker
+    def get_workers(self, task_type):
 
-    def get_worker(self, task_type):
+        candidates = []
 
-        return self.workers.get(task_type)
+        for worker in self.workers:
+
+            if task_type in worker.capabilities:
+                candidates.append(worker)
+
+        return candidates
