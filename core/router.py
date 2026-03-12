@@ -8,6 +8,6 @@ class Router:
 
         task_type = task["type"]
 
-        worker = self.registry.get_worker(task_type)
+        workers = self.registry.get_workers(task_type)
 
-        return worker
+        return workers
