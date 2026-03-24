@@ -16,6 +16,7 @@ from core.decision_engine import make_decision
 from core.trace_logger import log_execution
 from core.execution_trace import ExecutionTrace
 from datetime import datetime
+from core.memory_manager import MemoryManager
 class CEO:
     # Constructor (__init__)
     def __init__(self):
@@ -29,7 +30,8 @@ class CEO:
         self.executor = TaskExecutor()
         self.critic = CriticAgent()
         self.planner = TaskPlanner()
-
+        self.memory_manager = MemoryManager()
+        
     # Plan Creation Function
     def create_plan(self, command: str):
         command_lower = command.lower()
@@ -67,7 +69,8 @@ class CEO:
     async def receive_command(self, command: str):
         try:
             # PLAN
-            plan = self.planner.create_plan(command)
+            memory = self.memory_manager.load_memory()
+            plan = self.planner.create_plan(command, memory)
             logger.info(f"Plan created: {plan}")
 
             final_outputs = []
@@ -112,6 +115,29 @@ class CEO:
                             "score": score
                         })
 
+                memory = self.memory_manager.load_memory()
+
+                bad_workers = [
+                    m["worker"] for m in memory
+                    if m.get("type") == "mistake"
+                ]
+
+                worker_outputs = [
+                    w for w in worker_outputs
+                    if w["worker"] not in bad_workers
+                ]
+
+                # safety fallback (VERY IMPORTANT)
+                if not worker_outputs:
+                    worker_outputs = [
+                        {
+                            "worker": worker.name,
+                            "output": str(output),
+                            "score": 0
+                        }
+                        for worker, output in zip(workers, outputs)
+                    ]
+
                 # BEST WORKER
                 best_result = max(worker_outputs, key=lambda x: x["score"])
 
@@ -119,12 +145,32 @@ class CEO:
                 worker_name = best_result["worker"]
                 critic_score = best_result["score"]
 
+                # LOAD MEMORY
+                memory = self.memory_manager.load_memory()
+
+                # Reduce trust if worker failed many times
+                past_failures = [
+                    m for m in memory
+                    if m.get("worker") == worker_name and m.get("result") == "FAILED"
+                ]
+                if len(past_failures) > 3:
+                    critic_score *= 0.7
+
                 # DECISION ENGINE
                 decision = make_decision(
                     worker_name=worker_name,
                     task_type=intent,
                     critic_score=critic_score
                 )
+
+                # -------- USER PREFERENCE CHECK --------
+                user_rejections = [
+                    m for m in memory
+                    if m.get("type") == "user_preference"
+                ]
+
+                if len(user_rejections) > 2:
+                    decision.decision = "ASK_USER"
 
                 print("CONFIDENCE:", decision.confidence)
                 print("RISK:", decision.risk)
@@ -149,6 +195,17 @@ class CEO:
 
                 elif decision.decision == "ASK_USER":
                     confirm = input("Decision requires approval. Proceed? (yes/no): ")
+
+                    if confirm.lower() != "yes":
+
+                        # STORE USER PREFERENCE
+                        self.memory_manager.add_memory({
+                            "type": "user_preference",
+                            "task": intent,
+                            "preference": "rejected"
+                        })
+
+                        return format_error("Execution cancelled by user.")
                     if confirm.lower() != "yes":
                         return format_error("Execution cancelled by user.")
 
@@ -167,6 +224,26 @@ class CEO:
                 )
 
                 log_execution(trace)
+
+                # MEMORY STORE
+                memory_entry = {
+                    "task": intent,
+                    "worker": worker_name,
+                    "decision": decision.decision,
+                    "confidence": decision.confidence,
+                    "result": "SUCCESS" if critic_score > 0 else "FAILED"
+                }
+
+                self.memory_manager.add_memory(memory_entry)
+
+                # -------- STORE MISTAKES --------
+                if critic_score == 0:
+                    self.memory_manager.add_memory({
+                        "type": "mistake",
+                        "task": intent,
+                        "worker": worker_name,
+                        "issue": "low_score"
+                    })
 
             # FINAL CRITIC REVIEW
             review = self.critic.review(plan, intent, final_outputs)
