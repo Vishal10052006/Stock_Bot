@@ -66,83 +66,33 @@ class CEO:
     # Receive Command Function
     async def receive_command(self, command: str):
         try:
-            # Expand Command Logic
-            if command.lower() in ["expand it", "continue", "elaborate"]:
-                last = self.memory.get_last_interaction()
-                if last:
-                    command = last["command"] + " (expanded)"
-
-            # Planner
+            # PLAN
             plan = self.planner.create_plan(command)
             logger.info(f"Plan created: {plan}")
 
             final_outputs = []
 
             for step in plan:
-                
-                # Worker Selection
+
                 intent = step["intent"]
+                task = step["task"]
 
-                # ROUTER SELECTS WORKER
-                worker = self.router.route(step["task"])
-
-                if not worker:
-                    final_outputs.append("No worker available.")
-                    continue
-
-                if intent == "general":
-                    final_outputs.append("I don't know how to handle this task yet.")
-                    continue
-
-                # ----- RISK CONTROL -----
-
-                # Safety Check
-                if worker.risk_level == "high":
-                    confirm = input(f"⚠ High risk task detected: {step['task']}. Continue? (yes/no): ")
-                    if confirm.lower() != "yes":
-                        return format_error("Execution cancelled by user.")
-
-                # Critic Review (Medium Risk)
-                if worker.risk_level == "medium":
-                    review = self.critic.review(step["task"])
-                    if review["decision"] == "reject":
-                        return format_error("Critic rejected unsafe task.")
-
-                # Decision Logging
-                print("CONFIDENCE:", decision.confidence)
-                print("RISK:", decision.risk)
-                print("DECISION:", decision.decision)
-
-                if decision.decision == "AUTO_EXECUTE":
-                    executor.run()
-
-                elif decision.decision == "ASK_USER":
-                    user_input = input("❓ Decision requires user approval. Proceed? (yes/no): ")
-                    if user_input.lower() == "yes":
-                        executor.run()
-                    else:
-                        return format_error("Execution cancelled by user.")
-
-                else:
-                    print("Task blocked due to high risk.")
-
-                # ----- EXECUTE -----
-
+                # GET WORKERS
                 workers = self.registry.all_workers()
 
-                import asyncio
+                if not workers:
+                    final_outputs.append("No workers available.")
+                    continue
 
+                # PARALLEL EXECUTION
                 tasks = [
-                    self.executor.execute(
-                        [worker],
-                        [intent],
-                        step["task"]
-                    )
+                    self.executor.execute([worker], [intent], task)
                     for worker in workers
                 ]
 
                 outputs = await asyncio.gather(*tasks, return_exceptions=True)
 
+                # CRITIC SCORING
                 worker_outputs = []
 
                 for worker, output in zip(workers, outputs):
@@ -162,97 +112,98 @@ class CEO:
                             "score": score
                         })
 
+                # BEST WORKER
                 best_result = max(worker_outputs, key=lambda x: x["score"])
 
-                results = [best_result["output"]]
-
+                result = best_result["output"]
                 worker_name = best_result["worker"]
-
                 critic_score = best_result["score"]
 
-                # Decision Engine
+                # DECISION ENGINE
                 decision = make_decision(
                     worker_name=worker_name,
-                    task_type=task_type,
+                    task_type=intent,
                     critic_score=critic_score
                 )
 
-                if len(plan) > 1:
-                    task_type = step["intent"]
-                else:
-                    task_type = plan[0]["intent"].title()
+                print("CONFIDENCE:", decision.confidence)
+                print("RISK:", decision.risk)
+                print("DECISION:", decision.decision)
 
+                # PERMISSION ENGINE
+                from core.autonomy_engine import check_permission
+
+                permission = check_permission(intent)
+
+                if permission == "BLOCK":
+                    return format_error("Task blocked by autonomy rules.")
+
+                elif permission == "ASK":
+                    confirm = input("Permission required. Continue? (yes/no): ")
+                    if confirm.lower() != "yes":
+                        return format_error("Execution cancelled by user.")
+
+                # DECISION CHECK
+                if decision.decision == "BLOCK":
+                    return format_error("Task blocked due to high risk.")
+
+                elif decision.decision == "ASK_USER":
+                    confirm = input("Decision requires approval. Proceed? (yes/no): ")
+                    if confirm.lower() != "yes":
+                        return format_error("Execution cancelled by user.")
+
+                # STORE RESULT
+                final_outputs.append(result)
+
+                # TRACE LOGGING
                 trace = ExecutionTrace(
-                    task_type=task_type,
+                    task_type=intent,
                     worker=worker_name,
                     confidence=decision.confidence,
                     risk=decision.risk,
                     decision=decision.decision,
-                    result = "SUCCESS" if critic_score > 0 else "FAILED",
+                    result="SUCCESS" if critic_score > 0 else "FAILED",
                     timestamp=str(datetime.now())
                 )
 
                 log_execution(trace)
 
-                if results:
-                    for result in results:
-                        if isinstance(result, Exception):
-                            final_outputs.append("Worker failed safely.")
-                        else:
-                            final_outputs.append(result)
+            # FINAL CRITIC REVIEW
+            review = self.critic.review(plan, intent, final_outputs)
 
-                # CRITIC CHECK START
-                review = self.critic.review(plan, task_type, final_outputs)
+            if review["decision"] == "reject":
+                return format_error(f"Critic rejected output: {review['reason']}")
 
-                if review["decision"] == "reject":
-                    final_response = format_error(
-                        f"Critic rejected output: {review['reason']}"
+            elif review["decision"] == "retry":
+
+                refined_outputs = []
+
+                for step in plan:
+                    workers = self.registry.all_workers()
+
+                    results = await self.executor.execute(
+                        workers,
+                        [step["intent"]],
+                        step["task"]
                     )
-                    return final_response
 
-                elif review["decision"] == "retry":
+                    for r in results:
+                        if not isinstance(r, Exception):
+                            refined_outputs.append(r)
 
-                    # Retry once with refinement
-                    refined_outputs = []
+                final_outputs = refined_outputs
 
-                    for step in plan:
-                        intents = [step["intent"]]
+            # FINAL RESPONSE
+            final_response = format_success(
+                intent,
+                "\n".join(final_outputs)
+            )
 
-                        print("PLAN STEP:", step)
-                        print("WORKERS:", self.registry.all_workers().keys())
-                        print("INTENTS:", intents)
-
-                        results = await self.executor.execute(
-                            self.registry.all_workers(),
-                            intents,
-                            step["task"]
-                        )
-
-                        if results:
-                            for result in results:
-                                if not isinstance(result, Exception):
-                                    refined_outputs.append(result)
-
-                    final_outputs = refined_outputs
-                
-                # Final Response
-                final_response = format_success(
-                    task_type,
-                    "\n".join(final_outputs)
-                )
-
-            # Memory Storage
+            # MEMORY
             self.memory.add_interaction(command, final_response)
+
             return final_response
-        
-        # Error Handling
+
         except Exception as e:
             logger.error(str(e))
             return format_error("Unexpected system failure.")
-    
-    def fallback_response(self, command):        # Fallback = Backup plan - Jab main system fail ho jaye, tab use hone wala option 
-        return format_error("No suitable worker found.")
-    
-        
-        task_type 
-# print(CEO())

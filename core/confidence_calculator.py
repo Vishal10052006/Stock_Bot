@@ -1,8 +1,8 @@
-from config.worker_reliability import WORKER_RELIABILITY
+from core.reliability_manager import calculate_worker_reliability
 
-def calculate_confidence(worker_name: str, critic_score: float) -> float:
+def calculate_confidence(worker_name, critic_score):
 
-    reliability = WORKER_RELIABILITY.get(worker_name, 0.5)
+    reliability = calculate_worker_reliability(worker_name)
 
     confidence = (reliability + critic_score) / 2
 
