@@ -1,6 +1,6 @@
 from core.memory_manager import MemoryManager
 from memory.session_memory import SessionMemory
-from execution_engine import ExecutionEngine
+from core.execution_engine import ExecutionEngine
 
 from core.goal_manager import GoalManager
 from core.strategy_engine import StrategyEngine
@@ -19,7 +19,7 @@ class CEO:
     def add_goal(self, goal):
         self.goal_manager.add_goal(goal)
 
-    def plan_stratgies(self):
+    def plan_strategies(self):
         goals = self.goal_manager.get_active_goals()
         strategies = []
 
