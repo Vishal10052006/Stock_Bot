@@ -10,39 +10,35 @@ class DecisionEngine:
         self.memory_manager = MemoryManager()
         self.learning_engine = LearningEngine(self.memory_manager)
 
-    def make_decision(self, worker_name, task_type, critic_score, goal="unknown"):
+    def make_decision(self, worker_name, task_type, critic_score, goal):
         
-        # Step 1: confidence
-        confidence = calculate_confidence(worker_name, critic_score)
+        # 1. Base confidence from critic
+        confidence = critic_score / 10  # normalize (0–1)
 
-        # Step 2: risk
-        risk = calculate_risk(task_type)
+        # 2. Adjust using past failures (learning influence)
+        memory = self.memory_manager.load_memory()
 
-        # Step 3: score
-        final_score = confidence - risk
+        failures = [
+            m for m in memory
+            if m.get("worker") == worker_name and m.get("result") == "FAILED"
+        ]
 
-        # Step 4: decision
-        if final_score >= 0.4:
-            decision = "AUTO_EXECUTE"
-        elif final_score >= 0:
+        if len(failures) >= 3:
+            confidence *= 0.7   # reduce trust
+
+        # 3. Risk calculation
+        if confidence > 0.7:
+            decision = "EXECUTE"
+            risk = "low"
+        elif confidence > 0.4:
             decision = "ASK_USER"
+            risk = "medium"
         else:
             decision = "BLOCK"
+            risk = "high"
 
-        # Step 5: simulate outcome (temporary)
-        actual_outcome = final_score   # placeholder
-
-        # ✅ STEP 6 — RECORD DECISION
-        self.learning_engine.record_outcome(
-            goal,
-            decision,
-            final_score,
-            actual_outcome
-        )
-
-        return DecisionScore(
-            confidence=confidence,
-            risk=risk,
-            final_score=final_score,
-            decision=decision
-        )
+        return {
+            "decision": decision,
+            "confidence": round(confidence, 2),
+            "risk": risk
+        }
