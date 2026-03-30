@@ -6,32 +6,32 @@ from core.critic import CriticAgent
 from core.planner import TaskPlanner
 from core.worker_registry import WorkerRegistry
 from core.worker_loader import WorkerLoader
-
+from core.decision_engine import DecisionEngine
 from utils.logger import logger
 import asyncio
-from core.decision_engine import make_decision
 from utils.formatter import format_success, format_error
 from core.execution_trace import ExecutionTrace
 from core.trace_logger import log_execution
 from datetime import datetime
 from core import executor
-
 from workers.writing_worker import WritingWorker
 from workers.research_worker import ResearchWorker
 from memory.session_memory import SessionMemory
 
-
 class ExecutionEngine:
-    def __init__(self):
-        self.registry = WorkerRegistry()
 
+    def __init__(self, trust_manager, memory_manager):
+        self.trust_manager = trust_manager
+        self.memory_manager = memory_manager
+        self.registry = WorkerRegistry()
+        self.decision_engine = DecisionEngine(self.memory_manager)
         loader = WorkerLoader(self.registry)
         loader.load_workers()
-
         self.router = Router(self.registry)
         self.executor = TaskExecutor()
         self.critic = CriticAgent()
         self.planner = TaskPlanner()
+        self.decision_engine = DecisionEngine(self.memory_manager)
 
     def execute(self, task):
         workers = self.router.route(task)
@@ -91,22 +91,32 @@ class ExecutionEngine:
                 # GET WORKERS
                 workers = self.registry.all_workers()
 
-                if not workers:
-                    final_outputs.append("No workers available.")
-                    continue
+                # sort workers based on trust
+                workers = sorted(
+                    workers,
+                    key=lambda w: self.trust_manager.get_trust(w.name),
+                    reverse=True
+                )
 
-                # PARALLEL EXECUTION
-                tasks = [
-                    self.executor.execute([worker], [intent], task)
-                    for worker in workers
-                ]
+                # select BEST worker only
+                best_worker = max(
+                    workers,
+                    key=lambda w: self.trust_manager.get_trust(w.name)
+                )
 
-                outputs = await asyncio.gather(*tasks, return_exceptions=True)
+                # execute ONLY best worker
+                result = await self.executor.execute(
+                    [best_worker],
+                    intent,
+                    task
+                )
+
+                outputs = [result]
 
                 # CRITIC SCORING
                 worker_outputs = []
 
-                for worker, output in zip(workers, outputs):
+                for worker, output in [(best_worker, outputs[0])]:
 
                     if isinstance(output, Exception):
                         worker_outputs.append({
@@ -148,6 +158,17 @@ class ExecutionEngine:
 
                 # BEST WORKER
                 best_result = max(worker_outputs, key=lambda x: x["score"])
+                worker_name = best_result["worker"]
+                intent = intent  # already exists
+                critic_score = best_result["score"]
+                goal = intent  # temporary
+
+                decision = self.decision_engine.make_decision(
+                    worker_name=worker_name,
+                    task_type=intent,
+                    critic_score=critic_score,
+                    goal=goal
+                )
 
                 result = best_result["output"]
                 worker_name = best_result["worker"]
@@ -165,13 +186,14 @@ class ExecutionEngine:
                     critic_score *= 0.7
 
                 # DECISION ENGINE
-                decision = make_decision(
+                decision = self.decision_engine.make_decision(
                     worker_name=worker_name,
                     task_type=intent,
-                    critic_score=critic_score
+                    critic_score=critic_score,
+                    goal=goal
                 )
 
-                # -------- USER PREFERENCE CHECK --------
+                # USER PREFERENCE CHECK
                 user_rejections = [
                     m for m in memory
                     if m.get("type") == "user_preference"
