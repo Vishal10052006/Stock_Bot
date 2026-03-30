@@ -5,6 +5,9 @@ from core.execution_engine import ExecutionEngine
 from core.goal_manager import GoalManager
 from core.strategy_engine import StrategyEngine
 
+from core.decision_simulator import DecisionSimulator
+from core.learning_engine import LearningEngine
+
 class CEO:
     # Constructor (__init__)
     def __init__(self):
@@ -16,6 +19,9 @@ class CEO:
         self.goal_manager = GoalManager()
         self.strategy_engine = StrategyEngine()
 
+        self.decision_simulator = DecisionSimulator()
+        self.learning_engine = LearningEngine(self.memory_manager)
+        
     def add_goal(self, goal):
         self.goal_manager.add_goal(goal)
 
@@ -31,3 +37,6 @@ class CEO:
 
     async def act(self, command):
         return await self.execution_engine.run(command, self.memory_manager)
+    
+    def simulate_decision(self, goal):
+        return self.decision_simulator.simulate(goal)
