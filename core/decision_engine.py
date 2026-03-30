@@ -2,11 +2,13 @@ from core.confidence_calculator import calculate_confidence
 from core.risk_calculator import calculate_risk
 from core.decision_type import DecisionScore
 from core.learning_engine import LearningEngine
+from core.memory_manager import MemoryManager
 
 
 class DecisionEngine:
-    def __init__(self):
-        self.learning_engine = LearningEngine()
+    def __init__(self, memory_manager):
+        self.memory_manager = MemoryManager()
+        self.learning_engine = LearningEngine(self.memory_manager)
 
     def make_decision(self, worker_name, task_type, critic_score, goal="unknown"):
         
