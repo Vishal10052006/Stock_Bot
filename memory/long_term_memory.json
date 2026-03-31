@@ -1,1 +1,159 @@
-[]
+[
+    {
+        "type": "decision_outcome",
+        "goal": "Build AI Study Assistant",
+        "chosen_option": "Build backend first",
+        "predicted": {
+            "stability": "high",
+            "speed": "medium",
+            "risk": "low"
+        },
+        "actual": {
+            "stability": "high",
+            "speed": "medium",
+            "risk": "low"
+        }
+    },
+    {
+        "type": "decision_outcome",
+        "goal": "Build AI Study Assistant",
+        "chosen_option": "Build backend first",
+        "predicted": {
+            "stability": "high",
+            "speed": "medium",
+            "risk": "low"
+        },
+        "actual": {
+            "stability": "high",
+            "speed": "medium",
+            "risk": "low"
+        }
+    },
+    {
+        "type": "decision_outcome",
+        "goal": "Build AI Study Assistant",
+        "chosen_option": "Build backend first",
+        "predicted": {
+            "stability": "high",
+            "speed": "medium",
+            "risk": "low"
+        },
+        "actual": {
+            "stability": "high",
+            "speed": "medium",
+            "risk": "low"
+        }
+    },
+    {
+        "type": "decision_outcome",
+        "goal": "Build AI Study Assistant",
+        "chosen_option": "Build backend first",
+        "predicted": {
+            "stability": "high",
+            "speed": "medium",
+            "risk": "low"
+        },
+        "actual": {
+            "stability": "high",
+            "speed": "medium",
+            "risk": "low"
+        }
+    },
+    {
+        "type": "decision_outcome",
+        "goal": "Build AI Study Assistant",
+        "chosen_option": "Build backend first",
+        "predicted": {
+            "stability": "high",
+            "speed": "medium",
+            "risk": "low"
+        },
+        "actual": {
+            "stability": "high",
+            "speed": "medium",
+            "risk": "low"
+        }
+    },
+    {
+        "type": "decision_outcome",
+        "goal": "Build AI Study Assistant",
+        "chosen_option": "Build backend first",
+        "predicted": {
+            "stability": "high",
+            "speed": "medium",
+            "risk": "low"
+        },
+        "actual": {
+            "stability": "high",
+            "speed": "medium",
+            "risk": "low"
+        }
+    },
+    {
+        "type": "decision_outcome",
+        "goal": "Build AI Study Assistant",
+        "chosen_option": "Build backend first",
+        "predicted": {
+            "stability": "high",
+            "speed": "medium",
+            "risk": "low"
+        },
+        "actual": {
+            "stability": "high",
+            "speed": "medium",
+            "risk": "low"
+        }
+    },
+    {
+        "type": "decision_outcome",
+        "goal": "Build AI Study Assistant",
+        "chosen_option": "Build backend first",
+        "predicted": {
+            "stability": "high",
+            "speed": "medium",
+            "risk": "low"
+        },
+        "actual": {
+            "stability": "high",
+            "speed": "medium",
+            "risk": "low"
+        }
+    },
+    {
+        "type": "decision_outcome",
+        "goal": "Build AI Study Assistant",
+        "chosen_option": "Build backend first",
+        "predicted": {
+            "stability": "high",
+            "speed": "medium",
+            "risk": "low"
+        },
+        "actual": {
+            "stability": "high",
+            "speed": "medium",
+            "risk": "low"
+        }
+    },
+    {
+        "type": "decision_outcome",
+        "goal": "Build AI Study Assistant",
+        "chosen_option": "Build backend first",
+        "predicted": {
+            "stability": "high",
+            "speed": "medium",
+            "risk": "low"
+        },
+        "actual": {
+            "stability": "high",
+            "speed": "medium",
+            "risk": "low"
+        }
+    },
+    {
+        "type": "execution",
+        "worker": "math_worker",
+        "task": "write a blog about AI",
+        "result": "SUCCESS",
+        "confidence": 0.7
+    }
+]
