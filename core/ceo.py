@@ -1,24 +1,27 @@
 from core.memory_manager import MemoryManager
 from memory.session_memory import SessionMemory
 from core.execution_engine import ExecutionEngine
-
+from core.decision_engine import DecisionEngine
 from core.goal_manager import GoalManager
 from core.strategy_engine import StrategyEngine
 
 from core.decision_simulator import DecisionSimulator
 from core.learning_engine import LearningEngine
+from core.trust_manager import TrustManager
 
 class CEO:
     # Constructor (__init__)
     def __init__(self):
-
+        self.trust_manager = TrustManager()
         self.memory = SessionMemory()
         self.memory_manager = MemoryManager()
-        self.execution_engine = ExecutionEngine()
-
+        self.execution_engine = ExecutionEngine(
+            self.trust_manager,
+            self.memory_manager
+        )
+        self.decision_engine = DecisionEngine(self.memory_manager)
         self.goal_manager = GoalManager()
         self.strategy_engine = StrategyEngine()
-
         self.decision_simulator = DecisionSimulator()
         self.learning_engine = LearningEngine(self.memory_manager)
         
@@ -36,7 +39,32 @@ class CEO:
         return strategies
 
     async def act(self, command):
-        return await self.execution_engine.run(command, self.memory_manager)
+        available_workers = ["math_worker", "research_worker", "writing_worker"]
+
+        decision = self.decision_engine.make_decision(
+            task_type=command,
+            critic_score=8,  # (temporary, later from critic system)
+            goal="default",
+            available_workers=available_workers,
+            trust_manager=self.trust_manager
+        )
+
+        # 👇 Only execute if allowed
+        if decision["decision"] == "EXECUTE":
+            results = await self.execution_engine.run(
+                command,
+                self.memory_manager,
+                decision["worker"],
+                self.trust_manager
+            )
+        else:
+            return {
+                "status": decision["decision"],
+                "reason": decision
+            }
+
+        print("TRUST SCORES:", self.trust_manager.get_all_trust())
+        return results
     
     def simulate_decision(self, goal):
         return self.decision_simulator.simulate(goal)
