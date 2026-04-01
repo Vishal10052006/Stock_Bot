@@ -10,17 +10,25 @@ class DecisionEngine:
         self.memory_manager = MemoryManager()
         self.learning_engine = LearningEngine(self.memory_manager)
 
-    def select_worker(self, task_type, available_workers, trust_manager):
+    def select_worker(self, task, available_workers, trust_manager):
+
+        import random
+
+        # 🔥 STEP 1 — EXPLORATION (ADD HERE)
+        if random.random() < 0.2:
+            print("⚡ Exploring random worker")
+            return random.choice(available_workers)
+
+        # 🔥 STEP 2 — NORMAL SCORING
         scored = []
 
         for worker in available_workers:
-            # Base score from your system (you can improve later)
-            base_score = 0.5  
-
-            trust = trust_manager.get_trust(worker)
-
-            final_score = base_score * 0.7 + trust * 0.3
-            scored.append((worker, final_score))
+            score = self.calculate_multi_domain_score(
+                worker,
+                task,
+                trust_manager
+            )
+            scored.append((worker, score))
 
         return max(scored, key=lambda x: x[1])[0]
 
@@ -54,10 +62,11 @@ class DecisionEngine:
             risk = "high"
 
         return {
-            "worker": worker_name,   # 🔥 ADD THIS LINE
+            "worker": worker_name,
             "decision": decision,
             "confidence": round(confidence, 2),
             "risk": risk,
+            "reason": f"Selected based on trust + goal + skill vs risk/time"
         }
     
     def explain(self, decision_data):
@@ -67,3 +76,31 @@ class DecisionEngine:
     Risk: {decision_data['risk']}
     Reason: Based on past performance and current score
     """
+
+    def calculate_multi_domain_score(self, worker, task, trust_manager):
+
+        trust = trust_manager.get_trust(worker)
+
+        # Example dynamic behavior
+        if worker == "writing_worker":
+            skill_gain = 0.9
+            time_cost = 0.6
+        elif worker == "research_worker":
+            skill_gain = 0.7
+            time_cost = 0.4
+        else:
+            skill_gain = 0.5
+            time_cost = 0.3
+
+        risk = 0.3
+        goal_value = 0.8
+
+        score = (
+            trust * 0.2 +
+            goal_value * 0.2 +
+            skill_gain * 0.3 +
+            (1 - time_cost) * 0.2 -
+            risk * 0.1
+        )
+
+        return score
