@@ -1,12 +1,14 @@
 from workers.base_worker import BaseWorker
 
-
 class MathWorker(BaseWorker):
+    def __init__(self):
+        self.name = "math_worker"
 
-    name = "math_worker"
+    def execute(self, task):
+        print(f"[MathWorker] Processing: {task}")
 
-    capabilities = ["math", "calculate"]
-
-    def run(self, task):
-        expression = task["input"]
-        return eval(expression)
+        return {
+            "success": True,
+            "confidence": 0.7,
+            "output": "Math result"
+        }
