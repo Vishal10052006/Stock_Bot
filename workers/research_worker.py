@@ -3,7 +3,7 @@ import asyncio
 
 class ResearchWorker(BaseWorker):
     def __init__(self):
-        self.name = "Research_Worker"
+        self.name = "research_worker"
 
     def execute(self, task):
         print(f"[Research Worker] Processing: {task}")
