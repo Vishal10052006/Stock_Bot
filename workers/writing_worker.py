@@ -1,14 +1,15 @@
 from workers.base_worker import BaseWorker
 import asyncio
 
-class WritingWorker(BaseWorker):
+class WritinWorker(BaseWorker):
+    def __init__(self):
+        self.name = "Writing_Worker"
 
-    name = "writing_worker"
+    def execute(self, task):
+        print(f"[WritingWorker] Processing: {task}")
 
-    capabilities = ["write", "blog"]
-
-    def run(self, task):
-
-        topic = task["input"]
-
-        return f"Blog about {topic}"
+        return {
+            "success": True,
+            "confidence": 0.7,
+            "output": "Writing result"
+        }
