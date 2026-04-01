@@ -23,7 +23,7 @@ class DecisionEngine:
         scored = []
 
         for worker in available_workers:
-            score = self.calculate_multi_domain_score(
+            score = self.calculate_advanced_score(
                 worker,
                 task,
                 trust_manager
@@ -61,12 +61,27 @@ class DecisionEngine:
             decision = "BLOCK"
             risk = "high"
 
+        # 🔥 ADD THIS BEFORE RETURN
+        trust = trust_manager.get_trust(worker_name)
+        risk = self.estimate_risk(worker_name, task_type)
+        time_cost = self.estimate_time(worker_name, task_type)
+        skill_gain = self.estimate_skill_gain(worker_name, task_type)
+        goal_value = self.estimate_goal_value(task_type)
+
         return {
             "worker": worker_name,
             "decision": decision,
             "confidence": round(confidence, 2),
             "risk": risk,
-            "reason": f"Selected based on trust + goal + skill vs risk/time"
+
+            "reason": f"""
+        Worker: {worker_name}
+        Trust: {trust}
+        Risk: {risk}
+        Time: {time_cost}
+        Skill Gain: {skill_gain}
+        Goal Value: {goal_value}
+        """
         }
     
     def explain(self, decision_data):
@@ -76,31 +91,69 @@ class DecisionEngine:
     Risk: {decision_data['risk']}
     Reason: Based on past performance and current score
     """
-
-    def calculate_multi_domain_score(self, worker, task, trust_manager):
+    # SCORING FUNCTION THAT COMBINES MULTIPLE DOMAINS
+    def calculate_advanced_score(self, worker, task, trust_manager):
 
         trust = trust_manager.get_trust(worker)
 
-        # Example dynamic behavior
-        if worker == "writing_worker":
-            skill_gain = 0.9
-            time_cost = 0.6
-        elif worker == "research_worker":
-            skill_gain = 0.7
-            time_cost = 0.4
-        else:
-            skill_gain = 0.5
-            time_cost = 0.3
-
-        risk = 0.3
-        goal_value = 0.8
+        # 🔥 Dynamic factors
+        risk = self.estimate_risk(worker, task)
+        time_cost = self.estimate_time(worker, task)
+        skill_gain = self.estimate_skill_gain(worker, task)
+        goal_value = self.estimate_goal_value(task)
 
         score = (
             trust * 0.2 +
             goal_value * 0.2 +
-            skill_gain * 0.3 +
+            skill_gain * 0.25 +
             (1 - time_cost) * 0.2 -
-            risk * 0.1
+            risk * 0.15
         )
+        memory = self.memory_manager.load_memory()
+        penalty = self.adjust_for_past_failures(worker, memory)
+        score += penalty
 
         return score
+    
+    # INTELLIGENCE FUNCTIONS
+    def estimate_risk(self, worker, task):
+        if worker == "research_worker":
+            return 0.4
+        elif worker == "writing_worker":
+            return 0.2
+        return 0.3
+    
+    # Time estimation
+    def estimate_time(self, worker, task):
+        if worker == "research_worker":
+            return 0.7
+        elif worker == "writing_worker":
+            return 0.5
+        return 0.4
+    
+    # Skill gain
+    def estimate_skill_gain(self, worker, task):
+        if "blog" in task.lower():
+            if worker == "writing_worker":
+                return 0.9
+            elif worker == "research_worker":
+                return 0.7
+        return 0.5
+    
+    # Goal importance
+    def estimate_goal_value(self, task):
+        if "blog" in task.lower():
+            return 0.8
+        return 0.5
+    
+    # MEMORY-BASED LEARNING
+    def adjust_for_past_failures(self, worker, memory):
+        failures = [
+            m for m in memory
+            if m.get("worker") == worker and m.get("result") == "FAILED"
+        ]
+
+        if len(failures) >= 2:
+            return -0.2
+
+        return 0
