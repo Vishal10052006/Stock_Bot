@@ -14,8 +14,6 @@ from core.execution_trace import ExecutionTrace
 from core.trace_logger import log_execution
 from datetime import datetime
 from core import executor
-from workers.writing_worker import WritingWorker
-from workers.research_worker import ResearchWorker
 from memory.session_memory import SessionMemory
 
 class ExecutionEngine:
@@ -24,7 +22,6 @@ class ExecutionEngine:
         self.trust_manager = trust_manager
         self.memory_manager = memory_manager
         self.registry = WorkerRegistry()
-        self.decision_engine = DecisionEngine(self.memory_manager)
         loader = WorkerLoader(self.registry)
         loader.load_workers()
         self.router = Router(self.registry)
@@ -33,12 +30,32 @@ class ExecutionEngine:
         self.planner = TaskPlanner()
         self.decision_engine = DecisionEngine(self.memory_manager)
 
-    def execute(self, task):
-        workers = self.router.route(task)
-        result = self.executor.execute(task, workers)
-        feedback = self.critic.review(result)
+    async def run(self, command, memory_manager, worker_name, trust_manager):
+        result = self.execute(command, worker_name, trust_manager)
+        return [result]
 
-        return feedback
+    def execute(self, task, worker_name, trust_manager):
+
+        worker = self.registry.get_worker(worker_name)
+
+        print(f"EXECUTING WORKER: {worker_name}")
+
+        result = worker.execute(task)
+
+        success = result.get("success", True)
+        confidence = result.get("confidence", 1.0)
+
+        trust_manager.update_trust(worker_name, success, confidence)
+
+        self.memory_manager.store({
+            "type": "execution",
+            "worker": worker_name,
+            "task": task,
+            "result": "SUCCESS" if success else "FAILED",
+            "confidence": confidence
+        })
+
+        return result
     
     # Plan Creation Function
     def create_plan(self, command: str):
@@ -78,6 +95,14 @@ class ExecutionEngine:
         try:
             # PLAN
             memory = self.memory_manager.load_memory()
+            # Reduce trust dynamically
+            past_failures = [
+                m for m in memory
+                if m.get("worker") == worker_name and m.get("result") == "FAILED"
+            ]
+
+            if len(past_failures) > 3:
+                critic_score *= 0.7
             plan = self.planner.create_plan(command, memory)
             logger.info(f"Plan created: {plan}")
 
@@ -192,6 +217,9 @@ class ExecutionEngine:
                     critic_score=critic_score,
                     goal=goal
                 )
+                print("CONFIDENCE:", decision["confidence"])
+                print("RISK:", decision["risk"])
+                print("DECISION:", decision["decision"])
 
                 # USER PREFERENCE CHECK
                 user_rejections = [
