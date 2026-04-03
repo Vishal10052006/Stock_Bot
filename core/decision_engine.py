@@ -1,14 +1,17 @@
+from core import trust_manager
 from core.confidence_calculator import calculate_confidence
 from core.risk_calculator import calculate_risk
 from core.decision_type import DecisionScore
 from core.learning_engine import LearningEngine
 from core.memory_manager import MemoryManager
+from core.strategy_engine import StrategyEngine
 
 
 class DecisionEngine:
     def __init__(self, memory_manager):
         self.memory_manager = MemoryManager()
         self.learning_engine = LearningEngine(self.memory_manager)
+        self.strategy_engine = StrategyEngine()
 
     def select_worker(self, task, available_workers, trust_manager):
 
@@ -23,12 +26,7 @@ class DecisionEngine:
 
         for worker in available_workers:
 
-            # 🔥 ADD THIS HERE
             trust = trust_manager.get_trust(worker)
-
-            if trust > 0.6:
-                print("🎯 High trust → using strategy_worker")
-                return "strategy_worker"
 
             # normal scoring
             score = self.calculate_advanced_score(worker, task, trust_manager)
@@ -37,8 +35,17 @@ class DecisionEngine:
         return max(scored, key=lambda x: x[1])[0]
 
     def make_decision(self, task_type, critic_score, goal, available_workers, trust_manager):
-        
-        worker_name = self.select_worker(task_type, available_workers, trust_manager)
+
+        # TRY STRATEGY FIRST
+        strategy_output = self.strategy_engine.create_strategy(task_type)
+
+        self.last_strategy = strategy_output
+
+        if strategy_output:
+            print("🧠 Strategy override activated")
+            worker_name = "strategy_worker"
+        else:
+            worker_name = self.select_worker(task_type, available_workers, trust_manager)
         
         # 1. Base confidence from critic
         confidence = critic_score / 10  # normalize (0–1)
