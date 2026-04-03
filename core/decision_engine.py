@@ -42,8 +42,32 @@ class DecisionEngine:
         self.last_strategy = strategy_output
 
         if strategy_output:
-            print("🧠 Strategy override activated")
-            worker_name = "strategy_worker"
+            scored = []
+
+            for worker in available_workers:
+                trust = trust_manager.get_trust(worker)
+
+                risk = self.estimate_risk(worker, task_type)
+                time_cost = self.estimate_time(worker, task_type)
+                skill_gain = self.estimate_skill_gain(worker, task_type)
+                goal_value = self.estimate_goal_value(task_type)
+
+                # 🔥 FINAL SCORE
+                score = (
+                    0.4 * trust +
+                    0.2 * (1 - risk) +
+                    0.2 * (1 - time_cost) +
+                    0.1 * skill_gain +
+                    0.1 * goal_value
+                )
+
+                scored.append((worker, score))
+
+            # pick best worker
+            worker_name = max(scored, key=lambda x: x[1])[0]
+
+            print(f"🧠 Selected worker: {worker_name}")
+
         else:
             worker_name = self.select_worker(task_type, available_workers, trust_manager)
         
