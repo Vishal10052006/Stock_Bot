@@ -14,20 +14,24 @@ class DecisionEngine:
 
         import random
 
-        # 🔥 STEP 1 — EXPLORATION (ADD HERE)
-        if random.random() < 0.2:
+        # ⚡ Exploration
+        if random.random() < 0.3:
             print("⚡ Exploring random worker")
             return random.choice(available_workers)
 
-        # 🔥 STEP 2 — NORMAL SCORING
         scored = []
 
         for worker in available_workers:
-            score = self.calculate_advanced_score(
-                worker,
-                task,
-                trust_manager
-            )
+
+            # 🔥 ADD THIS HERE
+            trust = trust_manager.get_trust(worker)
+
+            if trust > 0.6:
+                print("🎯 High trust → using strategy_worker")
+                return "strategy_worker"
+
+            # normal scoring
+            score = self.calculate_advanced_score(worker, task, trust_manager)
             scored.append((worker, score))
 
         return max(scored, key=lambda x: x[1])[0]
@@ -61,7 +65,7 @@ class DecisionEngine:
             decision = "BLOCK"
             risk = "high"
 
-        # 🔥 ADD THIS BEFORE RETURN
+        # ADD THIS BEFORE RETURN
         trust = trust_manager.get_trust(worker_name)
         risk = self.estimate_risk(worker_name, task_type)
         time_cost = self.estimate_time(worker_name, task_type)
@@ -96,7 +100,7 @@ class DecisionEngine:
 
         trust = trust_manager.get_trust(worker)
 
-        # 🔥 Dynamic factors
+        # Dynamic factors
         risk = self.estimate_risk(worker, task)
         time_cost = self.estimate_time(worker, task)
         skill_gain = self.estimate_skill_gain(worker, task)
@@ -114,6 +118,22 @@ class DecisionEngine:
         score += penalty
 
         return score
+    
+    def estimate_goal_value(self, task):
+        return 0.9           # profit importance
+    
+    def estimate_risk(self, worker, task):
+        if "technical" in worker:
+            return 0.3
+        elif "sentiment" in worker:
+            return 0.5
+        return 0.2
+    
+    def estimate_skill_gain(self, worker, task):
+        return 0.7
+    
+    def estimate_time(self, worker, task):
+        return 0.4
     
     # INTELLIGENCE FUNCTIONS
     def estimate_risk(self, worker, task):
@@ -157,3 +177,6 @@ class DecisionEngine:
             return -0.2
 
         return 0
+    
+
+
