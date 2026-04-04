@@ -5,120 +5,141 @@ from core.decision_type import DecisionScore
 from core.learning_engine import LearningEngine
 from core.memory_manager import MemoryManager
 from core.strategy_engine import StrategyEngine
+from core.weight_manager import WeightManager
+from core.reinforcement_engine import ReinforcementEngine
 
 
 class DecisionEngine:
     def __init__(self, memory_manager):
-        self.memory_manager = MemoryManager()
+        self.memory_manager = memory_manager
+        self.weight_manager = WeightManager()
+        self.reinforcement_engine = ReinforcementEngine()
         self.learning_engine = LearningEngine(self.memory_manager)
         self.strategy_engine = StrategyEngine()
 
+# 1. Main decision function that combines all factors
+    def calculate_advanced_score(self, worker, task, trust_manager):
+
+        trust = trust_manager.get_trust(worker)
+
+        risk = self.estimate_risk(worker, task)
+        time_cost = self.estimate_time(worker, task)
+        skill_gain = self.estimate_skill_gain(worker, task)
+        goal_value = self.estimate_goal_value(task)
+
+        # unified factors
+        factors = {
+            "trust": trust,
+            "risk": (1 - risk),
+            "time": (1 - time_cost),
+            "skill": skill_gain,
+            "goal": goal_value
+        }
+
+        # dynamic weights (PHASE 6 CORE)
+        weights = self.weight_manager.get_weights()
+
+        score = (
+            weights["trust"] * factors["trust"] +
+            weights["risk"] * factors["risk"] +
+            weights["time"] * factors["time"] +
+            weights["skill"] * factors["skill"] +
+            weights["goal"] * factors["goal"]
+        )
+
+        # memory penalty (optional but ok)
+        memory = self.memory_manager.load_memory()
+        score += self.adjust_for_past_failures(worker, memory)
+
+        return score, factors
+    
+# 2. Worker selection based on scores
     def select_worker(self, task, available_workers, trust_manager):
-
-        import random
-
-        # ⚡ Exploration
-        if random.random() < 0.15:
-            print(" Exploring random worker")
-            return random.choice(available_workers)
 
         scored = []
 
         for worker in available_workers:
-
-            trust = trust_manager.get_trust(worker)
-
-            # normal scoring
-            score = self.calculate_advanced_score(worker, task, trust_manager)
+            score, _ = self.calculate_advanced_score(worker, task, trust_manager)
             scored.append((worker, score))
+            print(f"{worker} score: {score}")
 
         return max(scored, key=lambda x: x[1])[0]
-
+    
+# 3. Main function to execute decision and learn from result
     def make_decision(self, task_type, critic_score, goal, available_workers, trust_manager):
 
-        # TRY STRATEGY FIRST
-        strategy_output = self.strategy_engine.create_strategy(task_type)
+        import random
 
+        # Dynamic exploration rate
+        experience = self.learning_engine.get_experience()
+        exploration_rate = max(0.1, 0.4 - experience * 0.01)
+
+        if random.random() < exploration_rate:
+            worker_name = random.choice(available_workers)
+            print("Exploring worker:", worker_name)
+
+            return {
+                "worker": worker_name,
+                "decision": "EXECUTE",
+                "confidence": 0.5,
+                "risk": "medium",
+                "factors": {},
+                "reason": "Exploration mode"
+            }
+
+        strategy_output = self.strategy_engine.create_strategy(task_type)
         self.last_strategy = strategy_output
 
-        if strategy_output:
-            scored = []
+        scored = []
 
-            for worker in available_workers:
-                trust = trust_manager.get_trust(worker)
+        # 🔥 USE SAME FUNCTION (NO DUPLICATE LOGIC)
+        for worker in available_workers:
+            score, factors = self.calculate_advanced_score(worker, task_type, trust_manager)
+            scored.append((worker, score, factors))
 
-                risk = self.estimate_risk(worker, task_type)
-                time_cost = self.estimate_time(worker, task_type)
-                skill_gain = self.estimate_skill_gain(worker, task_type)
-                goal_value = self.estimate_goal_value(task_type)
+        # pick best worker
+        worker_name, best_score, best_factors = max(scored, key=lambda x: x[1])
 
-                # 🔥 FINAL SCORE
-                score = (
-                    0.4 * trust +
-                    0.2 * (1 - risk) +
-                    0.2 * (1 - time_cost) +
-                    0.1 * skill_gain +
-                    0.1 * goal_value
-                )
+        print(f"Selected worker: {worker_name}")
 
-                scored.append((worker, score))
+        # confidence
+        confidence = critic_score / 10
 
-            # pick best worker
-            worker_name = max(scored, key=lambda x: x[1])[0]
-
-            print(f"🧠 Selected worker: {worker_name}")
-
-        else:
-            worker_name = self.select_worker(task_type, available_workers, trust_manager)
-        
-        # 1. Base confidence from critic
-        confidence = critic_score / 10  # normalize (0–1)
-
-        # 2. Adjust using past failures (learning influence)
+        # adjust using memory
         memory = self.memory_manager.load_memory()
-
         failures = [
             m for m in memory
             if m.get("worker") == worker_name and m.get("result") == "FAILED"
         ]
 
         if len(failures) >= 3:
-            confidence *= 0.7   # reduce trust
+            confidence *= 0.7
 
-        # 3. Risk calculation
+        # risk label
         if confidence > 0.7:
             decision = "EXECUTE"
-            risk = "low"
+            risk_label = "low"
         elif confidence > 0.4:
             decision = "ASK_USER"
-            risk = "medium"
+            risk_label = "medium"
         else:
             decision = "BLOCK"
-            risk = "high"
-
-        # ADD THIS BEFORE RETURN
-        trust = trust_manager.get_trust(worker_name)
-        risk = self.estimate_risk(worker_name, task_type)
-        time_cost = self.estimate_time(worker_name, task_type)
-        skill_gain = self.estimate_skill_gain(worker_name, task_type)
-        goal_value = self.estimate_goal_value(task_type)
+            risk_label = "high"
 
         return {
             "worker": worker_name,
             "decision": decision,
             "confidence": round(confidence, 2),
-            "risk": risk,
-
+            "risk": risk_label,
+            "factors": best_factors,
             "reason": f"""
-        Worker: {worker_name}
-        Trust: {trust}
-        Risk: {risk}
-        Time: {time_cost}
-        Skill Gain: {skill_gain}
-        Goal Value: {goal_value}
-        """
+    Worker: {worker_name}
+    Score: {round(best_score, 3)}
+    Confidence: {confidence}
+    """
         }
-    
+
+# 4. Function to execute task and learn from result
     def explain(self, decision_data):
         return f"""
     Decision: {decision_data['decision']}
@@ -126,30 +147,7 @@ class DecisionEngine:
     Risk: {decision_data['risk']}
     Reason: Based on past performance and current score
     """
-    # SCORING FUNCTION THAT COMBINES MULTIPLE DOMAINS
-    def calculate_advanced_score(self, worker, task, trust_manager):
-
-        trust = trust_manager.get_trust(worker)
-
-        # Dynamic factors
-        risk = self.estimate_risk(worker, task)
-        time_cost = self.estimate_time(worker, task)
-        skill_gain = self.estimate_skill_gain(worker, task)
-        goal_value = self.estimate_goal_value(task)
-
-        score = (
-            trust * 0.2 +
-            goal_value * 0.2 +
-            skill_gain * 0.25 +
-            (1 - time_cost) * 0.2 -
-            risk * 0.15
-        )
-        memory = self.memory_manager.load_memory()
-        penalty = self.adjust_for_past_failures(worker, memory)
-        score += penalty
-
-        return score
-    
+# 5. FACTOR ESTIMATION FUNCTIONS (SIMPLIFIED FOR DEMO)        
     def estimate_goal_value(self, task):
         return 0.9           # profit importance
     
@@ -168,34 +166,39 @@ class DecisionEngine:
     
     # INTELLIGENCE FUNCTIONS
     def estimate_risk(self, worker, task):
-        if worker == "research_worker":
+        if worker == "technical_worker":
+            return 0.3
+        elif worker == "sentiment_worker":
+            return 0.6
+        elif worker == "strategy_worker":
             return 0.4
-        elif worker == "writing_worker":
-            return 0.2
-        return 0.3
-    
-    # Time estimation
+        return 0.5
+
+
     def estimate_time(self, worker, task):
-        if worker == "research_worker":
-            return 0.7
-        elif worker == "writing_worker":
+        if worker == "technical_worker":
+            return 0.6   # slower
+        elif worker == "sentiment_worker":
+            return 0.3   # fast
+        elif worker == "strategy_worker":
             return 0.5
         return 0.4
-    
-    # Skill gain
+
+
     def estimate_skill_gain(self, worker, task):
-        if "blog" in task.lower():
-            if worker == "writing_worker":
-                return 0.9
-            elif worker == "research_worker":
-                return 0.7
-        return 0.5
-    
-    # Goal importance
-    def estimate_goal_value(self, task):
-        if "blog" in task.lower():
+        if worker == "technical_worker":
             return 0.8
+        elif worker == "sentiment_worker":
+            return 0.6
+        elif worker == "strategy_worker":
+            return 0.9
         return 0.5
+
+
+    def estimate_goal_value(self, task):
+        if "stock" in task.lower():
+            return 0.9
+        return 0.6
     
     # MEMORY-BASED LEARNING
     def adjust_for_past_failures(self, worker, memory):
