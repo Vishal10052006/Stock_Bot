@@ -15,7 +15,7 @@ class WeightManager:
         learning_rate = 0.05
 
         for key in self.weights:
-            self.weights[key] += learning_rate * feedback.get(key, 0)
+            self.weights[key] = max(0.1, min(0.5, self.weights[key]))
 
         self.normalize()
 
