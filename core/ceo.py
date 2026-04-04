@@ -25,6 +25,7 @@ class CEO:
         self.decision_simulator = DecisionSimulator()
         self.learning_engine = LearningEngine(self.memory_manager)
         
+        
     def add_goal(self, goal):
         self.goal_manager.add_goal(goal)
 
@@ -39,7 +40,11 @@ class CEO:
         return strategies
 
     async def act(self, command):
-        available_workers = ["math_worker", "research_worker", "writing_worker"]
+        available_workers = [
+            "technical_worker",
+            "sentiment_worker",
+            "strategy_worker"
+        ]
 
         decision = self.decision_engine.make_decision(
             task_type=command,
