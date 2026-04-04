@@ -18,8 +18,8 @@ class DecisionEngine:
         import random
 
         # ⚡ Exploration
-        if random.random() < 0.3:
-            print("⚡ Exploring random worker")
+        if random.random() < 0.15:
+            print(" Exploring random worker")
             return random.choice(available_workers)
 
         scored = []
