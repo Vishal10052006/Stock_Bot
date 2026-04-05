@@ -20,3 +20,17 @@ class MemoryManager:
         memory = self.load_memory()
         memory.append(entry)
         self.save_memory(memory)
+
+    def store_worker_performance(self, worker, success, confidence):
+        self.memory.append({
+            "type": "worker_performance",
+            "worker": worker,
+            "success": success,
+            "confidence": confidence
+        })
+
+    def store(self, data):
+        if not hasattr(self, "memory"):
+            self.memory = []
+
+        self.memory.append(data)
