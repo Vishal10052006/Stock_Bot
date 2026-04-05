@@ -1,3 +1,5 @@
+from unittest import result
+
 from core import trust_manager
 from core.confidence_calculator import calculate_confidence
 from core.risk_calculator import calculate_risk
@@ -126,18 +128,35 @@ class DecisionEngine:
             decision = "BLOCK"
             risk_label = "high"
 
-        return {
+        result = {
             "worker": worker_name,
             "decision": decision,
             "confidence": round(confidence, 2),
             "risk": risk_label,
             "factors": best_factors,
-            "reason": f"""
-    Worker: {worker_name}
-    Score: {round(best_score, 3)}
-    Confidence: {confidence}
-    """
-        }
+            "reason": f"Worker: {worker_name} | Score: {round(best_score, 3)} | Confidence: {confidence}"
+                }
+
+        import random
+
+        predicted = result["confidence"]
+        actual = random.uniform(0.4, 1.0)
+
+        reward = self.reinforcement_engine.calculate_reward(predicted, actual)
+
+        weights = self.weight_manager.get_weights()
+
+        feedback = self.reinforcement_engine.generate_feedback(
+            best_factors,
+            reward
+        )
+
+        self.weight_manager.update_weights(feedback)
+
+        print("🧠 UPDATED WEIGHTS:", self.weight_manager.get_weights())
+
+        # ✅ FINAL RETURN
+        return result
 
 # 4. Function to execute task and learn from result
     def explain(self, decision_data):
