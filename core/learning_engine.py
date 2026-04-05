@@ -1,7 +1,8 @@
 class LearningEngine:
 
     def __init__(self, memory_manager):
-        self.memory = memory_manager
+        self.memory_manager = memory_manager
+    
     # STORE DECISION RESULT
     def record_outcome(self, goal, chosen_option, predicted_outcome, actual_outcome):
         
@@ -52,3 +53,7 @@ class LearningEngine:
             "total_cases": len(outcomes),
             "average_accuracy": avg_accuracy
         }
+    
+    def get_experience(self):
+        memory = self.memory_manager.load_memory()
+        return len(memory)
