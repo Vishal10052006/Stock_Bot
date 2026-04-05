@@ -151,7 +151,7 @@
     },
     {
         "type": "execution",
-        "worker": "math_worker",
+        "worker": "technical_worker",
         "task": "write a blog about AI",
         "result": "SUCCESS",
         "confidence": 0.7
