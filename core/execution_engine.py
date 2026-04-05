@@ -38,22 +38,25 @@ class ExecutionEngine:
 
         worker = self.registry.get_worker(worker_name)
 
-        print(f"EXECUTING WORKER: {worker_name}")
+        if worker.name == "strategy_worker" and hasattr(self, "last_strategy"):
+            result = self.last_strategy   # reuse instead of re-running
+        else:
+            result = worker.execute(task)
 
-        result = worker.execute(task)
-
+        # STORE RESULT (ONLY ONCE)
         success = result.get("success", True)
         confidence = result.get("confidence", 1.0)
 
-        trust_manager.update_trust(worker_name, success, confidence)
-
         self.memory_manager.store({
             "type": "execution",
-            "worker": worker_name,
+            "worker": worker.name,
             "task": task,
             "result": "SUCCESS" if success else "FAILED",
             "confidence": confidence
         })
+
+        # TRUST UPDATE
+        self.trust_manager.update_trust(worker.name, success, confidence)
 
         return result
     
