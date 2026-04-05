@@ -13,8 +13,7 @@ class WorkerLoader:
 
         from config import SYSTEM_CONFIG
 
-        workers_path = SYSTEM_CONFIG["workers_folder"]
-
+        workers_path = SYSTEM_CONFIG.get("workers_folder", "workers")
         for filename in os.listdir(workers_path):
 
             # ignore non worker files
@@ -31,6 +30,6 @@ class WorkerLoader:
 
                     worker_instance = obj()
 
-                    self.registry.register(worker_instance.name, worker_instance)
+                    self.registry.register(worker_instance)
 
                     print(f"[WorkerLoader] Loaded worker: {worker_instance.name}")

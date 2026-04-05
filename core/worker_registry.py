@@ -1,19 +1,17 @@
 class WorkerRegistry:
-
     def __init__(self):
-        self.workers = []
+        self.workers = {}
 
     def register(self, worker):
+        self.workers[worker.name] = worker
 
-        self.workers.append(worker)
+    def all_workers(self):
+        return list(self.workers.keys())
 
-    def get_workers(self, task_type):
+    def get_worker(self, worker_name):
+        worker = self.workers.get(worker_name)
 
-        candidates = []
+        if not worker:
+            raise ValueError(f"Worker '{worker_name}' not found")
 
-        for worker in self.workers:
-
-            if task_type in worker.capabilities:
-                candidates.append(worker)
-
-        return candidates
+        return worker
