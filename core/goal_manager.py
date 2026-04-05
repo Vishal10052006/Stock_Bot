@@ -12,4 +12,4 @@ class GoalManager:
         )
 
     def get_active_goals(self):
-        return [g for g in self.goal if g["status"] == "active"]
+        return [g for g in self.goals if g["status"] == "active"]  
