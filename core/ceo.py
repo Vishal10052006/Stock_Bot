@@ -6,7 +6,7 @@ from core.execution_engine import ExecutionEngine
 from core.decision_engine import DecisionEngine
 from core.goal_manager import GoalManager
 from core.strategy_engine import StrategyEngine
-from core.weight_manager import WeightManager
+from intelligence.weight_manager import WeightManager
 from core.reinforcement_engine import ReinforcementEngine
 from core.decision_simulator import DecisionSimulator
 from core.learning_engine import LearningEngine

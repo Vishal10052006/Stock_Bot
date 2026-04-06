@@ -7,7 +7,7 @@ from core.decision_type import DecisionScore
 from core.learning_engine import LearningEngine
 from core.memory_manager import MemoryManager
 from core.strategy_engine import StrategyEngine
-from core.weight_manager import WeightManager
+from intelligence.weight_manager import WeightManager
 from core.reinforcement_engine import ReinforcementEngine
 
 
