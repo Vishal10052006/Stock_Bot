@@ -1,5 +1,5 @@
 from workers.base_worker import BaseWorker
-from core.memory_manager import MemoryManager
+from memory.memory_manager import MemoryManager
 
 class StrategyWorker(BaseWorker):
     name = "strategy_worker"
