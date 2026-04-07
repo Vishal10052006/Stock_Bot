@@ -1,34 +1,24 @@
-# core/execution_engine.py
+from unittest import loader
 
-from core.router import Router
-from core.executor import TaskExecutor
-from intelligence.evaluation_engine import CriticAgent
-from core.planner import TaskPlanner
+from execution.executor import Executor
+from execution.execution_trace import ExecutionTrace
+from utils.logger import logger
+from utils.formatter import format_success, format_error
+from utils.logger import logger
+from datetime import datetime
 from workers.worker_registry import WorkerRegistry
 from workers.worker_loader import WorkerLoader
-from core.decision_engine import DecisionEngine
-from utils.logger import logger
-import asyncio
-from utils.formatter import format_success, format_error
-from core.execution_trace import ExecutionTrace
-from core.trace_logger import log_execution
-from datetime import datetime
-from core import executor
-from memory.session_memory import SessionMemory
 
 class ExecutionEngine:
 
     def __init__(self, trust_manager, memory_manager):
         self.trust_manager = trust_manager
         self.memory_manager = memory_manager
+        self.executor = Executor()
         self.registry = WorkerRegistry()
+
         loader = WorkerLoader(self.registry)
         loader.load_workers()
-        self.router = Router(self.registry)
-        self.executor = TaskExecutor()
-        self.critic = CriticAgent()
-        self.planner = TaskPlanner()
-        self.decision_engine = DecisionEngine(self.memory_manager)
 
     async def run(self, command, memory_manager, worker_name, trust_manager):
         result = self.execute(command, worker_name, trust_manager)
@@ -54,9 +44,6 @@ class ExecutionEngine:
             "result": "SUCCESS" if success else "FAILED",
             "confidence": confidence
         })
-
-        # TRUST UPDATE
-        self.trust_manager.update_trust(worker.name, success, confidence)
 
         return result
     
@@ -119,17 +106,13 @@ class ExecutionEngine:
                 # GET WORKERS
                 workers = self.registry.all_workers()
 
-                # sort workers based on trust
-                workers = sorted(
-                    workers,
-                    key=lambda w: self.trust_manager.get_trust(w.name),
-                    reverse=True
-                )
-
                 # select BEST worker only
                 best_worker = max(
                     workers,
-                    key=lambda w: self.trust_manager.get_trust(w.name)
+                    key=lambda w: (
+                        self.trust_manager.get_trust(w.name) +
+                        self.reliability_manager.get_reliability(w.name)
+                    )
                 )
 
                 # execute ONLY best worker
@@ -284,7 +267,7 @@ class ExecutionEngine:
                     timestamp=str(datetime.now())
                 )
 
-                log_execution(trace)
+                logger.info(trace)
 
                 # MEMORY STORE
                 memory_entry = {
@@ -339,6 +322,30 @@ class ExecutionEngine:
 
             # MEMORY
             self.memory.add_interaction(command, final_response)
+
+            # define actual result quality
+            actual_score = critic_score   # from your critic system
+
+            # define expected (baseline)
+            expected_score = 0.5   # you can improve later
+
+            evaluation = self.learning_engine.evaluate(expected_score, actual_score)
+
+            reward = self.reinforcement_engine.get_reward(evaluation)
+
+            # update trust + reliability
+            self.trust_manager.update_trust(worker_name, actual_score > 0, decision.confidence)
+            self.reliability_manager.update(worker_name, evaluation)
+
+            # store learning record
+            self.learning_engine.record({
+                "task": intent,
+                "worker": worker_name,
+                "score": actual_score,
+                "evaluation": evaluation,
+                "reward": reward,
+                "timestamp": str(datetime.now())
+            })
 
             return final_response
 
