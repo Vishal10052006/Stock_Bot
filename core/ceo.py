@@ -1,34 +1,43 @@
-from unittest import result
-
-from core.memory_manager import MemoryManager
+from memory.memory_manager import MemoryManager
 from memory.session_memory import SessionMemory
-from core.execution_engine import ExecutionEngine
+
+from execution.execution_engine import ExecutionEngine
 from core.decision_engine import DecisionEngine
 from core.goal_manager import GoalManager
-from core.strategy_engine import StrategyEngine
+
+from intelligence.strategy_engine import StrategyEngine
 from intelligence.weight_manager import WeightManager
-from core.reinforcement_engine import ReinforcementEngine
-from core.decision_simulator import DecisionSimulator
-from core.learning_engine import LearningEngine
-from core.trust_manager import TrustManager
+from intelligence.decision_simulator import DecisionSimulator
+
+from learning.learning_engine import LearningEngine
+from learning.reinforcement_engine import ReinforcementEngine
+from learning.trust_manager import TrustManager
 
 class CEO:
     # Constructor (__init__)
     def __init__(self):
         self.trust_manager = TrustManager()
-        self.memory = SessionMemory()
         self.memory_manager = MemoryManager()
+
+        self.strategy_engine = StrategyEngine()
+        self.learning_engine = LearningEngine(self.memory_manager)
+
+        self.weight_manager = WeightManager()
+        self.reinforcement_engine = ReinforcementEngine()
+
         self.execution_engine = ExecutionEngine(
             self.trust_manager,
             self.memory_manager
         )
-        self.decision_engine = DecisionEngine(self.memory_manager)
-        self.goal_manager = GoalManager()
-        self.strategy_engine = StrategyEngine()
-        self.decision_simulator = DecisionSimulator()
-        self.learning_engine = LearningEngine(self.memory_manager)
-        self.weight_manager = WeightManager()
-        self.reinforcement_engine = ReinforcementEngine()
+
+        self.decision_engine = DecisionEngine(
+            self.memory_manager,
+            self.trust_manager,
+            self.learning_engine,
+            self.strategy_engine,
+            self.weight_manager,
+            self.reinforcement_engine
+        )
              
     def add_goal(self, goal):
         self.goal_manager.add_goal(goal)
