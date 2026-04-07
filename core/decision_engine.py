@@ -5,9 +5,13 @@ from core.decision_type import DecisionScore
 from intelligence.weight_manager import WeightManager
 
 class DecisionEngine:
-    def __init__(self, memory_manager):
+    def __init__(self, memory_manager, trust_manager, learning_engine, strategy_engine, weight_manager, reinforcement_engine):
         self.memory_manager = memory_manager
-        self.trust_manager = TrustManager()
+        self.trust_manager = trust_manager
+        self.learning_engine = learning_engine
+        self.strategy_engine = strategy_engine
+        self.weight_manager = weight_manager
+        self.reinforcement_engine = reinforcement_engine
 
 # 1. Main decision function that combines all factors
     def calculate_advanced_score(self, worker, task, trust_manager):
