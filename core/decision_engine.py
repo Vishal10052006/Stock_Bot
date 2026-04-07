@@ -1,23 +1,13 @@
 from unittest import result
 
-from core import trust_manager
-from core.confidence_calculator import calculate_confidence
-from core.risk_calculator import calculate_risk
+from learning.trust_manager import TrustManager
 from core.decision_type import DecisionScore
-from core.learning_engine import LearningEngine
-from core.memory_manager import MemoryManager
-from core.strategy_engine import StrategyEngine
 from intelligence.weight_manager import WeightManager
-from core.reinforcement_engine import ReinforcementEngine
-
 
 class DecisionEngine:
     def __init__(self, memory_manager):
         self.memory_manager = memory_manager
-        self.weight_manager = WeightManager()
-        self.reinforcement_engine = ReinforcementEngine()
-        self.learning_engine = LearningEngine(self.memory_manager)
-        self.strategy_engine = StrategyEngine()
+        self.trust_manager = TrustManager()
 
 # 1. Main decision function that combines all factors
     def calculate_advanced_score(self, worker, task, trust_manager):
