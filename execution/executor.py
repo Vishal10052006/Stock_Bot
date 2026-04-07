@@ -1,6 +1,6 @@
 import asyncio
 
-class TaskExecutor:
+class Executor:
 
     async def execute(self, workers, intents, command):
         tasks = []
