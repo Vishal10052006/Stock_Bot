@@ -12,6 +12,7 @@ from intelligence.decision_simulator import DecisionSimulator
 from learning.learning_engine import LearningEngine
 from learning.reinforcement_engine import ReinforcementEngine
 from learning.trust_manager import TrustManager
+from learning.reliability_manager import ReliabilityManager
 
 class CEO:
     # Constructor (__init__)
@@ -19,15 +20,21 @@ class CEO:
         self.trust_manager = TrustManager()
         self.memory_manager = MemoryManager()
 
-        self.strategy_engine = StrategyEngine()
         self.learning_engine = LearningEngine(self.memory_manager)
+        self.reinforcement_engine = ReinforcementEngine()
+        self.reliability_manager = ReliabilityManager()
 
+        self.strategy_engine = StrategyEngine()
+        
         self.weight_manager = WeightManager()
         self.reinforcement_engine = ReinforcementEngine()
 
         self.execution_engine = ExecutionEngine(
             self.trust_manager,
-            self.memory_manager
+            self.memory_manager,
+            self.learning_engine,
+            self.reinforcement_engine,
+            self.reliability_manager
         )
 
         self.decision_engine = DecisionEngine(
@@ -66,14 +73,13 @@ class CEO:
             available_workers=available_workers,
             trust_manager=self.trust_manager
         )
+        worker_name = decision.get("worker_name", "strategy_worker")
 
         # Only execute if allowed
         if decision["decision"] == "EXECUTE":
             results = await self.execution_engine.run(
                 command,
-                self.memory_manager,
-                decision["worker"],
-                self.trust_manager
+                worker_name
             )
 
             # REINFORCEMENT LEARNING BLOCK
