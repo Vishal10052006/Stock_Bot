@@ -11,20 +11,37 @@ from workers.worker_loader import WorkerLoader
 
 class ExecutionEngine:
 
-    def __init__(self, trust_manager, memory_manager):
+    def __init__(
+        self,
+        trust_manager,
+        memory_manager,
+        learning_engine,
+        reinforcement_engine,
+        reliability_manager
+    ):
         self.trust_manager = trust_manager
         self.memory_manager = memory_manager
+        self.learning_engine = learning_engine
+        self.reinforcement_engine = reinforcement_engine
+        self.reliability_manager = reliability_manager
+
         self.executor = Executor()
         self.registry = WorkerRegistry()
 
         loader = WorkerLoader(self.registry)
         loader.load_workers()
 
-    async def run(self, command, memory_manager, worker_name, trust_manager):
-        result = self.execute(command, worker_name, trust_manager)
+    async def run(self, command, worker_name):
+        result = self.execute(command, worker_name)
+
+        # Phase 6 ACTIVATED
+        self.learning_engine.learn(command, result)
+        self.reinforcement_engine.update(command, result)
+        self.trust_manager.update(worker_name, result)
+
         return [result]
 
-    def execute(self, task, worker_name, trust_manager):
+    def execute(self, task, worker_name):
 
         worker = self.registry.get_worker(worker_name)
 
@@ -36,6 +53,9 @@ class ExecutionEngine:
         # STORE RESULT (ONLY ONCE)
         success = result.get("success", True)
         confidence = result.get("confidence", 1.0)
+
+        # Reliability tracking
+        self.reliability_manager.update(worker.name, success, confidence)
 
         self.memory_manager.store({
             "type": "execution",
