@@ -28,3 +28,19 @@ class TrustManager:
 
     def get_all_trust(self):
         return self.trust_scores
+    
+    def update(self, worker_name, result):
+        success = result.get("success", True)
+
+        if worker_name not in self.trust_scores:
+            self.trust_scores[worker_name] = 0.5  # default trust
+
+        if success:
+            self.trust_scores[worker_name] += 0.05
+        else:
+            self.trust_scores[worker_name] -= 0.05
+
+        # clamp between 0 and 1
+        self.trust_scores[worker_name] = max(0.0, min(1.0, self.trust_scores[worker_name]))
+
+        print(f"[Trust] {worker_name}: {self.trust_scores[worker_name]:.2f}")
