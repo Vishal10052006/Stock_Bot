@@ -57,3 +57,19 @@ class LearningEngine:
     def get_experience(self):
         memory = self.memory_manager.load_memory()
         return len(memory)
+    
+    def learn(self, command, result):
+        success = result.get("success", True)
+        confidence = result.get("confidence", 1.0)
+
+        learning_data = {
+            "command": command,
+            "success": success,
+            "confidence": confidence
+        }
+
+        # store learning data
+        self.memory_manager.store({
+            "type": "learning",
+            "data": learning_data
+        })
