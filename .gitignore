@@ -6,3 +6,5 @@ __pycache__/
 Thumbs.db
 PIPELINE
 .env
+# Local Python virtual environment.
+.venv/
