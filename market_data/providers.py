@@ -1,14 +1,29 @@
 """
 Stock Bot - Market Data Providers
 
-Contains concrete implementations of the MarketDataProvider contract.
+Defines the provider contract and concrete market-data providers.
 
-Phase 1 intentionally uses a deterministic in-memory provider so that
-the market-data pipeline can be tested without network calls,
-API credentials, rate limits, or external service failures.
+The rest of the system depends on the MarketDataProvider contract
+rather than on a specific external market-data service.
 """
 
-from typing import Sequence
+from collections.abc import Sequence
+from typing import Protocol, runtime_checkable
+
+
+@runtime_checkable
+class MarketDataProvider(Protocol):
+    """
+    Contract that every market-data provider must implement.
+
+    A provider is responsible only for retrieving raw price
+    observations. Normalization into domain models is handled
+    elsewhere by MarketDataEngine.
+    """
+
+    def get_prices(self, symbol: str) -> Sequence[float]:
+        """Return raw price observations for a stock symbol."""
+        ...
 
 
 class StaticMarketDataProvider:

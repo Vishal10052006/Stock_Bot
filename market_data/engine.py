@@ -4,22 +4,14 @@ Stock Bot - Market Data Engine
 Provides a provider-independent interface for obtaining normalized
 market prices.
 
-The engine depends on a narrow provider contract rather than on a
-specific external market-data service.
+The engine depends on the MarketDataProvider contract rather than
+on a specific external market-data service.
 """
 
 from datetime import datetime
-from typing import Protocol, Sequence
 
 from market_data.models import MarketPrice
-
-
-class MarketDataProvider(Protocol):
-    """Contract that every market-data provider must implement."""
-
-    def get_prices(self, symbol: str) -> Sequence[float]:
-        """Return raw price observations for a stock symbol."""
-        ...
+from market_data.providers import MarketDataProvider
 
 
 class MarketDataEngine:

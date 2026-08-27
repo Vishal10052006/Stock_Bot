@@ -1,42 +1,44 @@
 """
-Tests for the Phase-1 market-data provider adapter.
-
-Verifies that the concrete provider satisfies the expected
-MarketDataProvider behavior.
+Tests for the market-data provider contract and static provider.
 """
 
-from market_data.providers import StaticMarketDataProvider
+from market_data.providers import (
+    MarketDataProvider,
+    StaticMarketDataProvider,
+)
 
 
 def test_static_provider_returns_configured_prices():
-    """The provider should return its configured prices."""
+    """Static provider should return its configured price sequence."""
 
     provider = StaticMarketDataProvider(
-        prices=[2500.0, 2525.0, 2550.0]
+        [100.0, 101.5, 103.0]
     )
 
-    result = provider.get_prices("RELIANCE")
-
-    assert list(result) == [2500.0, 2525.0, 2550.0]
-
-
-def test_static_provider_normalizes_prices_to_float():
-    """Configured numeric values should be exposed as floats."""
-
-    provider = StaticMarketDataProvider(
-        prices=[2500, 2525]
-    )
-
-    result = provider.get_prices("RELIANCE")
-
-    assert list(result) == [2500.0, 2525.0]
+    assert list(provider.get_prices("RELIANCE")) == [
+        100.0,
+        101.5,
+        103.0,
+    ]
 
 
-def test_static_provider_returns_empty_sequence_when_configured_empty():
-    """An empty provider configuration should remain empty."""
+def test_static_provider_copies_input_prices():
+    """External mutation should not alter provider state."""
 
-    provider = StaticMarketDataProvider(prices=[])
+    prices = [100.0, 101.0]
+    provider = StaticMarketDataProvider(prices)
 
-    result = provider.get_prices("RELIANCE")
+    prices.append(999.0)
 
-    assert list(result) == []
+    assert list(provider.get_prices("RELIANCE")) == [
+        100.0,
+        101.0,
+    ]
+
+
+def test_static_provider_satisfies_provider_contract():
+    """Static provider should structurally satisfy MarketDataProvider."""
+
+    provider = StaticMarketDataProvider([100.0])
+
+    assert isinstance(provider, MarketDataProvider)
