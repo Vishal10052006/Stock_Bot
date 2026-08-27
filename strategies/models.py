@@ -6,6 +6,7 @@ the strategy and risk layers.
 """
 
 from dataclasses import dataclass
+from math import isfinite
 from typing import Literal
 
 
@@ -29,6 +30,10 @@ class StrategyDecision:
 
         if self.action not in ("BUY", "SELL", "HOLD"):
             raise ValueError("action must be BUY, SELL, or HOLD")
+
+        # Reject NaN and infinite confidence values before range validation.
+        if not isfinite(float(self.confidence)):
+            raise ValueError("confidence must be finite")
 
         if not 0.0 <= self.confidence <= 1.0:
             raise ValueError("confidence must be between 0.0 and 1.0")

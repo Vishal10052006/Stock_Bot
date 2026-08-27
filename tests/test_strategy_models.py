@@ -57,3 +57,33 @@ def test_invalid_confidence_is_rejected():
             confidence=1.5,
             rationale="Invalid confidence.",
         )
+
+
+def test_nan_confidence_is_rejected():
+    """NaN confidence values should be rejected."""
+
+    with pytest.raises(
+        ValueError,
+        match="confidence must be finite",
+    ):
+        StrategyDecision(
+            symbol="RELIANCE",
+            action="BUY",
+            confidence=float("nan"),
+            rationale="Invalid confidence.",
+        )
+
+
+def test_infinite_confidence_is_rejected():
+    """Infinite confidence values should be rejected."""
+
+    with pytest.raises(
+        ValueError,
+        match="confidence must be finite",
+    ):
+        StrategyDecision(
+            symbol="RELIANCE",
+            action="BUY",
+            confidence=float("inf"),
+            rationale="Invalid confidence.",
+        )
