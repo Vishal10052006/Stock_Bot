@@ -14,15 +14,30 @@ from market_data.engine import MarketDataEngine
 TIMESTAMP = datetime(2026, 8, 27, 9, 30)
 
 
-def test_market_data_engine_normalizes_provider_prices():
-    """Provider prices should become MarketPrice objects."""
+class FakeMarketDataProvider:
+    """Deterministic provider used for unit testing."""
 
-    def fake_provider(symbol):
-        """Return deterministic test prices."""
+    def get_prices(self, symbol):
+        """Return fixed prices for the requested symbol."""
+
         assert symbol == "RELIANCE"
+
         return [2500.0, 2510.0, 2520.0]
 
-    engine = MarketDataEngine(fake_provider)
+
+class EmptyMarketDataProvider:
+    """Provider that simulates an empty market-data response."""
+
+    def get_prices(self, symbol):
+        """Return no prices."""
+
+        return []
+
+
+def test_market_data_engine_uses_provider():
+    """Provider prices should become normalized MarketPrice objects."""
+
+    engine = MarketDataEngine(FakeMarketDataProvider())
 
     result = engine.get_prices(
         symbol="RELIANCE",
@@ -30,23 +45,33 @@ def test_market_data_engine_normalizes_provider_prices():
     )
 
     assert len(result) == 3
+
     assert result[0].symbol == "RELIANCE"
     assert result[0].price == 2500.0
     assert result[1].price == 2510.0
     assert result[2].price == 2520.0
+
     assert result[0].timestamp == TIMESTAMP
 
 
 def test_empty_symbol_is_rejected():
     """An empty symbol should be rejected before provider access."""
 
-    def fake_provider(symbol):
-        """This provider should never be called."""
-        raise AssertionError("provider should not be called")
+    class ProviderThatMustNotBeCalled:
+        """Provider used to verify early validation."""
 
-    engine = MarketDataEngine(fake_provider)
+        def get_prices(self, symbol):
+            """Fail if the engine calls the provider."""
+            raise AssertionError("provider should not be called")
 
-    with pytest.raises(ValueError, match="symbol must not be empty"):
+    engine = MarketDataEngine(
+        ProviderThatMustNotBeCalled()
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="symbol must not be empty",
+    ):
         engine.get_prices(
             symbol="",
             timestamp=TIMESTAMP,
@@ -56,11 +81,9 @@ def test_empty_symbol_is_rejected():
 def test_empty_provider_result_is_rejected():
     """An empty provider response should be rejected."""
 
-    def fake_provider(symbol):
-        """Return no market data."""
-        return []
-
-    engine = MarketDataEngine(fake_provider)
+    engine = MarketDataEngine(
+        EmptyMarketDataProvider()
+    )
 
     with pytest.raises(
         ValueError,

@@ -4,31 +4,37 @@ Stock Bot - Market Data Engine
 Provides a provider-independent interface for obtaining normalized
 market prices.
 
-The engine deliberately does not depend on a specific market-data
-provider. A provider can be connected later without changing the
-downstream trading pipeline.
+The engine depends on a narrow provider contract rather than on a
+specific external market-data service.
 """
 
 from datetime import datetime
-from typing import Callable, Sequence
+from typing import Protocol, Sequence
 
 from market_data.models import MarketPrice
 
 
-class MarketDataEngine:
-    """Normalize market-price data for the Stock Bot."""
+class MarketDataProvider(Protocol):
+    """Contract that every market-data provider must implement."""
 
-    def __init__(self, price_provider: Callable[[str], Sequence[float]]):
+    def get_prices(self, symbol: str) -> Sequence[float]:
+        """Return raw price observations for a stock symbol."""
+        ...
+
+
+class MarketDataEngine:
+    """Normalize provider data into Stock Bot market-data contracts."""
+
+    def __init__(self, provider: MarketDataProvider):
         """
         Initialize the market-data engine.
 
         Args:
-            price_provider: Callable that receives a symbol and returns
-                a sequence of positive historical/current prices.
+            provider: Object implementing the MarketDataProvider contract.
         """
 
-        # Keep the external provider behind a narrow interface.
-        self.price_provider = price_provider
+        # Keep the external data source behind a stable abstraction.
+        self.provider = provider
 
     def get_prices(
         self,
@@ -36,7 +42,7 @@ class MarketDataEngine:
         timestamp: datetime,
     ) -> list[MarketPrice]:
         """
-        Fetch and normalize prices for a symbol.
+        Fetch and normalize market prices.
 
         Args:
             symbol: Stock ticker symbol.
@@ -52,13 +58,13 @@ class MarketDataEngine:
         if not symbol:
             raise ValueError("symbol must not be empty")
 
-        # Obtain raw prices from the injected provider.
-        prices = self.price_provider(symbol)
+        # Obtain raw prices through the provider contract.
+        prices = self.provider.get_prices(symbol)
 
         if not prices:
             raise ValueError("price provider returned no prices")
 
-        # Convert provider output into the domain contract.
+        # Convert provider output into domain-level contracts.
         return [
             MarketPrice(
                 symbol=symbol,
