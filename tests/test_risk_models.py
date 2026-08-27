@@ -52,3 +52,31 @@ def test_invalid_risk_score_is_rejected():
             risk_score=1.5,
             reason="Invalid risk score.",
         )
+
+
+def test_nan_risk_score_is_rejected():
+    """NaN risk scores should be rejected."""
+
+    with pytest.raises(
+        ValueError,
+        match="risk_score must be finite",
+    ):
+        RiskResult(
+            decision="APPROVE",
+            risk_score=float("nan"),
+            reason="Invalid risk score.",
+        )
+
+
+def test_infinite_risk_score_is_rejected():
+    """Infinite risk scores should be rejected."""
+
+    with pytest.raises(
+        ValueError,
+        match="risk_score must be finite",
+    ):
+        RiskResult(
+            decision="APPROVE",
+            risk_score=float("inf"),
+            reason="Invalid risk score.",
+        )
