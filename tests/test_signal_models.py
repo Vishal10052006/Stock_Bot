@@ -49,3 +49,35 @@ def test_invalid_confidence_is_rejected():
             timestamp=datetime(2026, 8, 27, 9, 30),
             source="technical",
         )
+
+
+def test_nan_confidence_is_rejected():
+    """NaN confidence values should be rejected."""
+
+    with pytest.raises(
+        ValueError,
+        match="confidence must be finite",
+    ):
+        TradingSignal(
+            symbol="RELIANCE",
+            signal="BUY",
+            confidence=float("nan"),
+            timestamp=datetime(2026, 8, 27, 9, 30),
+            source="technical",
+        )
+
+
+def test_infinite_confidence_is_rejected():
+    """Infinite confidence values should be rejected."""
+
+    with pytest.raises(
+        ValueError,
+        match="confidence must be finite",
+    ):
+        TradingSignal(
+            symbol="RELIANCE",
+            signal="BUY",
+            confidence=float("inf"),
+            timestamp=datetime(2026, 8, 27, 9, 30),
+            source="technical",
+        )
