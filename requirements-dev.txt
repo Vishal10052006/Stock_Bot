@@ -1,0 +1,4 @@
+# STOCK BOT — Development Dependencies
+# Python 3.14.x
+
+pytest==9.1.1
