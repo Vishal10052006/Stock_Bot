@@ -1,13 +1,18 @@
 """
 Stock Bot — Core Orchestrator
 
-Connects the Phase-1 feature, signal, strategy, and risk layers
-without using the legacy Personal AI CEO/execution architecture.
+Connects the Phase-1 market-data, feature, signal, strategy,
+and risk layers without depending on a specific market-data provider.
+
+The existing prices-based interface is retained for backward
+compatibility with the Phase-1 tests.
 """
 
 from collections.abc import Sequence
 
 from features.engine import calculate_features
+from market_data.engine import MarketDataEngine
+from market_data.providers import StaticMarketDataProvider
 from risk.gate import approve_trade
 from risk.models import RiskResult
 from signals.engine import generate_signal
@@ -23,15 +28,34 @@ def analyze_market(
     """
     Run the deterministic Phase-1 analysis pipeline.
 
+    This compatibility function preserves the existing public API
+    while routing the supplied prices through MarketDataEngine.
+
     Returns:
         strategy: Normalized strategy decision.
         risk: Risk evaluation result.
         approved: Whether the decision may proceed to paper execution.
     """
 
+    # Use the provider abstraction even when prices are supplied directly.
+    provider = StaticMarketDataProvider(prices)
+    market_data = MarketDataEngine(provider)
+
+    # Normalize raw prices into MarketPrice domain objects.
+    market_prices = market_data.get_prices(
+        symbol=symbol,
+        timestamp=timestamp,
+    )
+
+    # Extract numeric prices for the existing feature engine.
+    normalized_prices = [
+        market_price.price
+        for market_price in market_prices
+    ]
+
     features = calculate_features(
         symbol=symbol,
-        prices=prices,
+        prices=normalized_prices,
         timestamp=timestamp,
     )
 
