@@ -17,6 +17,11 @@ from learning.reliability_manager import ReliabilityManager
 class CEO:
     # Constructor (__init__)
     def __init__(self):
+                # Goal management for planning workflows.
+        self.goal_manager = GoalManager()
+
+        # Decision simulation for evaluating alternative approaches.
+        self.decision_simulator = DecisionSimulator()
         self.trust_manager = TrustManager()
         self.memory_manager = MemoryManager()
 
