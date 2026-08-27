@@ -48,3 +48,51 @@ def test_non_numeric_feature_is_rejected():
                 "rsi": "high",
             },
         )
+
+
+def test_nan_feature_is_rejected():
+    """NaN feature values should be rejected."""
+
+    with pytest.raises(
+        ValueError,
+        match="feature values must be finite",
+    ):
+        FeatureSet(
+            symbol="RELIANCE",
+            timestamp=datetime(2026, 8, 27, 9, 30),
+            values={
+                "rsi": float("nan"),
+            },
+        )
+
+
+def test_positive_infinity_feature_is_rejected():
+    """Positive infinity should be rejected."""
+
+    with pytest.raises(
+        ValueError,
+        match="feature values must be finite",
+    ):
+        FeatureSet(
+            symbol="RELIANCE",
+            timestamp=datetime(2026, 8, 27, 9, 30),
+            values={
+                "rsi": float("inf"),
+            },
+        )
+
+
+def test_negative_infinity_feature_is_rejected():
+    """Negative infinity should be rejected."""
+
+    with pytest.raises(
+        ValueError,
+        match="feature values must be finite",
+    ):
+        FeatureSet(
+            symbol="RELIANCE",
+            timestamp=datetime(2026, 8, 27, 9, 30),
+            values={
+                "rsi": float("-inf"),
+            },
+        )

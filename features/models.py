@@ -5,6 +5,7 @@ Defines normalized feature values produced from market data.
 """
 
 from dataclasses import dataclass
+from math import isfinite
 
 
 @dataclass(frozen=True)
@@ -30,3 +31,7 @@ class FeatureSet:
 
             if not isinstance(value, (int, float)):
                 raise ValueError("feature values must be numeric")
+
+            # Reject NaN and infinite values before they enter the pipeline.
+            if not isfinite(float(value)):
+                raise ValueError("feature values must be finite")
