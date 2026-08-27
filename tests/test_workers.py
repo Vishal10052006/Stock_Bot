@@ -43,3 +43,15 @@ def test_strategy_worker_implements_execute():
     worker = StrategyWorker()
 
     assert callable(worker.execute)
+
+
+def test_strategy_worker_returns_success_contract():
+    """StrategyWorker should return the standard worker result contract."""
+
+    worker = StrategyWorker()
+    result = worker.execute("test task")
+
+    assert isinstance(result, dict)
+    assert result["success"] is True
+    assert "best_worker" in result
+    assert "confidence" in result

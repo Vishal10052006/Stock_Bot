@@ -39,7 +39,7 @@ class ExecutionEngine:
         self.reinforcement_engine.update(command, result)
         self.trust_manager.update(worker_name, result)
 
-        return [result]
+        return result
 
     def execute(self, task, worker_name):
 
@@ -57,7 +57,8 @@ class ExecutionEngine:
         # Reliability tracking
         self.reliability_manager.update(worker.name, success, confidence)
 
-        self.memory_manager.store({
+        # Persist execution outcomes so future workers can learn from them.
+        self.memory_manager.add_memory({
             "type": "execution",
             "worker": worker.name,
             "task": task,
