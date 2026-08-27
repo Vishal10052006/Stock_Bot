@@ -91,3 +91,45 @@ def test_external_provider_rejects_non_positive_prices():
 
     with pytest.raises(MarketDataProviderError):
         provider.get_prices("RELIANCE")
+
+
+def test_external_provider_rejects_nan_prices():
+    """NaN external prices should be rejected at the adapter boundary."""
+
+    provider = ExternalMarketDataProvider(
+        lambda symbol: [float("nan")]
+    )
+
+    with pytest.raises(
+        MarketDataProviderError,
+        match="non-finite prices",
+    ):
+        provider.get_prices("RELIANCE")
+
+
+def test_external_provider_rejects_infinite_prices():
+    """Infinite external prices should be rejected."""
+
+    provider = ExternalMarketDataProvider(
+        lambda symbol: [float("inf")]
+    )
+
+    with pytest.raises(
+        MarketDataProviderError,
+        match="non-finite prices",
+    ):
+        provider.get_prices("RELIANCE")
+
+
+def test_external_provider_rejects_negative_infinite_prices():
+    """Negative infinite external prices should be rejected."""
+
+    provider = ExternalMarketDataProvider(
+        lambda symbol: [float("-inf")]
+    )
+
+    with pytest.raises(
+        MarketDataProviderError,
+        match="non-finite prices",
+    ):
+        provider.get_prices("RELIANCE")

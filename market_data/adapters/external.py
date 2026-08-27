@@ -8,6 +8,7 @@ dependency injection. This keeps the core system independent of
 HTTP clients, API credentials, network availability, and provider SDKs.
 """
 
+import math
 from collections.abc import Callable, Sequence
 
 from market_data.providers import MarketDataProvider
@@ -51,11 +52,12 @@ class ExternalMarketDataProvider:
             symbol: Stock ticker symbol.
 
         Returns:
-            A validated sequence of positive prices.
+            A validated sequence of positive, finite prices.
 
         Raises:
-            ValueError: If the symbol is empty or invalid data is returned.
-            MarketDataProviderError: If the external provider fails.
+            ValueError: If the symbol is empty.
+            MarketDataProviderError: If the external provider fails
+                or returns invalid market data.
         """
 
         if not symbol:
@@ -76,14 +78,34 @@ class ExternalMarketDataProvider:
             )
 
         try:
-            normalized_prices = tuple(float(price) for price in prices)
+            normalized_prices = tuple(
+                float(price)
+                for price in prices
+            )
         except (TypeError, ValueError) as exc:
+            # Normalize provider-specific numeric conversion failures
+            # into one stable application-level exception.
             raise MarketDataProviderError(
                 f"external market-data provider returned invalid prices "
                 f"for {symbol}"
             ) from exc
 
-        if any(price <= 0 for price in normalized_prices):
+        # Reject NaN and positive/negative infinity before data reaches
+        # the core market-data engine.
+        if any(
+            not math.isfinite(price)
+            for price in normalized_prices
+        ):
+            raise MarketDataProviderError(
+                f"external market-data provider returned non-finite "
+                f"prices for {symbol}"
+            )
+
+        # Market prices must always be strictly positive.
+        if any(
+            price <= 0
+            for price in normalized_prices
+        ):
             raise MarketDataProviderError(
                 f"external market-data provider returned non-positive "
                 f"prices for {symbol}"
