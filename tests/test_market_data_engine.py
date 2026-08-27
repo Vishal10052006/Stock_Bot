@@ -93,3 +93,87 @@ def test_empty_provider_result_is_rejected():
             symbol="RELIANCE",
             timestamp=TIMESTAMP,
         )
+
+
+class ConfigurableMarketDataProvider:
+    """Provider that returns caller-supplied test prices."""
+
+    def __init__(self, prices):
+        """Store the prices that should be returned."""
+        self.prices = prices
+
+    def get_prices(self, symbol):
+        """Return the configured test prices."""
+        return self.prices
+
+
+def test_non_numeric_provider_price_is_rejected():
+    """Non-numeric provider output should be rejected."""
+
+    provider = ConfigurableMarketDataProvider(
+        ["not-a-price"]
+    )
+    engine = MarketDataEngine(provider)
+
+    with pytest.raises(
+        ValueError,
+        match="non-numeric price",
+    ):
+        engine.get_prices(
+            symbol="RELIANCE",
+            timestamp=TIMESTAMP,
+        )
+
+
+def test_non_positive_provider_price_is_rejected():
+    """Zero or negative provider output should be rejected."""
+
+    provider = ConfigurableMarketDataProvider(
+        [0, -10]
+    )
+    engine = MarketDataEngine(provider)
+
+    with pytest.raises(
+        ValueError,
+        match="non-positive price",
+    ):
+        engine.get_prices(
+            symbol="RELIANCE",
+            timestamp=TIMESTAMP,
+        )
+
+
+def test_non_finite_provider_price_is_rejected():
+    """NaN and infinite provider output should be rejected."""
+
+    provider = ConfigurableMarketDataProvider(
+        [float("nan")]
+    )
+    engine = MarketDataEngine(provider)
+
+    with pytest.raises(
+        ValueError,
+        match="non-finite price",
+    ):
+        engine.get_prices(
+            symbol="RELIANCE",
+            timestamp=TIMESTAMP,
+        )
+
+
+def test_infinite_provider_price_is_rejected():
+    """Infinite provider output should be rejected."""
+
+    provider = ConfigurableMarketDataProvider(
+        [float("inf")]
+    )
+    engine = MarketDataEngine(provider)
+
+    with pytest.raises(
+        ValueError,
+        match="non-finite price",
+    ):
+        engine.get_prices(
+            symbol="RELIANCE",
+            timestamp=TIMESTAMP,
+        )

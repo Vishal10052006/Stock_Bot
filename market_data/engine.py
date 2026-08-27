@@ -9,6 +9,7 @@ on a specific external market-data service.
 """
 
 from datetime import datetime
+from math import isfinite
 
 from market_data.models import MarketPrice
 from market_data.providers import MarketDataProvider
@@ -44,7 +45,8 @@ class MarketDataEngine:
             A list of normalized MarketPrice objects.
 
         Raises:
-            ValueError: If the symbol is empty or no prices are returned.
+            ValueError: If the symbol is empty, the provider returns
+                no prices, or a provider price is invalid.
         """
 
         if not symbol:
@@ -56,12 +58,35 @@ class MarketDataEngine:
         if not prices:
             raise ValueError("price provider returned no prices")
 
-        # Convert provider output into domain-level contracts.
+        normalized_prices: list[float] = []
+
+        for price in prices:
+            try:
+                normalized_price = float(price)
+            except (TypeError, ValueError) as exc:
+                raise ValueError(
+                    "price provider returned a non-numeric price"
+                ) from exc
+
+            # Reject NaN and infinite values before creating domain objects.
+            if not isfinite(normalized_price):
+                raise ValueError(
+                    "price provider returned a non-finite price"
+                )
+
+            if normalized_price <= 0:
+                raise ValueError(
+                    "price provider returned a non-positive price"
+                )
+
+            normalized_prices.append(normalized_price)
+
+        # Convert validated provider output into domain-level contracts.
         return [
             MarketPrice(
                 symbol=symbol,
-                price=float(price),
+                price=price,
                 timestamp=timestamp,
             )
-            for price in prices
+            for price in normalized_prices
         ]
