@@ -8,6 +8,8 @@ This provides a stable contract for the strategy and risk layers before
 more sophisticated models are introduced.
 """
 
+from math import isfinite
+
 from features.models import FeatureSet
 from signals.models import TradingSignal
 
@@ -34,6 +36,10 @@ def generate_signal(features: FeatureSet) -> TradingSignal:
 
     if price_change_pct is None:
         raise ValueError("price_change_pct feature is required")
+
+    # Reject NaN and infinite feature values before signal generation.
+    if not isfinite(float(price_change_pct)):
+        raise ValueError("price_change_pct must be finite")
 
     # Scale absolute price movement into a 0..1 confidence value.
     confidence = min(abs(price_change_pct) / 5.0, 1.0)

@@ -80,3 +80,33 @@ def test_missing_price_change_feature_is_rejected():
 
     with pytest.raises(ValueError, match="price_change_pct feature is required"):
         generate_signal(features)
+
+
+def test_nan_price_change_is_rejected():
+    """NaN price changes should be rejected before signal generation."""
+
+    features = make_features(1.0)
+
+    # Simulate invalid downstream mutation of the feature dictionary.
+    features.values["price_change_pct"] = float("nan")
+
+    with pytest.raises(
+        ValueError,
+        match="price_change_pct must be finite",
+    ):
+        generate_signal(features)
+
+
+def test_infinite_price_change_is_rejected():
+    """Infinite price changes should be rejected before signal generation."""
+
+    features = make_features(1.0)
+
+    # Simulate invalid downstream mutation of the feature dictionary.
+    features.values["price_change_pct"] = float("inf")
+
+    with pytest.raises(
+        ValueError,
+        match="price_change_pct must be finite",
+    ):
+        generate_signal(features)
