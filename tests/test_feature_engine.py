@@ -69,3 +69,45 @@ def test_empty_symbol_is_rejected():
             prices=[100.0, 105.0, 110.0],
             timestamp=datetime(2026, 8, 27, 9, 30),
         )
+
+
+def test_non_numeric_prices_are_rejected():
+    """Non-numeric price values should be rejected."""
+
+    with pytest.raises(
+        ValueError,
+        match="prices must be numeric",
+    ):
+        calculate_features(
+            symbol="RELIANCE",
+            prices=[100.0, "invalid", 110.0],
+            timestamp=datetime(2026, 8, 27, 9, 30),
+        )
+
+
+def test_non_finite_prices_are_rejected():
+    """NaN and infinite prices should be rejected."""
+
+    with pytest.raises(
+        ValueError,
+        match="prices must be finite",
+    ):
+        calculate_features(
+            symbol="RELIANCE",
+            prices=[100.0, float("nan"), 110.0],
+            timestamp=datetime(2026, 8, 27, 9, 30),
+        )
+
+
+def test_infinite_prices_are_rejected():
+    """Infinite prices should be rejected."""
+
+    with pytest.raises(
+        ValueError,
+        match="prices must be finite",
+    ):
+        calculate_features(
+            symbol="RELIANCE",
+            prices=[100.0, float("inf"), 110.0],
+            timestamp=datetime(2026, 8, 27, 9, 30),
+        )

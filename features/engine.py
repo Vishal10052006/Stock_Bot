@@ -5,6 +5,7 @@ Calculates normalized technical features from market price data.
 """
 
 from collections.abc import Sequence
+from math import isfinite
 
 from features.models import FeatureSet
 
@@ -24,6 +25,9 @@ def calculate_features(
         - latest_price: Most recent market price.
         - price_change_pct: Percentage change from first to latest price.
         - price_range_pct: Percentage range between minimum and maximum price.
+
+    Raises:
+        ValueError: If the symbol or price data is invalid.
     """
 
     if not symbol:
@@ -32,13 +36,24 @@ def calculate_features(
     if not prices:
         raise ValueError("prices must not be empty")
 
-    if any(price <= 0 for price in prices):
+    # Normalize provider/input values before performing calculations.
+    try:
+        normalized_prices = tuple(float(price) for price in prices)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("prices must be numeric") from exc
+
+    # Reject NaN and infinite values before they enter feature calculations.
+    if any(not isfinite(price) for price in normalized_prices):
+        raise ValueError("prices must be finite")
+
+    # Feature calculations require strictly positive market prices.
+    if any(price <= 0 for price in normalized_prices):
         raise ValueError("prices must be greater than zero")
 
-    latest_price = float(prices[-1])
-    first_price = float(prices[0])
-    minimum_price = float(min(prices))
-    maximum_price = float(max(prices))
+    latest_price = normalized_prices[-1]
+    first_price = normalized_prices[0]
+    minimum_price = min(normalized_prices)
+    maximum_price = max(normalized_prices)
 
     price_change_pct = ((latest_price - first_price) / first_price) * 100.0
     price_range_pct = ((maximum_price - minimum_price) / minimum_price) * 100.0
