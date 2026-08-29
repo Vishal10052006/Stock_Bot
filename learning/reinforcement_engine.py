@@ -1,60 +1,64 @@
+"""
+Stock Bot — Reinforcement Engine
+
+Phase 2 reinforcement-learning boundary.
+
+Responsibilities:
+    1. Compare predicted and observed outcomes.
+    2. Calculate a reward from prediction error.
+    3. Convert decision factors into reinforcement feedback.
+
+The reinforcement engine does NOT:
+    - select workers,
+    - execute workers,
+    - own adaptive weights,
+    - update WeightManager directly.
+
+Weight ownership and adaptive updates belong to WeightManager.
+"""
+
+
 class ReinforcementEngine:
+    """Calculate rewards and generate learning feedback."""
 
     def calculate_reward(self, predicted, actual):
+        """
+        Calculate a reward from prediction accuracy.
+
+        Args:
+            predicted: Predicted execution confidence.
+            actual: Observed execution outcome score.
+
+        Returns:
+            Reward value:
+                1.0  -> highly accurate prediction
+                0.5  -> moderately accurate prediction
+               -0.5  -> poor prediction
+        """
+
         error = abs(predicted - actual)
 
         if error < 0.1:
             return 1.0
-        elif error < 0.3:
+
+        if error < 0.3:
             return 0.5
-        else:
-            return -0.5   # punish bad decisions
+
+        return -0.5
 
     def generate_feedback(self, factors, reward):
-        feedback = {}
+        """
+        Convert decision factors into reinforcement feedback.
 
-        for key, value in factors.items():
-            feedback[key] = value * reward
+        Args:
+            factors: Decision-scoring factors.
+            reward: Calculated reinforcement reward.
 
-        return feedback
-    
-    def update_weights(self, feedback):
-        learning_rate = 0.05
+        Returns:
+            Feedback dictionary for WeightManager.
+        """
 
-        print("DEBUG feedback:", feedback)
-        print("BEFORE:", self.weights)
-
-        for key in self.weights:
-            self.weights[key] = max(0.1, min(0.5, self.weights[key]))
-            print("AFTER:", self.weights)
-
-        self.normalize()
-
-    def update(self, command, result):
-        # 1. predicted (from result or fallback)
-        predicted = result.get("confidence", 0.5)
-
-        # 2. actual (convert success → score)
-        success = result.get("success", True)
-        actual = 1.0 if success else 0.0
-
-        # 3. reward
-        reward = self.calculate_reward(predicted, actual)
-
-        # 4. factors (for now simple placeholder)
-        factors = {
-            "trust": 1,
-            "risk": 1,
-            "time": 1,
-            "skill": 1,
-            "goal": 1
+        return {
+            key: value * reward
+            for key, value in factors.items()
         }
-
-        # 5. feedback
-        feedback = self.generate_feedback(factors, reward)
-
-        # 6. update weights
-        if hasattr(self, "weights"):
-            self.update_weights(feedback)
-
-        print(f"[Reinforcement] Reward: {reward}")
