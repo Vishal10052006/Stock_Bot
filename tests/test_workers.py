@@ -1,0 +1,84 @@
+"""
+Tests for the Stock Bot worker contracts.
+"""
+
+from workers.base_worker import BaseWorker
+from workers.sentiment_worker import SentimentWorker
+from workers.strategy_worker import StrategyWorker
+from workers.technical_worker import TechnicalWorker
+
+
+def test_base_worker_requires_execute():
+    """BaseWorker should expose the execution contract."""
+
+    worker = BaseWorker()
+
+    try:
+        worker.execute("test task")
+    except NotImplementedError:
+        pass
+    else:
+        raise AssertionError("BaseWorker.execute() must raise NotImplementedError")
+
+
+def test_technical_worker_implements_execute():
+    """TechnicalWorker should implement execute()."""
+
+    worker = TechnicalWorker()
+
+    assert callable(worker.execute)
+
+
+def test_sentiment_worker_implements_execute():
+    """SentimentWorker should implement execute()."""
+
+    worker = SentimentWorker()
+
+    assert callable(worker.execute)
+
+
+def test_strategy_worker_implements_execute():
+    """StrategyWorker should implement execute()."""
+
+    worker = StrategyWorker()
+
+    assert callable(worker.execute)
+
+
+def test_strategy_worker_returns_success_contract():
+    """StrategyWorker should return the standard worker result contract."""
+
+    worker = StrategyWorker()
+    result = worker.execute("test task")
+
+    assert isinstance(result, dict)
+    assert result["success"] is True
+    assert "recommended_worker" in result
+    assert "confidence" in result
+
+
+def test_executor_executes_selected_worker():
+    """Executor should execute a selected worker and return its result."""
+
+    import asyncio
+
+    from execution.executor import Executor
+    from workers.strategy_worker import StrategyWorker
+
+    worker = StrategyWorker()
+
+    workers = {
+        worker.name: worker,
+    }
+
+    results = asyncio.run(
+        Executor().execute(
+            workers,
+            [worker.name],
+            "test task",
+        )
+    )
+
+    assert len(results) == 1
+    assert isinstance(results[0], dict)
+    assert results[0]["success"] is True

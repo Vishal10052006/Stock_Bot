@@ -1,11 +1,30 @@
+"""
+Stock Bot - Learning Engine
+
+Records decision outcomes, evaluates prediction accuracy,
+and provides historical learning information.
+"""
+
 class LearningEngine:
 
     def __init__(self, memory_manager):
+        """Initialize the learning engine with the shared memory manager."""
+
+        # Store the injected memory dependency consistently.
         self.memory_manager = memory_manager
-    
+
+    # ------------------------------------------------------------------
     # STORE DECISION RESULT
-    def record_outcome(self, goal, chosen_option, predicted_outcome, actual_outcome):
-        
+    # ------------------------------------------------------------------
+    def record_outcome(
+        self,
+        goal,
+        chosen_option,
+        predicted_outcome,
+        actual_outcome
+    ):
+        """Store the result of a completed decision."""
+
         entry = {
             "type": "decision_outcome",
             "goal": goal,
@@ -14,10 +33,15 @@ class LearningEngine:
             "actual": actual_outcome
         }
 
-        self.memory.add_memory(entry)
+        # Use the injected MemoryManager consistently.
+        self.memory_manager.add_memory(entry)
 
-    # COMPARE (LEARNING CORE) 
+    # ------------------------------------------------------------------
+    # COMPARE PREDICTION WITH ACTUAL RESULT
+    # ------------------------------------------------------------------
     def evaluate_accuracy(self, predicted, actual):
+        """Return the percentage of matching predicted fields."""
+
         score = 0
         total = len(predicted)
 
@@ -28,37 +52,57 @@ class LearningEngine:
         accuracy = score / total if total > 0 else 0
 
         return accuracy
-    
+
+    # ------------------------------------------------------------------
     # ADAPT FUTURE DECISIONS
+    # ------------------------------------------------------------------
     def update_learning(self):
-        memory = self.memory.load_memory()
+        """Calculate average accuracy from stored decision outcomes."""
+
+        # Use the injected MemoryManager consistently.
+        memory = self.memory_manager.load_memory()
 
         outcomes = [
-            m for m in memory
-            if m.get("type") == "decision_outcome"
+            entry
+            for entry in memory
+            if entry.get("type") == "decision_outcome"
         ]
 
         if not outcomes:
-            return {"message": "No learning data yet"}
+            return {
+                "message": "No learning data yet"
+            }
 
         total_accuracy = 0
 
-        for o in outcomes:
-            acc = self.evaluate_accuracy(o["predicted"], o["actual"])
-            total_accuracy += acc
+        for outcome in outcomes:
+            accuracy = self.evaluate_accuracy(
+                outcome["predicted"],
+                outcome["actual"]
+            )
+            total_accuracy += accuracy
 
-        avg_accuracy = total_accuracy / len(outcomes)
+        average_accuracy = total_accuracy / len(outcomes)
 
         return {
             "total_cases": len(outcomes),
-            "average_accuracy": avg_accuracy
+            "average_accuracy": average_accuracy
         }
-    
+
+    # ------------------------------------------------------------------
+    # EXPERIENCE
+    # ------------------------------------------------------------------
     def get_experience(self):
-        memory = self.memory_manager.load_memory()
-        return len(memory)
-    
+        """Return the number of stored memory entries."""
+
+        return len(self.memory_manager.load_memory())
+
+    # ------------------------------------------------------------------
+    # GENERAL LEARNING
+    # ------------------------------------------------------------------
     def learn(self, command, result):
+        """Store the outcome of a general execution."""
+
         success = result.get("success", True)
         confidence = result.get("confidence", 1.0)
 
@@ -68,7 +112,7 @@ class LearningEngine:
             "confidence": confidence
         }
 
-        # store learning data
+        # Store learning data through the shared memory manager.
         self.memory_manager.store({
             "type": "learning",
             "data": learning_data

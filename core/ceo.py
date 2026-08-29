@@ -17,6 +17,11 @@ from learning.reliability_manager import ReliabilityManager
 class CEO:
     # Constructor (__init__)
     def __init__(self):
+                # Goal management for planning workflows.
+        self.goal_manager = GoalManager()
+
+        # Decision simulation for evaluating alternative approaches.
+        self.decision_simulator = DecisionSimulator()
         self.trust_manager = TrustManager()
         self.memory_manager = MemoryManager()
 
@@ -73,7 +78,7 @@ class CEO:
             available_workers=available_workers,
             trust_manager=self.trust_manager
         )
-        worker_name = decision.get("worker_name", "strategy_worker")
+        worker_name = decision.get("worker", "strategy_worker")
 
         # Only execute if allowed
         if decision["decision"] == "EXECUTE":
@@ -116,15 +121,29 @@ class CEO:
     
     def evaluate_result(self, result):
         """
-        Convert real-world result into numeric score (0–1)
+        Convert a worker execution result into a numeric score [0, 1].
+
+        Supports the Phase 1 dictionary contract and legacy string
+        results for backward compatibility.
         """
+
+        if isinstance(result, dict):
+            if result.get("success") is True:
+                return float(result.get("confidence", 1.0))
+
+            if result.get("success") is False:
+                return 0.0
+
         if result == "SUCCESS":
             return 1.0
-        elif result == "PARTIAL":
+
+        if result == "PARTIAL":
             return 0.6
-        elif result == "FAILED":
+
+        if result == "FAILED":
             return 0.0
+
         return 0.5
-    
+
     def simulate_decision(self, goal):
         return self.decision_simulator.simulate(goal)
