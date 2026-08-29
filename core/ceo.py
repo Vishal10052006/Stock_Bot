@@ -32,7 +32,6 @@ class CEO:
         self.strategy_engine = StrategyEngine()
         
         self.weight_manager = WeightManager()
-        self.reinforcement_engine = ReinforcementEngine()
 
         self.execution_engine = ExecutionEngine(
             self.trust_manager,

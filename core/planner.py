@@ -1,61 +1,92 @@
+"""
+Stock Bot — Task Planner
+
+Phase 2 planning boundary.
+
+Responsibilities:
+    1. Convert a user command into an execution plan.
+    2. Preserve deterministic step ordering.
+    3. Assign an intent to each step.
+
+The planner does NOT:
+    - select workers,
+    - execute workers,
+    - evaluate worker reliability,
+    - inspect execution memory,
+    - modify the plan based on historical outcomes.
+"""
+
+
 class TaskPlanner:
+    """Create deterministic execution plans from user commands."""
 
     def create_plan(self, command: str, memory=None):
-        command = command.lower()
+        """
+        Convert a user command into an ordered execution plan.
 
-        plan = []
+        Args:
+            command: User task description.
+            memory: Legacy parameter retained for API compatibility.
+                It is intentionally ignored by the planner.
 
-        if "blog" in command:
+        Returns:
+            List of ordered plan steps.
+        """
 
-            plan = [
-                {"step": 1, "intent": "research", "task": "research topic"},
-                {"step": 2, "intent": "writing", "task": "create outline"},
-                {"step": 3, "intent": "writing", "task": command},
-                {"step": 4, "intent": "writing", "task": "optimize SEO"},
-                {"step": 5, "intent": "writing", "task": "publish blog"}                
+        # Normalize only for intent detection. Preserve the user's
+        # original command in the actual task where appropriate.
+        normalized_command = command.lower()
+
+        # Blog workflow.
+        if "blog" in normalized_command:
+            return [
+                {
+                    "step": 1,
+                    "intent": "research",
+                    "task": "research topic",
+                },
+                {
+                    "step": 2,
+                    "intent": "writing",
+                    "task": "create outline",
+                },
+                {
+                    "step": 3,
+                    "intent": "writing",
+                    "task": command,
+                },
+                {
+                    "step": 4,
+                    "intent": "writing",
+                    "task": "optimizeSEO",
+                },
+                {
+                    "step": 5,
+                    "intent": "writing",
+                    "task": "publish blog",
+                },
             ]
 
-        # Research workflow
-        elif "research" in command:
-
-            plan = [
-                {"step": 1, "intent": "research", "task": command},
-                {"step": 2, "intent": "writing", "task": "summarize research"}
+        # Research workflow.
+        if "research" in normalized_command:
+            return [
+                {
+                    "step": 1,
+                    "intent": "research",
+                    "task": command,
+                },
+                {
+                    "step": 2,
+                    "intent": "writing",
+                    "task": "summarize research",
+                },
             ]
 
-        else:
-
-            plan = [
-                {"step": 1, "intent": "writing", "task": command}
-            ]
-
-        # MEMORY-BASED IMPROVEMENT
-        bad_tasks = []
-        preferred_tasks = []
-
-        if memory:
-            for m in memory:
-
-                # Track failures
-                if m.get("type") == "mistake":
-                    bad_tasks.append(m.get("task"))
-
-                # Track success
-                if m.get("result") == "SUCCESS":
-                    preferred_tasks.append(m.get("task"))
-
-        # Remove bad tasks
-        filtered_plan = []
-        for step in plan:
-            if step["task"] in bad_tasks:
-                continue
-            filtered_plan.append(step)
-
-        # Prioritize good tasks
-        filtered_plan = sorted(
-            filtered_plan,
-            key=lambda x: x["task"] in preferred_tasks,
-            reverse=True
-        )
-
-        return filtered_plan
+        # Default single-step workflow.
+        return [
+            {
+                "step": 1,
+                "intent": "writing",
+                "task": command,
+            }
+        ]

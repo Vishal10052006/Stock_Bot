@@ -131,25 +131,14 @@ class DecisionEngine:
             "reason": f"Worker: {worker_name} | Score: {round(best_score, 3)} | Confidence: {confidence}"
                 }
 
-        import random
-
-        predicted = result["confidence"]
-        actual = random.uniform(0.4, 1.0)
-
-        reward = self.reinforcement_engine.calculate_reward(predicted, actual)
-
-        weights = self.weight_manager.get_weights()
-
-        feedback = self.reinforcement_engine.generate_feedback(
-            best_factors,
-            reward
-        )
-
-        self.weight_manager.update_weights(feedback)
-
-        print("🧠 UPDATED WEIGHTS:", self.weight_manager.get_weights())
-
-        # ✅ FINAL RETURN
+        # Decision-making ends here.
+        #
+        # Actual execution outcomes are not available yet, so this layer
+        # must not calculate rewards, generate learning feedback, or update
+        # adaptive weights.
+        #
+        # Those operations belong after ExecutionEngine produces an
+        # observed result.
         return result
 
 # 4. Function to execute task and learn from result
