@@ -121,26 +121,29 @@ class CEO:
     
     def evaluate_result(self, result):
         """
-        Convert an execution result into a numeric score (0–1).
+        Convert a worker execution result into a numeric score [0, 1].
 
-        Worker results use a dictionary contract containing a boolean
-        ``success`` field. Legacy string results remain supported.
+        Supports the Phase 1 dictionary contract and legacy string
+        results for backward compatibility.
         """
 
         if isinstance(result, dict):
             if result.get("success") is True:
-                return 1.0
+                return float(result.get("confidence", 1.0))
+
             if result.get("success") is False:
                 return 0.0
 
         if result == "SUCCESS":
             return 1.0
+
         if result == "PARTIAL":
             return 0.6
+
         if result == "FAILED":
             return 0.0
 
         return 0.5
-    
+
     def simulate_decision(self, goal):
         return self.decision_simulator.simulate(goal)

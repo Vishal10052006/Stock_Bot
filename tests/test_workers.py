@@ -53,5 +53,32 @@ def test_strategy_worker_returns_success_contract():
 
     assert isinstance(result, dict)
     assert result["success"] is True
-    assert "best_worker" in result
+    assert "recommended_worker" in result
     assert "confidence" in result
+
+
+def test_executor_executes_selected_worker():
+    """Executor should execute a selected worker and return its result."""
+
+    import asyncio
+
+    from execution.executor import Executor
+    from workers.strategy_worker import StrategyWorker
+
+    worker = StrategyWorker()
+
+    workers = {
+        worker.name: worker,
+    }
+
+    results = asyncio.run(
+        Executor().execute(
+            workers,
+            [worker.name],
+            "test task",
+        )
+    )
+
+    assert len(results) == 1
+    assert isinstance(results[0], dict)
+    assert results[0]["success"] is True

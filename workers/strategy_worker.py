@@ -63,7 +63,7 @@ class StrategyWorker(BaseWorker):
 
         # Return the standard worker execution contract.
         return {
-            "best_worker": best_worker or "strategy_worker",
+            "recommended_worker": best_worker or "strategy_worker",
             "confidence": 0.8,
             "success": True,
         }

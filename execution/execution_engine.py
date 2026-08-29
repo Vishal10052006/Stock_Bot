@@ -1,15 +1,28 @@
-from unittest import loader
+"""
+Stock Bot — Execution Engine
+
+Phase 1 execution boundary.
+
+Responsibilities:
+    1. Resolve a registered worker.
+    2. Execute the worker task.
+    3. Normalize the worker result contract.
+    4. Record reliability statistics.
+    5. Persist the execution outcome.
+
+Decision-making, planning, critic evaluation, and orchestration
+belong outside this layer.
+"""
+
+import inspect
 
 from execution.executor import Executor
-from execution.execution_trace import ExecutionTrace
-from utils.logger import logger
-from utils.formatter import format_success, format_error
-from utils.logger import logger
-from datetime import datetime
-from workers.worker_registry import WorkerRegistry
 from workers.worker_loader import WorkerLoader
+from workers.worker_registry import WorkerRegistry
+
 
 class ExecutionEngine:
+    """Execute one selected worker and record its outcome."""
 
     def __init__(
         self,
@@ -17,362 +30,130 @@ class ExecutionEngine:
         memory_manager,
         learning_engine,
         reinforcement_engine,
-        reliability_manager
+        reliability_manager,
     ):
+        """Initialize execution dependencies and load workers."""
+
         self.trust_manager = trust_manager
         self.memory_manager = memory_manager
         self.learning_engine = learning_engine
         self.reinforcement_engine = reinforcement_engine
         self.reliability_manager = reliability_manager
 
+        # Worker execution infrastructure.
         self.executor = Executor()
         self.registry = WorkerRegistry()
 
+        # Load all configured workers into the runtime registry.
         loader = WorkerLoader(self.registry)
         loader.load_workers()
 
     async def run(self, command, worker_name):
-        result = self.execute(command, worker_name)
+        """
+        Execute a selected worker.
 
-        # Phase 6 ACTIVATED
-        self.learning_engine.learn(command, result)
-        self.reinforcement_engine.update(command, result)
-        self.trust_manager.update(worker_name, result)
+        Args:
+            command: Task passed to the worker.
+            worker_name: Registered worker name.
 
-        return result
+        Returns:
+            Standard worker result dictionary.
 
-    def execute(self, task, worker_name):
+        Raises:
+            ValueError: If the worker does not exist.
+        """
 
         worker = self.registry.get_worker(worker_name)
 
-        if worker.name == "strategy_worker" and hasattr(self, "last_strategy"):
-            result = self.last_strategy   # reuse instead of re-running
-        else:
-            result = worker.execute(task)
+        try:
+            # Execute through the worker directly. Executor remains
+            # available for multi-worker execution in future phases.
+            result = worker.execute(command)
 
-        # STORE RESULT (ONLY ONCE)
-        success = result.get("success", True)
-        confidence = result.get("confidence", 1.0)
+            # Support asynchronous workers without changing the
+            # execution-engine public contract.
+            if inspect.isawaitable(result):
+                result = await result
 
-        # Reliability tracking
-        self.reliability_manager.update(worker.name, success, confidence)
+        except Exception:
+            # Convert execution failures into the standard result
+            # contract so downstream learning remains deterministic.
+            result = {
+                "success": False,
+                "confidence": 0.0,
+                "worker": worker.name,
+            }
 
-        # Persist execution outcomes so future workers can learn from them.
-        self.memory_manager.add_memory({
-            "type": "execution",
-            "worker": worker.name,
-            "task": task,
-            "result": "SUCCESS" if success else "FAILED",
-            "confidence": confidence
-        })
+        result = self._normalize_result(
+            result=result,
+            worker_name=worker.name,
+        )
+
+        self._record_outcome(
+            command=command,
+            worker_name=worker.name,
+            result=result,
+        )
 
         return result
-    
-    # Plan Creation Function
-    def create_plan(self, command: str):
-        command_lower = command.lower()
 
-        # Multi-command Splitting
-        if " and " in command_lower:
-            parts = command.split(" and ")   # <-- use original command here
+    @staticmethod
+    def _normalize_result(result, worker_name):
+        """
+        Normalize worker output to the Phase 1 result contract.
 
-            plan = []
-            step_number = 1
+        Required fields:
+            success: bool
+            confidence: float
+        """
 
-            for part in parts:
-                intents = self.router.detect(part)
-                intent = intents[0].lower() if intents else "writing"
-
-                plan.append({
-                    "step": step_number,
-                    "intent": intent,
-                    "task": part.strip()
-                })
-
-                step_number += 1
-
-            return plan
-
-        # Default single-step plan
-        intents = self.router.detect(command)
-        return [{
-            "step": 1,
-            "intent": intents[0] if intents else "writing",
-            "task": command
-        }]
-    
-    # Receive Command Function
-    async def receive_command(self, command: str):
-        try:
-            # PLAN
-            memory = self.memory_manager.load_memory()
-            # Reduce trust dynamically
-            past_failures = [
-                m for m in memory
-                if m.get("worker") == worker_name and m.get("result") == "FAILED"
-            ]
-
-            if len(past_failures) > 3:
-                critic_score *= 0.7
-            plan = self.planner.create_plan(command, memory)
-            logger.info(f"Plan created: {plan}")
-
-            final_outputs = []
-
-            for step in plan:
-
-                intent = step["intent"]
-                task = step["task"]
-
-                # GET WORKERS
-                workers = self.registry.all_workers()
-
-                # select BEST worker only
-                best_worker = max(
-                    workers,
-                    key=lambda w: (
-                        self.trust_manager.get_trust(w.name) +
-                        self.reliability_manager.get_reliability(w.name)
-                    )
-                )
-
-                # execute ONLY best worker
-                result = await self.executor.execute(
-                    [best_worker],
-                    intent,
-                    task
-                )
-
-                outputs = [result]
-
-                # CRITIC SCORING
-                worker_outputs = []
-
-                for worker, output in [(best_worker, outputs[0])]:
-
-                    if isinstance(output, Exception):
-                        worker_outputs.append({
-                            "worker": worker.name,
-                            "output": str(output),
-                            "score": 0
-                        })
-                    else:
-                        score = self.critic.score(output)
-
-                        worker_outputs.append({
-                            "worker": worker.name,
-                            "output": output,
-                            "score": score
-                        })
-
-                memory = self.memory_manager.load_memory()
-
-                bad_workers = [
-                    m["worker"] for m in memory
-                    if m.get("type") == "mistake"
-                ]
-
-                worker_outputs = [
-                    w for w in worker_outputs
-                    if w["worker"] not in bad_workers
-                ]
-
-                # safety fallback (VERY IMPORTANT)
-                if not worker_outputs:
-                    worker_outputs = [
-                        {
-                            "worker": worker.name,
-                            "output": str(output),
-                            "score": 0
-                        }
-                        for worker, output in zip(workers, outputs)
-                    ]
-
-                # BEST WORKER
-                best_result = max(worker_outputs, key=lambda x: x["score"])
-                worker_name = best_result["worker"]
-                intent = intent  # already exists
-                critic_score = best_result["score"]
-                goal = intent  # temporary
-
-                decision = self.decision_engine.make_decision(
-                    worker_name=worker_name,
-                    task_type=intent,
-                    critic_score=critic_score,
-                    goal=goal
-                )
-
-                result = best_result["output"]
-                worker_name = best_result["worker"]
-                critic_score = best_result["score"]
-
-                # LOAD MEMORY
-                memory = self.memory_manager.load_memory()
-
-                # Reduce trust if worker failed many times
-                past_failures = [
-                    m for m in memory
-                    if m.get("worker") == worker_name and m.get("result") == "FAILED"
-                ]
-                if len(past_failures) > 3:
-                    critic_score *= 0.7
-
-                # DECISION ENGINE
-                decision = self.decision_engine.make_decision(
-                    worker_name=worker_name,
-                    task_type=intent,
-                    critic_score=critic_score,
-                    goal=goal
-                )
-                print("CONFIDENCE:", decision["confidence"])
-                print("RISK:", decision["risk"])
-                print("DECISION:", decision["decision"])
-
-                # USER PREFERENCE CHECK
-                user_rejections = [
-                    m for m in memory
-                    if m.get("type") == "user_preference"
-                ]
-
-                if len(user_rejections) > 2:
-                    decision.decision = "ASK_USER"
-
-                print("CONFIDENCE:", decision.confidence)
-                print("RISK:", decision.risk)
-                print("DECISION:", decision.decision)
-
-                # PERMISSION ENGINE
-                from core.autonomy_engine import check_permission
-
-                permission = check_permission(intent)
-
-                if permission == "BLOCK":
-                    return format_error("Task blocked by autonomy rules.")
-
-                elif permission == "ASK":
-                    confirm = input("Permission required. Continue? (yes/no): ")
-                    if confirm.lower() != "yes":
-                        return format_error("Execution cancelled by user.")
-
-                # DECISION CHECK
-                if decision.decision == "BLOCK":
-                    return format_error("Task blocked due to high risk.")
-
-                elif decision.decision == "ASK_USER":
-                    confirm = input("Decision requires approval. Proceed? (yes/no): ")
-
-                    if confirm.lower() != "yes":
-
-                        # STORE USER PREFERENCE
-                        self.memory_manager.add_memory({
-                            "type": "user_preference",
-                            "task": intent,
-                            "preference": "rejected"
-                        })
-
-                        return format_error("Execution cancelled by user.")
-                    if confirm.lower() != "yes":
-                        return format_error("Execution cancelled by user.")
-
-                # STORE RESULT
-                final_outputs.append(result)
-
-                # TRACE LOGGING
-                trace = ExecutionTrace(
-                    task_type=intent,
-                    worker=worker_name,
-                    confidence=decision.confidence,
-                    risk=decision.risk,
-                    decision=decision.decision,
-                    result="SUCCESS" if critic_score > 0 else "FAILED",
-                    timestamp=str(datetime.now())
-                )
-
-                logger.info(trace)
-
-                # MEMORY STORE
-                memory_entry = {
-                    "task": intent,
-                    "worker": worker_name,
-                    "decision": decision.decision,
-                    "confidence": decision.confidence,
-                    "result": "SUCCESS" if critic_score > 0 else "FAILED"
-                }
-
-                self.memory_manager.add_memory(memory_entry)
-
-                # -------- STORE MISTAKES --------
-                if critic_score == 0:
-                    self.memory_manager.add_memory({
-                        "type": "mistake",
-                        "task": intent,
-                        "worker": worker_name,
-                        "issue": "low_score"
-                    })
-
-            # FINAL CRITIC REVIEW
-            review = self.critic.review(plan, intent, final_outputs)
-
-            if review["decision"] == "reject":
-                return format_error(f"Critic rejected output: {review['reason']}")
-
-            elif review["decision"] == "retry":
-
-                refined_outputs = []
-
-                for step in plan:
-                    workers = self.registry.all_workers()
-
-                    results = await self.executor.execute(
-                        workers,
-                        [step["intent"]],
-                        step["task"]
-                    )
-
-                    for r in results:
-                        if not isinstance(r, Exception):
-                            refined_outputs.append(r)
-
-                final_outputs = refined_outputs
-
-            # FINAL RESPONSE
-            final_response = format_success(
-                intent,
-                "\n".join(final_outputs)
-            )
-
-            # MEMORY
-            self.memory.add_interaction(command, final_response)
-
-            # define actual result quality
-            actual_score = critic_score   # from your critic system
-
-            # define expected (baseline)
-            expected_score = 0.5   # you can improve later
-
-            evaluation = self.learning_engine.evaluate(expected_score, actual_score)
-
-            reward = self.reinforcement_engine.get_reward(evaluation)
-
-            # update trust + reliability
-            self.trust_manager.update_trust(worker_name, actual_score > 0, decision.confidence)
-            self.reliability_manager.update(worker_name, evaluation)
-
-            # store learning record
-            self.learning_engine.record({
-                "task": intent,
+        if not isinstance(result, dict):
+            return {
+                "success": True,
+                "confidence": 1.0,
                 "worker": worker_name,
-                "score": actual_score,
-                "evaluation": evaluation,
-                "reward": reward,
-                "timestamp": str(datetime.now())
-            })
+                "output": result,
+            }
 
-            return final_response
+        normalized = dict(result)
 
-        except Exception as e:
-            logger.error(str(e))
-            return format_error("Unexpected system failure.")
-    
+        normalized.setdefault("success", True)
+        normalized.setdefault("confidence", 1.0)
+        normalized.setdefault("worker", worker_name)
 
+        # Keep confidence bounded for downstream scoring.
+        try:
+            normalized["confidence"] = max(
+                0.0,
+                min(1.0, float(normalized["confidence"])),
+            )
+        except (TypeError, ValueError):
+            normalized["confidence"] = 0.0
 
+        normalized["success"] = bool(normalized["success"])
+
+        return normalized
+
+    def _record_outcome(self, command, worker_name, result):
+        """Record reliability and persistent execution history."""
+
+        success = result["success"]
+        confidence = result["confidence"]
+
+        # Update in-memory reliability statistics.
+        self.reliability_manager.update(
+            worker_name,
+            success,
+            confidence,
+        )
+
+        # Persist a standardized execution record for future learning.
+        self.memory_manager.add_memory(
+            {
+                "type": "execution",
+                "worker": worker_name,
+                "task": command,
+                "result": "SUCCESS" if success else "FAILED",
+                "confidence": confidence,
+            }
+        )
