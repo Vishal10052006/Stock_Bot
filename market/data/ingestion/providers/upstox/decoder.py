@@ -51,9 +51,13 @@ def decode_feed_message(payload: bytes, protobuf_module: Any | None = None) -> A
 
     try:
         feed_response = _resolve_feed_response(protobuf_module)
-        return feed_response.FromString(bytes(payload))
-    except UpstoxDecodeError:
+    except ValueError:
+        # Preserve dependency-contract errors so callers can distinguish a
+        # missing generated message class from malformed wire data.
         raise
+
+    try:
+        return feed_response.FromString(bytes(payload))
     except Exception as exc:
         raise UpstoxDecodeError("Unable to decode Upstox protobuf payload") from exc
 
