@@ -105,6 +105,7 @@ class UpstoxMarketFeed(MarketFeed):
             )
 
         from .decoder import decode_feed_message, epoch_millis_to_datetime
+        from .proto_adapter import extract_ltpc
 
         while True:
             received_timestamp = datetime.now().astimezone()
@@ -115,40 +116,44 @@ class UpstoxMarketFeed(MarketFeed):
                 # V3 market updates are binary protobuf frames.
                 continue
 
-            decoded = decode_feed_message(raw_message, self._protobuf_module)
-            feeds = getattr(decoded, "feeds", None)
-            if not feeds:
-                continue
+            decoded = decode_feed_message(
+                raw_message,
+                self._protobuf_module,
+            )
 
-            for instrument_key, feed in feeds.items():
-                ltpc = getattr(feed, "ltpc", None)
-                if ltpc is None or not hasattr(ltpc, "ltp"):
-                    continue
+            # Keep protobuf-specific field extraction inside the adapter.
+            records = extract_ltpc(decoded)
+
+            for record in records:
+                instrument_key = record.instrument_key
 
                 symbol = next(
                     (
                         candidate
                         for candidate in self._subscribed_symbols
-                        if self.instrument_mapper.instrument_key(candidate) == instrument_key
+                        if self.instrument_mapper.instrument_key(candidate)
+                        == instrument_key
                     ),
                     instrument_key,
                 )
-                event_timestamp = epoch_millis_to_datetime(getattr(ltpc, "ltt", 0))
-                sequence = getattr(ltpc, "sequence_number", None)
+
+                event_timestamp = epoch_millis_to_datetime(
+                    record.timestamp_ms,
+                )
 
                 yield MarketEvent(
                     event_id=(
-                        f"{instrument_key}:{getattr(ltpc, 'ltt', '0')}"
-                        f":{getattr(ltpc, 'ltq', '0')}"
+                        f"{instrument_key}:{record.timestamp_ms}:"
+                        f"{int(record.quantity)}"
                     ),
                     symbol=symbol,
                     exchange="NSE",
                     event_type=MarketEventType.TRADE,
-                    price=float(ltpc.ltp),
-                    volume=float(getattr(ltpc, "ltq", 0)),
+                    price=record.price,
+                    volume=record.quantity,
                     exchange_timestamp=event_timestamp,
                     received_timestamp=received_timestamp,
-                    sequence_number=sequence,
+                    sequence_number=record.sequence_number,
                 )
 
     def disconnect(self) -> None:
