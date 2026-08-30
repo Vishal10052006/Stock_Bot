@@ -1,7 +1,5 @@
 """Unit tests for the Upstox V3 authorization boundary."""
 
-import json
-
 import pytest
 
 from market.data.ingestion.providers.upstox.auth import (
@@ -11,49 +9,61 @@ from market.data.ingestion.providers.upstox.auth import (
 
 
 class FakeResponse:
-    """Minimal context-manager response for HTTP tests."""
+    """Minimal response double compatible with ``requests.Response`` usage."""
 
-    def __enter__(self):
-        return self
+    status_code = 200
 
-    def __exit__(self, exc_type, exc_value, traceback):
-        return False
+    def __init__(self, payload):
+        self._payload = payload
+        self.text = str(payload)
 
-    def read(self):
-        return json.dumps(
-            {
-                "status": "success",
-                "data": {"authorized_redirect_uri": "wss://example.test/feed"},
-            }
-        ).encode("utf-8")
+    def raise_for_status(self):
+        """Match the successful ``requests.Response`` contract."""
+        return None
+
+    def json(self):
+        """Return the configured JSON payload."""
+        return self._payload
 
 
-class FakeUrlopen:
-    """Callable replacement for urllib.request.urlopen."""
+class FakeRequests:
+    """Callable ``requests`` module double for authorization tests."""
 
     def __init__(self, response):
         self.response = response
-        self.request = None
+        self.url = None
+        self.headers = None
+        self.timeout = None
 
-    def __call__(self, request, timeout):
-        self.request = request
+    def get(self, url, *, headers, timeout):
+        """Capture the request and return the configured fake response."""
+        self.url = url
+        self.headers = headers
         self.timeout = timeout
         return self.response
 
 
 def test_authorization_returns_websocket_uri(monkeypatch):
     """A successful authorization response should expose the V3 socket URI."""
-    fake = FakeUrlopen(FakeResponse())
+    fake_response = FakeResponse(
+        {
+            "status": "success",
+            "data": {"authorized_redirect_uri": "wss://example.test/feed"},
+        }
+    )
+    fake_requests = FakeRequests(fake_response)
     monkeypatch.setattr(
-        "market.data.ingestion.providers.upstox.auth.urlopen",
-        fake,
+        "market.data.ingestion.providers.upstox.auth.requests",
+        fake_requests,
     )
 
     uri = get_authorized_websocket_uri("access-token")
 
     assert uri == "wss://example.test/feed"
-    assert fake.request.get_header("Authorization") == "Bearer access-token"
-    assert fake.request.get_header("Accept") == "application/json"
+    assert fake_requests.url.endswith("/v3/feed/market-data-feed/authorize")
+    assert fake_requests.headers["Authorization"] == "Bearer access-token"
+    assert fake_requests.headers["Accept"] == "application/json"
+    assert fake_requests.timeout == 10.0
 
 
 def test_authorization_rejects_empty_token():
@@ -64,15 +74,15 @@ def test_authorization_rejects_empty_token():
 
 def test_authorization_rejects_malformed_response(monkeypatch):
     """Missing authorization data must become a typed provider error."""
-    class MalformedResponse(FakeResponse):
-        def read(self):
-            return b'{"status":"success","data":{}}'
-
-    fake = FakeUrlopen(MalformedResponse())
+    fake_response = FakeResponse({"status": "success", "data": {}})
+    fake_requests = FakeRequests(fake_response)
     monkeypatch.setattr(
-        "market.data.ingestion.providers.upstox.auth.urlopen",
-        fake,
+        "market.data.ingestion.providers.upstox.auth.requests",
+        fake_requests,
     )
 
-    with pytest.raises(UpstoxAuthorizationError):
+    with pytest.raises(
+        UpstoxAuthorizationError,
+        match="authorized redirect URI",
+    ):
         get_authorized_websocket_uri("access-token")
