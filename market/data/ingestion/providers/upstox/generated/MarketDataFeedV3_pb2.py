@@ -3,29 +3,18 @@
 
 from google.protobuf import descriptor as _descriptor
 from google.protobuf import descriptor_pool as _descriptor_pool
-from google.protobuf import runtime_version as _runtime_version
 from google.protobuf import symbol_database as _symbol_database
 from google.protobuf.internal import builder as _builder
-
-_runtime_version.ValidateProtobufRuntimeVersion(
-    _runtime_version.Domain.PUBLIC,
-    7,
-    34,
-    0,
-    "",
-    "MarketDataFeedV3.proto",
-)
 
 _sym_db = _symbol_database.Default()
 
 DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(
-    b'\n\x13MarketDataFeedV3.proto\x12\x31com.upstox.marketdatafeederv3udapi.rpc.proto\x1a\x00'
-)
+b'\n\x13MarketDataFeedV3.proto\x12\x31com.upstox.marketdatafeederv3udapi.rpc.proto\n\x04LTPC\x12\x0b\n\x03ltp\x18\x01 \x01(\x01\x12\x0b\n\x03ltt\x18\x02 \x01(\x03\x12\x0b\n\x03ltq\x18\x03 \x01(\x03\x12\n\n\x02cp\x18\x04 \x01(\x01\n\x0cMarketLevel\x12O\n\x0cbidAskQuote\x18\x01 \x03(\x0b2\x39.com.upstox.marketdatafeederv3udapi.rpc.proto.Quote\n\x0cMarketOHLC\x12K\n\x04ohlc\x18\x01 \x03(\x0b2=.com.upstox.marketdatafeederv3udapi.rpc.proto.OHLC\n\x05Quote\x12\r\n\x05bidQ\x18\x01 \x01(\x03\x12\r\n\x05bidP\x18\x02 \x01(\x01\x12\r\n\x05askQ\x18\x03 \x01(\x03\x12\r\n\x05askP\x18\x04 \x01(\x01\n\x0cOptionGreeks\x12\r\n\x05delta\x18\x01 \x01(\x01\x12\r\n\x05theta\x18\x02 \x01(\x01\x12\r\n\x05gamma\x18\x03 \x01(\x01\x12\x0c\n\x04vega\x18\x04 \x01(\x01\x12\x0b\n\x03rho\x18\x05 \x01(\x01\n\x04OHLC\x12\x10\n\x08interval\x18\x01 \x01(\t\x12\x0c\n\x04open\x18\x02 \x01(\x01\x12\r\n\x05high\x18\x03 \x01(\x01\x12\x0b\n\x03low\x18\x04 \x01(\x01\x12\r\n\x05close\x18\x05 \x01(\x01\x12\x0b\n\x03vol\x18\x06 \x01(\x03\x12\n\n\x02ts\x18\x07 \x01(\x03\n\x10MarketFullFeed\x12A\n\x04ltpc\x18\x01 \x01(\x0b23.com.upstox.marketdatafeederv3udapi.rpc.proto.LTPC\x12L\n\x0bmarketLevel\x18\x02 \x01(\x0b27.com.upstox.marketdatafeederv3udapi.rpc.proto.MarketLevel\x12I\n\x0coptionGreeks\x18\x03 \x01(\x0b23.com.upstox.marketdatafeederv3udapi.rpc.proto.OptionGreeks\x12O\n\nmarketOHLC\x18\x04 \x01(\x0b2;.com.upstox.marketdatafeederv3udapi.rpc.proto.MarketOHLC\x12\x0b\n\x03atp\x18\x05 \x01(\x01\x12\x0b\n\x03vtt\x18\x06 \x01(\x03\x12\n\n\x02oi\x18\x07 \x01(\x01\x12\n\n\x02iv\x18\x08 \x01(\x01\x12\x0c\n\x04tbq\x18\t \x01(\x01\x12\x0c\n\x04tsq\x18\n \x01(\x01\n\x0eIndexFullFeed\x12A\n\x04ltpc\x18\x01 \x01(\x0b23.com.upstox.marketdatafeederv3udapi.rpc.proto.LTPC\x12O\n\nmarketOHLC\x18\x02 \x01(\x0b2;.com.upstox.marketdatafeederv3udapi.rpc.proto.MarketOHLC\n\x08FullFeed\x12\x13\n\x08marketFF\x18\x01 \x01(\x0b2\x99\x01.com.upstox.marketdatafeederv3udapi.rpc.proto.MarketFullFeedH\x00\x12\x13\n\x08indexFF\x18\x02 \x01(\x0b2\x99\x01.com.upstox.marketdatafeederv3udapi.rpc.proto.IndexFullFeedH\x00B\x0f\n\rFullFeedUnion\n\x12\x06Feed\x12D\n\x04ltpc\x18\x01 \x01(\x0b24.com.upstox.marketdatafeederv3udapi.rpc.proto.LTPCH\x00\x12K\n\x08fullFeed\x18\x02 \x01(\x0b27.com.upstox.marketdatafeederv3udapi.rpc.proto.FullFeedH\x00\x12`\n\x13firstLevelWithGreeks\x18\x03 \x01(\x0b2?.com.upstox.marketdatafeederv3udapi.rpc.proto.FirstLevelWithGreeksH\x00\x12\x0f\n\x0brequestMode\x18\x04 \x01(\x0e22.com.upstox.marketdatafeederv3udapi.rpc.proto.RequestMode\x1a\x03\n\x01\n\x12\x14FirstLevelWithGreeks\x12A\n\x04ltpc\x18\x01 \x01(\x0b23.com.upstox.marketdatafeederv3udapi.rpc.proto.LTPC\x12H\n\x0bfirstDepth\x18\x02 \x01(\x0b23.com.upstox.marketdatafeederv3udapi.rpc.proto.Quote\x12I\n\x0coptionGreeks\x18\x03 \x01(\x0b23.com.upstox.marketdatafeederv3udapi.rpc.proto.OptionGreeks\x12\x0b\n\x03vtt\x18\x04 \x01(\x03\x12\n\n\x02oi\x18\x05 \x01(\x01\x12\n\n\x02iv\x18\x06 \x01(\x01H\x00B\x0f\n\rFeedUnion\n\tRequestMode\x12\x08\n\x04ltpc\x10\x00\x12\x0b\n\x07full_d5\x10\x01\x12\x12\n\x0eoption_greeks\x10\x02\x12\x0c\n\x08full_d30\x10\x03\x122\n\x0cMarketInfo\x12\x14\n\rsegmentStatus\x18\x01 \x03(\x0b2\x1d.com.upstox.marketdatafeederv3udapi.rpc.proto.MarketInfo.SegmentStatusEntry\x1a\x5d\n\x12SegmentStatusEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12:\n\x05value\x18\x02 \x01(\x0e2+.com.upstox.marketdatafeederv3udapi.rpc.proto.MarketStatus:\x02\x08\x01\x10\x01\n\x13FeedResponse\x12G\n\x04type\x18\x01 \x01(\x0e29.com.upstox.marketdatafeederv3udapi.rpc.proto.Type\x12I\n\x05feeds\x18\x02 \x03(\x0b2:.com.upstox.marketdatafeederv3udapi.rpc.proto.FeedResponse.FeedsEntry\x12\x10\n\x08currentTs\x18\x03 \x01(\x03\x12M\n\x0amarketInfo\x18\x04 \x01(\x0b24.com.upstox.marketdatafeederv3udapi.rpc.proto.MarketInfo\x1a\x5f\n\x0aFeedsEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\x40\n\x05value\x18\x02 \x01(\x0b2+.com.upstox.marketdatafeederv3udapi.rpc.proto.Feed:\x02\x08\x01\x10\x01*8\n\x04Type\x12\x0f\n\x0binitial_feed\x10\x00\x12\x0c\n\x08live_feed\x10\x01\x12\r\n\tmarket_info\x10\x02*\x89\x01\n\x0cMarketStatus\x12\x12\n\x0ePRE_OPEN_START\x10\x00\x12\x10\n\x0cPRE_OPEN_END\x10\x01\x12\x10\n\x0cNORMAL_OPEN\x10\x02\x12\x11\n\rNORMAL_CLOSE\x10\x03\x12\x12\n\x0eCLOSING_START\x10\x04\x12\x10\n\x0cCLOSING_END\x10\x05\x62\x06proto3')
 
-# The repository stores the authoritative .proto schema alongside this file.
-# This generated placeholder intentionally fails closed until regenerated with
-# protoc from that schema in the target environment.
-raise RuntimeError(
-    "Regenerate MarketDataFeedV3_pb2.py from MarketDataFeedV3.proto using protoc; "
-    "this generated artifact must not contain a hand-authored descriptor."
-)
+_builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, globals())
+_builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'MarketDataFeedV3_pb2', globals())
+
+if _descriptor._USE_C_DESCRIPTORS == False:
+    DESCRIPTOR._loaded_options = None
+    _FEEDRESPONSE_FEEDENTRY = FeedResponse.FeedsEntry
+    _MARKETINFO_SEGMENTSTATUSENTRY = MarketInfo.SegmentStatusEntry
