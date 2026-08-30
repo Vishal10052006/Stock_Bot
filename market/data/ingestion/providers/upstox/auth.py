@@ -65,7 +65,18 @@ def get_authorized_websocket_uri(
             "Upstox authorization response did not contain an authorized redirect URI"
         ) from exc
 
+    # A missing redirect URI is a malformed authorization response.
+    # Keep this distinct from a supplied-but-invalid URI so callers can
+    # distinguish an incomplete provider response from a bad endpoint.
+    if uri is None:
+        raise UpstoxAuthorizationError(
+            "Upstox authorization response did not contain an authorized redirect URI"
+        )
+
+    # A supplied URI must be a secure WebSocket endpoint.
     if not isinstance(uri, str) or not uri.startswith("wss://"):
-        raise UpstoxAuthorizationError("Upstox returned an invalid WebSocket URI")
+        raise UpstoxAuthorizationError(
+            "Upstox returned an invalid WebSocket URI"
+        )
 
     return uri
