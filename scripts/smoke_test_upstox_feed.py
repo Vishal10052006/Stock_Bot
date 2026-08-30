@@ -22,8 +22,8 @@ from market.data.ingestion.providers.upstox.generated import MarketDataFeedV3_pb
 
 
 def main() -> int:
-    """Connect, subscribe, receive one canonical event, then disconnect."""
-    symbol = os.getenv("UPSTOX_SMOKE_SYMBOL", "RELIANCE").strip().upper()
+    """Connect, subscribe, wait for one LTPC event, then disconnect."""
+    symbol = os.getenv("UPSTOX_SMOKE_SYMBOL", "ITC").strip().upper()
     if not symbol:
         print("UPSTOX_SMOKE_SYMBOL must not be empty", file=sys.stderr)
         return 2
