@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from urllib.request import Request, urlopen
 import json
 
+import requests
 
 DEFAULT_AUTHORIZE_URL = "https://api.upstox.com/v3/feed/market-data-feed/authorize"
 
@@ -30,26 +30,37 @@ def get_authorized_websocket_uri(
     if timeout_seconds <= 0:
         raise ValueError("timeout_seconds must be greater than zero")
 
-    request = Request(
-        authorize_url,
-        headers={
-            "Authorization": f"Bearer {token}",
-            "Accept": "application/json",
-        },
-        method="GET",
-    )
-
     try:
-        with urlopen(request, timeout=timeout_seconds) as response:
-            payload = json.load(response)
-    except Exception as exc:
+        response = requests.get(
+            authorize_url,
+            headers={
+                "Authorization": f"Bearer {token}",
+                "Accept": "application/json",
+                "User-Agent": "Stock-Bot/1.0",
+            },
+            timeout=timeout_seconds,
+        )
+    except requests.RequestException as exc:
         raise UpstoxAuthorizationError(
             "Failed to authorize the Upstox market-data WebSocket"
         ) from exc
 
+    if not response.ok:
+        raise UpstoxAuthorizationError(
+            f"Upstox market-data authorization failed with HTTP {response.status_code}"
+        )
+
     try:
-        uri = payload["data"]["authorized_redirect_uri"]
-    except (TypeError, KeyError) as exc:
+        payload = response.json()
+    except (ValueError, json.JSONDecodeError) as exc:
+        raise UpstoxAuthorizationError(
+            "Upstox authorization response was not valid JSON"
+        ) from exc
+
+    try:
+        data = payload["data"]
+        uri = data.get("authorized_redirect_uri") or data.get("authorizedRedirectUri")
+    except (TypeError, KeyError, AttributeError) as exc:
         raise UpstoxAuthorizationError(
             "Upstox authorization response did not contain an authorized redirect URI"
         ) from exc
