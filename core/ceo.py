@@ -14,20 +14,22 @@ from learning.reinforcement_engine import ReinforcementEngine
 from learning.trust_manager import TrustManager
 from learning.reliability_manager import ReliabilityManager
 
+
 class CEO:
     # Constructor (__init__)
     def __init__(self):
+        # Core managers used by the legacy orchestration layer.
         self.trust_manager = TrustManager()
         self.memory_manager = MemoryManager()
+        self.goal_manager = GoalManager()
+        self.decision_simulator = DecisionSimulator()
 
         self.learning_engine = LearningEngine(self.memory_manager)
         self.reinforcement_engine = ReinforcementEngine()
         self.reliability_manager = ReliabilityManager()
 
         self.strategy_engine = StrategyEngine()
-        
         self.weight_manager = WeightManager()
-        self.reinforcement_engine = ReinforcementEngine()
 
         self.execution_engine = ExecutionEngine(
             self.trust_manager,
@@ -45,7 +47,7 @@ class CEO:
             self.weight_manager,
             self.reinforcement_engine
         )
-             
+
     def add_goal(self, goal):
         self.goal_manager.add_goal(goal)
 
@@ -113,7 +115,7 @@ class CEO:
 
         print("TRUST SCORES:", self.trust_manager.get_all_trust())
         return results
-    
+
     def evaluate_result(self, result):
         """
         Convert real-world result into numeric score (0–1)
@@ -125,6 +127,7 @@ class CEO:
         elif result == "FAILED":
             return 0.0
         return 0.5
-    
+
     def simulate_decision(self, goal):
+        """Simulate a decision through the existing decision simulator."""
         return self.decision_simulator.simulate(goal)
