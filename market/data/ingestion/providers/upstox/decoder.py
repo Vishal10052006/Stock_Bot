@@ -1,6 +1,9 @@
 """Decode Upstox Market Data Feed V3 protobuf payloads.
 
 Provider-specific protobuf details remain isolated from the rest of Stock Bot.
+
+Reference:
+    Upstox Market Data Feed V3 protobuf schema.
 """
 
 from __future__ import annotations
@@ -30,8 +33,8 @@ def _resolve_feed_response(protobuf_module: Any) -> Any:
 def decode_feed_message(payload: bytes, protobuf_module: Any | None = None) -> Any:
     """Decode raw V3 protobuf bytes into a generated ``FeedResponse`` object.
 
-    The generated protobuf dependency can be injected for tests or supplied by
-    the application adapter, keeping provider code isolated and testable.
+    The generated protobuf dependency can be injected for tests. In production
+    it is loaded from the adapter's generated package.
     """
     if not isinstance(payload, (bytes, bytearray, memoryview)):
         raise TypeError("payload must be bytes-like")
