@@ -347,3 +347,119 @@ def test_events_convert_protobuf_ltcp_to_market_event():
     assert event.exchange_timestamp.tzinfo == UTC
     assert event.received_timestamp.tzinfo is not None
     assert event.event_id.startswith("NSE_EQ|RELIANCE:")
+
+def test_reconnect_restores_connection_and_subscriptions(monkeypatch):
+    """Reconnect should open a new socket and restore active subscriptions."""
+
+    first_socket = FakeWebSocket()
+    second_socket = FakeWebSocket()
+
+    class ReconnectingWebSocketModule(FakeWebSocketModule):
+        """Return a new socket for each connection attempt."""
+
+        def __init__(self):
+            super().__init__(first_socket)
+            self.sockets = [first_socket, second_socket]
+            self.connection_count = 1
+
+        def create_connection(self, uri, timeout):
+            """Return the next deterministic socket."""
+
+            self.created_uri = uri
+            self.created_timeout = timeout
+
+            socket = self.sockets[self.connection_count]
+            self.connection_count += 1
+
+            return socket
+
+    websocket_module = ReconnectingWebSocketModule()
+
+    monkeypatch.setattr(
+        "market.data.ingestion.providers.upstox.feed.get_authorized_websocket_uri",
+        lambda access_token, timeout_seconds: "wss://example.test/feed",
+    )
+
+    feed = make_feed(websocket_module)
+
+    # Simulate the existing live connection and subscription state.
+    feed._ws = first_socket
+    feed._subscribed_symbols = {"RELIANCE", "TCS"}
+
+    # Reconnect without waiting in the unit test.
+    feed.config = UpstoxFeedConfig(
+        access_token="test-token",
+        mode="ltpc",
+        timeout_seconds=7.5,
+        reconnect_max_attempts=1,
+        reconnect_delay_seconds=0,
+    )
+
+    monkeypatch.setattr(
+        "market.data.ingestion.providers.upstox.feed.time.sleep",
+        lambda _: None,
+    )
+
+    result = feed._reconnect()
+
+    assert result is True
+    assert feed.connected is True
+    assert feed._ws is second_socket
+
+    # Reconnect must restore both subscriptions.
+    assert len(second_socket.sent) == 1
+
+    payload = second_socket.sent[0]["payload"]
+
+    assert b"NSE_EQ|RELIANCE" in payload
+    assert b"NSE_EQ|TCS" in payload
+
+    assert feed._subscribed_symbols == {
+        "RELIANCE",
+        "TCS",
+    }
+
+
+def test_reconnect_returns_false_after_all_attempts_fail(monkeypatch):
+    """Reconnect should fail cleanly after exhausting retry attempts."""
+
+    websocket = FakeWebSocket()
+    websocket_module = FakeWebSocketModule(websocket)
+
+    feed = make_feed(websocket_module)
+
+    feed._ws = websocket
+    feed._subscribed_symbols = {"RELIANCE"}
+
+    feed.config = UpstoxFeedConfig(
+        access_token="test-token",
+        mode="ltpc",
+        timeout_seconds=7.5,
+        reconnect_max_attempts=2,
+        reconnect_delay_seconds=0,
+    )
+
+    attempts = {"count": 0}
+
+    def fail_connection(access_token, timeout_seconds):
+        """Simulate authorization failure on every reconnect attempt."""
+
+        attempts["count"] += 1
+
+        raise RuntimeError("simulated reconnect failure")
+
+    monkeypatch.setattr(
+        "market.data.ingestion.providers.upstox.feed.get_authorized_websocket_uri",
+        fail_connection,
+    )
+
+    monkeypatch.setattr(
+        "market.data.ingestion.providers.upstox.feed.time.sleep",
+        lambda _: None,
+    )
+
+    result = feed._reconnect()
+
+    assert result is False
+    assert attempts["count"] == 2
+    assert feed.connected is False

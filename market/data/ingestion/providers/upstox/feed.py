@@ -10,6 +10,7 @@ from collections.abc import Iterable, Iterator
 from datetime import datetime
 import importlib
 import json
+import time
 import uuid
 
 from market.data.events import MarketEvent, MarketEventType
@@ -55,17 +56,95 @@ class UpstoxMarketFeed(MarketFeed):
                 ) from exc
         return self._websocket
 
-    def connect(self) -> None:
-        """Authorize and open the provider WebSocket connection."""
+    def _open_connection(self) -> None:
+        """Authorize and open one WebSocket connection.
+
+        This method performs exactly one connection attempt.
+        Reconnection policy is handled separately.
+        """
         websocket = self._load_websocket_module()
+
         uri = get_authorized_websocket_uri(
             self.config.access_token,
             timeout_seconds=self.config.timeout_seconds,
         )
+
         self._ws = websocket.create_connection(
             uri,
             timeout=self.config.timeout_seconds,
         )
+
+    def _resubscribe(self) -> None:
+        """Restore subscriptions after a successful reconnect.
+
+        The existing symbol set is intentionally preserved during reconnect.
+        """
+        if self._subscribed_symbols:
+            symbols = sorted(self._subscribed_symbols)
+
+            # Send the subscription without changing the stored symbol set.
+            websocket = self._load_websocket_module()
+
+            instrument_keys = [
+                self.instrument_mapper.instrument_key(symbol)
+                for symbol in symbols
+            ]
+
+            request = {
+                "guid": str(uuid.uuid4()),
+                "method": "sub",
+                "data": {
+                    "mode": self.config.mode,
+                    "instrumentKeys": instrument_keys,
+                },
+            }
+
+            # Upstox V3 expects subscription requests as binary frames.
+            self._ws.send(
+                json.dumps(request).encode("utf-8"),
+                opcode=websocket.ABNF.OPCODE_BINARY,
+            )
+
+    def _reconnect(self) -> bool:
+        """Reconnect and restore subscriptions.
+
+        Returns:
+            True when reconnection succeeds.
+            False when all configured attempts fail.
+        """
+        # Preserve the current subscription state before replacing the socket.
+        subscribed_symbols = set(self._subscribed_symbols)
+
+        for attempt in range(1, self.config.reconnect_max_attempts + 1):
+            try:
+                # Close the failed socket without clearing subscriptions.
+                if self._ws is not None:
+                    try:
+                        self._ws.close()
+                    except Exception:
+                        pass
+
+                self._ws = None
+
+                if self.config.reconnect_delay_seconds > 0:
+                    time.sleep(self.config.reconnect_delay_seconds)
+
+                self._open_connection()
+
+                # Restore subscriptions directly from the preserved state.
+                self._subscribed_symbols = subscribed_symbols
+                self._resubscribe()
+
+                return True
+
+            except Exception:
+                self._ws = None
+
+        return False
+
+    def connect(self) -> None:
+        """Authorize and open the provider WebSocket connection."""
+        self._open_connection()
 
     def subscribe(self, symbols: Iterable[str]) -> None:
         """Subscribe internal symbols using Upstox instrument keys."""
@@ -109,7 +188,46 @@ class UpstoxMarketFeed(MarketFeed):
 
         while True:
             received_timestamp = datetime.now().astimezone()
-            raw_message = self._ws.recv()
+
+            try:
+                raw_message = self._ws.recv()
+            except Exception as exc:
+                # Determine whether the exception represents a connection
+                # failure that can safely trigger the reconnect policy.
+                websocket = self._load_websocket_module()
+
+                websocket_exception = getattr(
+                    websocket,
+                    "WebSocketException",
+                    (),
+                )
+
+                is_connection_failure = isinstance(
+                    exc,
+                    (
+                        ConnectionError,
+                        OSError,
+                        TimeoutError,
+                    ),
+                )
+
+                if websocket_exception:
+                    is_connection_failure = (
+                        is_connection_failure
+                        or isinstance(exc, websocket_exception)
+                    )
+
+                if not is_connection_failure:
+                    raise
+
+                if not self._reconnect():
+                    raise RuntimeError(
+                        "Upstox market feed reconnect attempts exhausted"
+                    ) from exc
+
+                # The connection has been restored and subscriptions have
+                # been replayed. Continue receiving market events.
+                continue
             if raw_message is None:
                 return
             if isinstance(raw_message, str):
