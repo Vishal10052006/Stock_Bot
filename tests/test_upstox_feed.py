@@ -64,6 +64,20 @@ class FakeWebSocketModule:
         },
     )
 
+    # Mirror the websocket-client exception hierarchy used by the
+    # production adapter so timeout handling is tested correctly.
+    WebSocketException = type(
+        "WebSocketException",
+        (Exception,),
+        {},
+    )
+
+    WebSocketTimeoutException = type(
+        "WebSocketTimeoutException",
+        (WebSocketException,),
+        {},
+    )
+
     def __init__(self, websocket):
         self.websocket = websocket
         self.created_uri = None
@@ -463,6 +477,57 @@ def test_reconnect_returns_false_after_all_attempts_fail(monkeypatch):
     assert result is False
     assert attempts["count"] == 2
     assert feed.connected is False
+
+def test_events_records_timeout_as_missing_data_gap(monkeypatch):
+    """Receive timeout should record a gap without triggering reconnect."""
+
+    from market.data.metrics import DataQualityMetrics
+
+    websocket = FakeWebSocket()
+    websocket_module = FakeWebSocketModule(websocket)
+    metrics = DataQualityMetrics()
+
+    feed = UpstoxMarketFeed(
+        make_config(),
+        make_mapper(),
+        websocket_module=websocket_module,
+        metrics=metrics,
+    )
+
+    feed._ws = websocket
+    feed._protobuf_module = object()
+
+    timeout_error = websocket_module.WebSocketTimeoutException(
+        "simulated receive timeout"
+    )
+
+    calls = {"count": 0}
+
+    def timeout_then_close():
+        """Simulate one receive timeout followed by stream termination."""
+
+        calls["count"] += 1
+
+        if calls["count"] == 1:
+            raise timeout_error
+
+        return None
+
+    monkeypatch.setattr(
+        websocket,
+        "recv",
+        timeout_then_close,
+    )
+
+    events = list(feed.events())
+
+    assert events == []
+
+    snapshot = metrics.snapshot()
+
+    assert snapshot.missing_data_gaps == 1
+    assert snapshot.connection_failures == 0
+    assert snapshot.reconnect_attempts == 0
 
 def test_events_records_connection_failure_before_reconnect(monkeypatch):
     """Connection failures should be recorded before reconnecting."""

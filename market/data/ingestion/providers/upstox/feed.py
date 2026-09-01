@@ -212,6 +212,35 @@ class UpstoxMarketFeed(MarketFeed):
                 # failure that can safely trigger the reconnect policy.
                 websocket = self._load_websocket_module()
 
+                # websocket-client exposes receive timeouts as a subclass of
+                # WebSocketException, so timeout detection must happen before the
+                # generic WebSocketException connection-failure check.
+                websocket_timeout_exception = getattr(
+                    websocket,
+                    "WebSocketTimeoutException",
+                    (),
+                )
+
+                is_receive_timeout = isinstance(
+                    exc,
+                    (TimeoutError,),
+                )
+
+                if websocket_timeout_exception:
+                    is_receive_timeout = (
+                        is_receive_timeout
+                        or isinstance(exc, websocket_timeout_exception)
+                    )
+
+                if is_receive_timeout:
+                    # A receive timeout means no frame arrived within the configured
+                    # interval. The socket may still be healthy, so record a
+                    # missing-data gap without triggering reconnection.
+                    if self.metrics is not None:
+                        self.metrics.record_missing_data_gap()
+
+                    continue
+
                 websocket_exception = getattr(
                     websocket,
                     "WebSocketException",
@@ -223,7 +252,6 @@ class UpstoxMarketFeed(MarketFeed):
                     (
                         ConnectionError,
                         OSError,
-                        TimeoutError,
                     ),
                 )
 
@@ -236,8 +264,8 @@ class UpstoxMarketFeed(MarketFeed):
                 if not is_connection_failure:
                     raise
 
-                # Record the provider connection failure exactly once,
-                # after confirming that this is a connection-related error.
+                # Record the provider connection failure exactly once, after
+                # confirming that this is a genuine connection-related error.
                 if self.metrics is not None:
                     self.metrics.record_connection_failure()
 
