@@ -16,6 +16,9 @@ import uuid
 from market.data.events import MarketEvent, MarketEventType
 from market.data.ingestion import MarketFeed
 
+from market.data.metrics import DataQualityMetrics
+from market.data.validation import MarketEventValidator
+
 from .auth import get_authorized_websocket_uri
 from .config import UpstoxFeedConfig
 from .instrument_mapper import UpstoxInstrumentMapper
@@ -31,6 +34,8 @@ class UpstoxMarketFeed(MarketFeed):
         *,
         protobuf_module=None,
         websocket_module=None,
+        event_validator: MarketEventValidator | None = None,
+        metrics: DataQualityMetrics | None = None,
     ) -> None:
         """Store dependencies without opening a network connection."""
         self.config = config
@@ -39,6 +44,8 @@ class UpstoxMarketFeed(MarketFeed):
         self._websocket = websocket_module
         self._ws = None
         self._subscribed_symbols: set[str] = set()
+        self.event_validator = event_validator
+        self.metrics = metrics
 
     @property
     def connected(self) -> bool:
@@ -116,6 +123,9 @@ class UpstoxMarketFeed(MarketFeed):
         subscribed_symbols = set(self._subscribed_symbols)
 
         for attempt in range(1, self.config.reconnect_max_attempts + 1):
+            if self.metrics is not None:
+                self.metrics.record_reconnect_attempt()
+
             try:
                 # Close the failed socket without clearing subscriptions.
                 if self._ws is not None:
@@ -135,10 +145,16 @@ class UpstoxMarketFeed(MarketFeed):
                 self._subscribed_symbols = subscribed_symbols
                 self._resubscribe()
 
+                if self.metrics is not None:
+                    self.metrics.record_reconnect_success()
+
                 return True
 
             except Exception:
                 self._ws = None
+
+        if self.metrics is not None:
+            self.metrics.record_reconnect_failure()
 
         return False
 
@@ -220,6 +236,11 @@ class UpstoxMarketFeed(MarketFeed):
                 if not is_connection_failure:
                     raise
 
+                # Record the provider connection failure exactly once,
+                # after confirming that this is a connection-related error.
+                if self.metrics is not None:
+                    self.metrics.record_connection_failure()
+
                 if not self._reconnect():
                     raise RuntimeError(
                         "Upstox market feed reconnect attempts exhausted"
@@ -259,7 +280,7 @@ class UpstoxMarketFeed(MarketFeed):
                     record.timestamp_ms,
                 )
 
-                yield MarketEvent(
+                event = MarketEvent(
                     event_id=(
                         f"{instrument_key}:{record.timestamp_ms}:"
                         f"{int(record.quantity)}"
@@ -273,6 +294,19 @@ class UpstoxMarketFeed(MarketFeed):
                     received_timestamp=received_timestamp,
                     sequence_number=record.sequence_number,
                 )
+
+                # Validate and record telemetry only when the components are configured.
+                if self.event_validator is not None:
+                    validation_result = self.event_validator.validate(event)
+
+                    if self.metrics is not None:
+                        self.metrics.record_validation(validation_result)
+
+                    # Invalid events must never enter the downstream trading pipeline.
+                    if not validation_result.valid:
+                        continue
+
+                yield event
 
     def disconnect(self) -> None:
         """Close the active provider connection safely."""

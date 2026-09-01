@@ -463,3 +463,161 @@ def test_reconnect_returns_false_after_all_attempts_fail(monkeypatch):
     assert result is False
     assert attempts["count"] == 2
     assert feed.connected is False
+
+def test_events_records_connection_failure_before_reconnect(monkeypatch):
+    """Connection failures should be recorded before reconnecting."""
+
+    from market.data.metrics import DataQualityMetrics
+
+    websocket = FakeWebSocket()
+    websocket_module = FakeWebSocketModule(websocket)
+    metrics = DataQualityMetrics()
+
+    feed = UpstoxMarketFeed(
+        make_config(),
+        make_mapper(),
+        websocket_module=websocket_module,
+        metrics=metrics,
+    )
+
+    feed._ws = websocket
+
+    # The events() method requires a protobuf module before reading frames.
+    # A dummy object is sufficient because reconnect will be forced to fail.
+    feed._protobuf_module = object()
+
+    def raise_connection_error():
+        """Simulate a real WebSocket connection failure."""
+        raise ConnectionError("simulated connection failure")
+
+    monkeypatch.setattr(
+        websocket,
+        "recv",
+        raise_connection_error,
+    )
+
+    # Prevent the test from performing an actual reconnect.
+    monkeypatch.setattr(
+        feed,
+        "_reconnect",
+        lambda: False,
+    )
+
+    with pytest.raises(
+        RuntimeError,
+        match="reconnect attempts exhausted",
+    ):
+        list(feed.events())
+
+    snapshot = metrics.snapshot()
+
+    assert snapshot.connection_failures == 1
+
+def test_events_validate_and_record_metrics():
+    """Valid events should be yielded and recorded by the metrics layer."""
+
+    from market.data.ingestion.providers.upstox.generated import (
+        MarketDataFeedV3_pb2,
+    )
+    from market.data.metrics import DataQualityMetrics
+    from market.data.validation import MarketEventValidator
+
+    response = MarketDataFeedV3_pb2.FeedResponse()
+    response.type = MarketDataFeedV3_pb2.live_feed
+
+    feed = response.feeds["NSE_EQ|RELIANCE"]
+    feed.ltpc.ltp = 1425.30
+    feed.ltpc.ltt = 1_756_537_500_000
+    feed.ltpc.ltq = 125
+
+    websocket = FakeWebSocket()
+    websocket.messages = [
+        response.SerializeToString(),
+        None,
+    ]
+
+    websocket_module = FakeWebSocketModule(websocket)
+    metrics = DataQualityMetrics()
+    validator = MarketEventValidator(
+        max_event_age_seconds=10_000_000_000,
+    )
+
+    market_feed = UpstoxMarketFeed(
+        make_config(),
+        make_mapper(),
+        protobuf_module=MarketDataFeedV3_pb2,
+        websocket_module=websocket_module,
+        event_validator=validator,
+        metrics=metrics,
+    )
+
+    market_feed._ws = websocket
+    market_feed._subscribed_symbols.add("RELIANCE")
+
+    events = list(market_feed.events())
+
+    assert len(events) == 1
+
+    snapshot = metrics.snapshot()
+
+    assert snapshot.events_received == 1
+    assert snapshot.events_accepted == 1
+    assert snapshot.events_rejected == 0
+    assert snapshot.latency_sample_count == 1
+
+
+def test_invalid_event_is_filtered_and_recorded():
+    """Rejected events must not reach downstream consumers."""
+
+    from market.data.ingestion.providers.upstox.generated import (
+        MarketDataFeedV3_pb2,
+    )
+    from market.data.metrics import DataQualityMetrics
+    from market.data.validation import MarketEventValidator
+
+    response = MarketDataFeedV3_pb2.FeedResponse()
+    response.type = MarketDataFeedV3_pb2.live_feed
+
+    feed = response.feeds["NSE_EQ|RELIANCE"]
+    feed.ltpc.ltp = 1425.30
+    feed.ltpc.ltt = 1_600_000_000_000
+    feed.ltpc.ltq = 125
+
+    websocket = FakeWebSocket()
+    websocket.messages = [
+        response.SerializeToString(),
+        None,
+    ]
+
+    websocket_module = FakeWebSocketModule(websocket)
+
+    metrics = DataQualityMetrics()
+
+    # The timestamp above is intentionally stale relative to the
+    # validator's configured freshness window.
+    validator = MarketEventValidator(
+        max_event_age_seconds=5.0,
+    )
+
+    market_feed = UpstoxMarketFeed(
+        make_config(),
+        make_mapper(),
+        protobuf_module=MarketDataFeedV3_pb2,
+        websocket_module=websocket_module,
+        event_validator=validator,
+        metrics=metrics,
+    )
+
+    market_feed._ws = websocket
+    market_feed._subscribed_symbols.add("RELIANCE")
+
+    events = list(market_feed.events())
+
+    # The stale event must be filtered before reaching consumers.
+    assert events == []
+
+    snapshot = metrics.snapshot()
+
+    assert snapshot.events_received == 1
+    assert snapshot.events_accepted == 0
+    assert snapshot.events_rejected == 1
