@@ -547,7 +547,7 @@ def test_upstox_historical_provider_integrates_with_pipeline(tmp_path):
         provider=provider,
         store=store,
         require_complete_sessions=False,
-        purpose=HistoricalDataPurpose.AUTHORITATIVE,
+        purpose=HistoricalDataPurpose.CANONICAL,
     )
 
     request = HistoricalDataRequest(

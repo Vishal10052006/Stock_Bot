@@ -87,12 +87,12 @@ class HistoricalMarketDataPipeline:
             )
 
         if (
-            self._purpose == HistoricalDataPurpose.AUTHORITATIVE
-            and self._provider.role != HistoricalProviderRole.AUTHORITATIVE
+            self._purpose == HistoricalDataPurpose.CANONICAL
+            and self._provider.role != HistoricalProviderRole.CANONICAL
         ):
             raise ValueError(
-                "authoritative historical ingestion requires "
-                "an authoritative provider; "
+                "canonical historical ingestion requires "
+                "a canonical provider; "
                 f"provider role is {self._provider.role.value}"
             )
 

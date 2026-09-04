@@ -15,14 +15,14 @@ class HistoricalProviderRole(str, Enum):
 
     TEST = "test"
     RESEARCH = "research"
-    AUTHORITATIVE = "authoritative"
+    CANONICAL = "canonical"
 
 
 class HistoricalDataPurpose(str, Enum):
     """Intended operational use of a historical dataset."""
 
     RESEARCH = "research"
-    AUTHORITATIVE = "authoritative"
+    CANONICAL = "canonical"
 
 
 @runtime_checkable

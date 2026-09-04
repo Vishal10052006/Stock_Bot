@@ -35,7 +35,7 @@ class UpstoxHistoricalMarketDataProvider(
 ):
     """Retrieve canonical NSE historical candles from Upstox V3."""
 
-    role = HistoricalProviderRole.AUTHORITATIVE
+    role = HistoricalProviderRole.CANONICAL
 
     def __init__(
         self,

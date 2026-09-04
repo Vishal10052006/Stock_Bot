@@ -125,7 +125,7 @@ def test_provider_has_authoritative_role():
 
     from market.data.historical.providers import HistoricalProviderRole
 
-    assert provider.role is HistoricalProviderRole.AUTHORITATIVE
+    assert provider.role is HistoricalProviderRole.CANONICAL
 
 
 def test_provider_converts_upstox_candles_to_canonical_candles():

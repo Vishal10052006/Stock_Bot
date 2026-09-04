@@ -58,7 +58,7 @@ def test_authoritative_purpose_rejects_research_provider_before_fetch() -> None:
 
     pipeline = HistoricalMarketDataPipeline(
         provider=provider,
-        purpose=HistoricalDataPurpose.AUTHORITATIVE,
+        purpose=HistoricalDataPurpose.CANONICAL,
     )
 
     request = HistoricalDataRequest(
@@ -69,7 +69,7 @@ def test_authoritative_purpose_rejects_research_provider_before_fetch() -> None:
 
     with pytest.raises(
         ValueError,
-        match="authoritative historical ingestion requires an authoritative provider",
+        match="canonical historical ingestion requires a canonical provider",
     ):
         pipeline.ingest(request)
 
@@ -79,7 +79,7 @@ def test_authoritative_purpose_rejects_test_provider_before_fetch() -> None:
 
     pipeline = HistoricalMarketDataPipeline(
         provider=provider,
-        purpose=HistoricalDataPurpose.AUTHORITATIVE,
+        purpose=HistoricalDataPurpose.CANONICAL,
     )
 
     request = HistoricalDataRequest(
@@ -90,6 +90,6 @@ def test_authoritative_purpose_rejects_test_provider_before_fetch() -> None:
 
     with pytest.raises(
         ValueError,
-        match="authoritative historical ingestion requires an authoritative provider",
+        match="canonical historical ingestion requires a canonical provider",
     ):
         pipeline.ingest(request)
