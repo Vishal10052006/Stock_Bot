@@ -21,6 +21,7 @@ NSE_REGULAR_CLOSE = time(15, 30)
 # NSE 2026 regular-session holidays represented by this calendar.
 NSE_2026_TRADING_HOLIDAYS = frozenset(
     {
+        date(2026, 1, 15),
         date(2026, 1, 26),
         date(2026, 3, 3),
         date(2026, 3, 26),

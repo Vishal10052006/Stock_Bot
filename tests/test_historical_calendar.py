@@ -101,6 +101,7 @@ def test_nse_holiday_is_not_trading_day() -> None:
 @pytest.mark.parametrize(
     "holiday",
     [
+        date(2026, 1, 15),
         date(2026, 1, 26),
         date(2026, 3, 3),
         date(2026, 3, 26),
