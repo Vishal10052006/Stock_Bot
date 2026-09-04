@@ -13,6 +13,7 @@ class UpstoxInstrumentIdentity:
 
     symbol: str
     instrument_key: str
+    isin: str
 
     def __post_init__(self) -> None:
         """Validate the provider identity contract."""
@@ -27,6 +28,9 @@ class UpstoxInstrumentIdentity:
                 "instrument_key must be a non-empty string"
             )
 
+        if not isinstance(self.isin, str) or not self.isin.strip():
+            raise ValueError("isin must be a non-empty string")
+
         object.__setattr__(
             self,
             "symbol",
@@ -36,6 +40,11 @@ class UpstoxInstrumentIdentity:
             self,
             "instrument_key",
             self.instrument_key.strip(),
+        )
+        object.__setattr__(
+            self,
+            "isin",
+            self.isin.strip().upper(),
         )
 
 
@@ -95,7 +104,18 @@ class UpstoxInstrumentMapper:
         """Return the provider identity for an internal symbol."""
         normalized_symbol = symbol.strip().upper()
 
+        instrument_key = self.instrument_key(normalized_symbol)
+
+        parts = instrument_key.split("|", 1)
+
+        if len(parts) != 2 or parts[0] != "NSE_EQ" or not parts[1].strip():
+            raise ValueError(
+                "NSE equity instrument key must have the format "
+                "NSE_EQ|<ISIN>"
+            )
+
         return UpstoxInstrumentIdentity(
             symbol=normalized_symbol,
-            instrument_key=self.instrument_key(normalized_symbol),
+            instrument_key=instrument_key,
+            isin=parts[1].strip().upper(),
         )

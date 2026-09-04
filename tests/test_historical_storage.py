@@ -1,12 +1,17 @@
 """Tests for deterministic historical dataset storage."""
 
-from datetime import datetime
+from datetime import date, datetime
+from decimal import Decimal
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
 import pytest
 
 from market.candles.models import Candle
+from market.data.historical.corporate_actions import (
+    CorporateAction,
+    CorporateActionType,
+)
 from market.data.historical.models import HistoricalDataset
 from market.data.historical.storage import (
     HistoricalDatasetStore,
@@ -86,6 +91,41 @@ def test_round_trip_preserves_dataset(tmp_path: Path):
     assert restored == dataset
 
 
+def test_round_trip_preserves_corporate_actions(tmp_path: Path):
+    dataset = make_dataset()
+    action = CorporateAction(
+        isin="INE002A01018",
+        action_type=CorporateActionType.DIVIDEND,
+        ex_date=date(2026, 8, 28),
+        announcement_date=date(2026, 8, 20),
+        record_date=date(2026, 8, 29),
+        amount=Decimal("12.345678901234567890"),
+        currency="INR",
+        source="test-source",
+    )
+
+    dataset = HistoricalDataset(
+        symbol=dataset.symbol,
+        exchange=dataset.exchange,
+        timeframe_minutes=dataset.timeframe_minutes,
+        bars=dataset.bars,
+        metadata=dataset.metadata,
+        corporate_actions=(action,),
+    )
+
+    store = JsonHistoricalDatasetStore()
+    path = tmp_path / "historical.json"
+
+    store.save(dataset, path)
+    restored = store.load(path)
+
+    assert restored.corporate_actions == (action,)
+    assert restored.corporate_actions[0].action_type is CorporateActionType.DIVIDEND
+    assert restored.corporate_actions[0].amount == Decimal(
+        "12.345678901234567890"
+    )
+
+
 def test_round_trip_preserves_timezone(tmp_path: Path):
     dataset = make_dataset()
     store = JsonHistoricalDatasetStore()
@@ -139,7 +179,7 @@ def test_schema_version_is_written(tmp_path: Path):
 
     payload = path.read_text(encoding="utf-8")
 
-    assert '"schema_version": "1"' in payload
+    assert '"schema_version": "2"' in payload
 
 
 def test_metadata_is_deterministically_sorted(tmp_path: Path):
@@ -179,6 +219,48 @@ def test_unsupported_schema_is_rejected(tmp_path: Path):
         match="unsupported historical dataset schema version",
     ):
         store.load(path)
+
+
+def test_schema_one_artifact_remains_loadable(tmp_path: Path):
+    path = tmp_path / "schema-one.json"
+
+    path.write_text(
+        '''
+{
+  "schema_version": "1",
+  "symbol": "RELIANCE",
+  "exchange": "NSE",
+  "timeframe_minutes": 5,
+  "metadata": {
+    "provider": "legacy"
+  },
+  "bars": [
+    {
+      "symbol": "RELIANCE",
+      "exchange": "NSE",
+      "timeframe_minutes": 5,
+      "timestamp": "2026-08-27T09:15:00+05:30",
+      "open": 2500.0,
+      "high": 2520.0,
+      "low": 2490.0,
+      "close": 2510.0,
+      "volume": 100000.0
+    }
+  ]
+}
+'''.strip(),
+        encoding="utf-8",
+    )
+
+    store = JsonHistoricalDatasetStore()
+    restored = store.load(path)
+
+    assert restored.symbol == "RELIANCE"
+    assert restored.exchange == "NSE"
+    assert restored.timeframe_minutes == 5
+    assert len(restored.bars) == 1
+    assert restored.metadata["provider"] == "legacy"
+    assert restored.corporate_actions == ()
 
 
 def test_malformed_json_is_rejected(tmp_path: Path):

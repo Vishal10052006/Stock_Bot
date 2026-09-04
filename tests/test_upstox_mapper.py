@@ -44,6 +44,20 @@ def test_mapper_returns_provider_identity():
 
     assert identity.symbol == "RELIANCE"
     assert identity.instrument_key == "NSE_EQ|123"
+    assert identity.isin == "123"
+
+
+def test_mapper_identity_rejects_malformed_nse_equity_key():
+    """Malformed NSE equity keys must not produce an invalid ISIN."""
+    mapper = UpstoxInstrumentMapper(
+        {"RELIANCE": "NSE_EQ|"}
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="NSE equity instrument key",
+    ):
+        mapper.identity("RELIANCE")
 
 
 def test_mapper_identity_rejects_unknown_symbol():

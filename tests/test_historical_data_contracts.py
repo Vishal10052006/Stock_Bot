@@ -1,11 +1,15 @@
 """Tests for Phase 2 historical-data contracts."""
 
-from datetime import datetime
+from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
 import pytest
 
 from market.candles.models import Candle
+from market.data.historical.corporate_actions import (
+    CorporateAction,
+    CorporateActionType,
+)
 from market.data.historical.models import (
     HistoricalDataRequest,
     HistoricalDataset,
@@ -77,6 +81,53 @@ def test_historical_dataset_accepts_canonical_candles() -> None:
     assert dataset.timeframe_minutes == 5
     assert dataset.bars == (candle,)
     assert dataset.metadata["provider"] == "test"
+
+
+def test_historical_dataset_defaults_to_no_corporate_actions() -> None:
+    dataset = HistoricalDataset(
+        symbol="RELIANCE",
+        exchange="NSE",
+        timeframe_minutes=5,
+        bars=(make_candle(),),
+        metadata={"provider": "test"},
+    )
+
+    assert dataset.corporate_actions == ()
+
+
+def test_historical_dataset_accepts_corporate_actions() -> None:
+    action = CorporateAction(
+        isin="INE002A01018",
+        action_type=CorporateActionType.DIVIDEND,
+        ex_date=date(2026, 8, 27),
+        source="upstox",
+    )
+
+    dataset = HistoricalDataset(
+        symbol="RELIANCE",
+        exchange="NSE",
+        timeframe_minutes=5,
+        bars=(make_candle(),),
+        metadata={"provider": "test"},
+        corporate_actions=(action,),
+    )
+
+    assert dataset.corporate_actions == (action,)
+
+
+def test_historical_dataset_rejects_invalid_corporate_action() -> None:
+    with pytest.raises(
+        TypeError,
+        match=r"corporate_actions\[0\] must be a CorporateAction",
+    ):
+        HistoricalDataset(
+            symbol="RELIANCE",
+            exchange="NSE",
+            timeframe_minutes=5,
+            bars=(make_candle(),),
+            metadata={"provider": "test"},
+            corporate_actions=("invalid",),
+        )
 
 
 def test_historical_dataset_rejects_wrong_symbol() -> None:

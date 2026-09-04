@@ -3,12 +3,17 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime
+from datetime import date, datetime
+from decimal import Decimal
 import os
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 
 from market.candles.models import Candle
+from market.data.historical.corporate_actions import (
+    CorporateAction,
+    CorporateActionType,
+)
 from market.data.historical.models import HistoricalDataset
 
 
@@ -34,7 +39,8 @@ class HistoricalDatasetStore:
 class JsonHistoricalDatasetStore(HistoricalDatasetStore):
     """Persist HistoricalDataset objects as deterministic JSON."""
 
-    SCHEMA_VERSION = "1"
+    SCHEMA_VERSION = "2"
+    SUPPORTED_SCHEMA_VERSIONS = frozenset({"1", "2"})
 
     @staticmethod
     def _serialize(dataset: HistoricalDataset) -> dict:
@@ -46,6 +52,33 @@ class JsonHistoricalDatasetStore(HistoricalDatasetStore):
             "exchange": dataset.exchange,
             "timeframe_minutes": dataset.timeframe_minutes,
             "metadata": dict(sorted(dataset.metadata.items())),
+            "corporate_actions": [
+                {
+                    "isin": action.isin,
+                    "action_type": action.action_type.value,
+                    "ex_date": action.ex_date.isoformat(),
+                    "announcement_date": (
+                        action.announcement_date.isoformat()
+                        if action.announcement_date is not None
+                        else None
+                    ),
+                    "record_date": (
+                        action.record_date.isoformat()
+                        if action.record_date is not None
+                        else None
+                    ),
+                    "ratio_numerator": action.ratio_numerator,
+                    "ratio_denominator": action.ratio_denominator,
+                    "amount": (
+                        str(action.amount)
+                        if action.amount is not None
+                        else None
+                    ),
+                    "currency": action.currency,
+                    "source": action.source,
+                }
+                for action in dataset.corporate_actions
+            ],
             "bars": [
                 {
                     "symbol": bar.symbol,
@@ -71,7 +104,9 @@ class JsonHistoricalDatasetStore(HistoricalDatasetStore):
                 "historical dataset artifact must contain a JSON object"
             )
 
-        if payload.get("schema_version") != JsonHistoricalDatasetStore.SCHEMA_VERSION:
+        schema_version = payload.get("schema_version")
+
+        if schema_version not in JsonHistoricalDatasetStore.SUPPORTED_SCHEMA_VERSIONS:
             raise ValueError(
                 "unsupported historical dataset schema version"
             )
@@ -140,12 +175,85 @@ class JsonHistoricalDatasetStore(HistoricalDatasetStore):
                     "historical dataset metadata must be a JSON object"
                 )
 
+            corporate_actions: list[CorporateAction] = []
+
+            if schema_version == "2":
+                raw_actions = payload.get("corporate_actions", [])
+
+                if not isinstance(raw_actions, list):
+                    raise ValueError(
+                        "historical dataset corporate_actions must be "
+                        "a JSON list"
+                    )
+
+                for index, raw_action in enumerate(raw_actions):
+                    if not isinstance(raw_action, dict):
+                        raise ValueError(
+                            "historical dataset corporate action "
+                            f"{index} must be a JSON object"
+                        )
+
+                    try:
+                        corporate_actions.append(
+                            CorporateAction(
+                                isin=raw_action["isin"],
+                                action_type=CorporateActionType(
+                                    raw_action["action_type"]
+                                ),
+                                ex_date=date.fromisoformat(
+                                    raw_action["ex_date"]
+                                ),
+                                announcement_date=(
+                                    date.fromisoformat(
+                                        raw_action["announcement_date"]
+                                    )
+                                    if raw_action.get(
+                                        "announcement_date"
+                                    )
+                                    is not None
+                                    else None
+                                ),
+                                record_date=(
+                                    date.fromisoformat(
+                                        raw_action["record_date"]
+                                    )
+                                    if raw_action.get("record_date")
+                                    is not None
+                                    else None
+                                ),
+                                ratio_numerator=raw_action.get(
+                                    "ratio_numerator"
+                                ),
+                                ratio_denominator=raw_action.get(
+                                    "ratio_denominator"
+                                ),
+                                amount=(
+                                    Decimal(raw_action["amount"])
+                                    if raw_action.get("amount") is not None
+                                    else None
+                                ),
+                                currency=raw_action.get("currency"),
+                                source=raw_action["source"],
+                            )
+                        )
+                    except (
+                        KeyError,
+                        TypeError,
+                        ValueError,
+                        ArithmeticError,
+                    ) as exc:
+                        raise ValueError(
+                            "invalid historical dataset corporate "
+                            f"action at index {index}"
+                        ) from exc
+
             return HistoricalDataset(
                 symbol=payload["symbol"],
                 exchange=payload["exchange"],
                 timeframe_minutes=payload["timeframe_minutes"],
                 bars=tuple(bars),
                 metadata=metadata,
+                corporate_actions=tuple(corporate_actions),
             )
         except (KeyError, TypeError, ValueError) as exc:
             raise ValueError(

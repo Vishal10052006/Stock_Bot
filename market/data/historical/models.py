@@ -8,6 +8,7 @@ from types import MappingProxyType
 from typing import Mapping
 
 from market.candles.models import Candle
+from market.data.historical.corporate_actions import CorporateAction
 
 
 @dataclass(frozen=True, slots=True)
@@ -70,6 +71,7 @@ class HistoricalDataset:
     timeframe_minutes: int
     bars: tuple[Candle, ...]
     metadata: Mapping[str, str]
+    corporate_actions: tuple[CorporateAction, ...] = ()
 
     def __post_init__(self) -> None:
         """Validate and freeze the dataset contract."""
@@ -140,3 +142,14 @@ class HistoricalDataset:
             "metadata",
             MappingProxyType(normalized_metadata),
         )
+
+        if not isinstance(self.corporate_actions, tuple):
+            raise TypeError(
+                "corporate_actions must be a tuple of CorporateAction objects"
+            )
+
+        for index, action in enumerate(self.corporate_actions):
+            if not isinstance(action, CorporateAction):
+                raise TypeError(
+                    f"corporate_actions[{index}] must be a CorporateAction"
+                )
