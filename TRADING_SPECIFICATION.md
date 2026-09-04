@@ -1,9 +1,9 @@
 # STOCK BOT — Trading Specification
 
-**Specification version:** 1.0  
-**Status:** FROZEN FOR RESEARCH AND PAPER TRADING  
-**Market:** NSE  
-**Segment:** Equity Cash  
+**Specification version:** 1.0
+**Status:** FROZEN FOR RESEARCH AND PAPER TRADING
+**Market:** NSE
+**Segment:** Equity Cash
 **Timezone:** Asia/Kolkata (IST)
 
 ---
@@ -507,7 +507,7 @@ No code path may enable live financial execution merely because:
 Live activation requires all required validation and safety gates.
 
 The roadmap defines live readiness only after paper evidence, broker
-integration, safety controls and current compliance checks. 
+integration, safety controls and current compliance checks.
 
 ---
 
