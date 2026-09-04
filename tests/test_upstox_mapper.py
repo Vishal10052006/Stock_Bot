@@ -30,3 +30,27 @@ def test_mapper_requires_at_least_one_valid_mapping():
     """An empty mapping cannot support deterministic subscriptions."""
     with pytest.raises(ValueError, match="valid instrument mapping"):
         UpstoxInstrumentMapper({"": ""})
+
+
+def test_mapper_returns_provider_identity():
+    """Identity should contain normalized symbol and provider instrument key."""
+    mapper = UpstoxInstrumentMapper(
+        {
+            " reliance ": " NSE_EQ|123 ",
+        }
+    )
+
+    identity = mapper.identity(" RELIANCE ")
+
+    assert identity.symbol == "RELIANCE"
+    assert identity.instrument_key == "NSE_EQ|123"
+
+
+def test_mapper_identity_rejects_unknown_symbol():
+    """Identity lookup must fail rather than guess an identifier."""
+    mapper = UpstoxInstrumentMapper(
+        {"RELIANCE": "NSE_EQ|123"}
+    )
+
+    with pytest.raises(KeyError, match="No Upstox instrument key"):
+        mapper.identity("INFY")

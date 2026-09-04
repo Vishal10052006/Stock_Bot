@@ -61,7 +61,8 @@ def make_dataset() -> HistoricalDataset:
             ),
         ),
         metadata={
-            "provider": "test-provider",
+            "provider": "upstox",
+            "instrument_key": "NSE_EQ|INE002A01018",
             "source_version": "test-v1",
         },
     )

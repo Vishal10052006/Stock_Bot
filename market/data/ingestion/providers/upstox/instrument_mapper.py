@@ -4,6 +4,39 @@ from __future__ import annotations
 
 import json
 import os
+from dataclasses import dataclass
+
+
+@dataclass(frozen=True, slots=True)
+class UpstoxInstrumentIdentity:
+    """Stable provider identity for one configured instrument."""
+
+    symbol: str
+    instrument_key: str
+
+    def __post_init__(self) -> None:
+        """Validate the provider identity contract."""
+        if not isinstance(self.symbol, str) or not self.symbol.strip():
+            raise ValueError("symbol must be a non-empty string")
+
+        if (
+            not isinstance(self.instrument_key, str)
+            or not self.instrument_key.strip()
+        ):
+            raise ValueError(
+                "instrument_key must be a non-empty string"
+            )
+
+        object.__setattr__(
+            self,
+            "symbol",
+            self.symbol.strip().upper(),
+        )
+        object.__setattr__(
+            self,
+            "instrument_key",
+            self.instrument_key.strip(),
+        )
 
 
 class UpstoxInstrumentMapper:
@@ -57,3 +90,12 @@ class UpstoxInstrumentMapper:
     def symbols(self) -> tuple[str, ...]:
         """Return configured internal symbols in deterministic order."""
         return tuple(sorted(self._mapping))
+
+    def identity(self, symbol: str) -> UpstoxInstrumentIdentity:
+        """Return the provider identity for an internal symbol."""
+        normalized_symbol = symbol.strip().upper()
+
+        return UpstoxInstrumentIdentity(
+            symbol=normalized_symbol,
+            instrument_key=self.instrument_key(normalized_symbol),
+        )

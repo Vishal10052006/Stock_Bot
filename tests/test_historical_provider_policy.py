@@ -93,3 +93,54 @@ def test_authoritative_purpose_rejects_test_provider_before_fetch() -> None:
         match="canonical historical ingestion requires a canonical provider",
     ):
         pipeline.ingest(request)
+
+
+def test_upstox_provenance_contains_provider_identity():
+    from market.data.historical.adapters.upstox import (
+        UpstoxHistoricalMarketDataProvider,
+    )
+    from market.data.historical.models import HistoricalDataRequest
+    from market.data.ingestion.providers.upstox.instrument_mapper import (
+        UpstoxInstrumentMapper,
+    )
+
+    provider = UpstoxHistoricalMarketDataProvider(
+        "test-access-token",
+        UpstoxInstrumentMapper(
+            {"RELIANCE": "NSE_EQ|INE002A01018"}
+        ),
+    )
+
+    request = HistoricalDataRequest(
+        symbol="RELIANCE",
+        exchange="NSE",
+        timeframe_minutes=5,
+    )
+
+    assert provider.provenance(request) == {
+        "provider": "upstox",
+        "instrument_key": "NSE_EQ|INE002A01018",
+    }
+
+
+def test_yfinance_provenance_records_provider_symbol_and_adjustment():
+    from market.data.historical.adapters.yfinance import (
+        YFinanceHistoricalMarketDataProvider,
+    )
+    from market.data.historical.models import HistoricalDataRequest
+
+    provider = YFinanceHistoricalMarketDataProvider(
+        auto_adjust=False,
+    )
+
+    request = HistoricalDataRequest(
+        symbol="RELIANCE",
+        exchange="NSE",
+        timeframe_minutes=5,
+    )
+
+    assert provider.provenance(request) == {
+        "provider": "yfinance",
+        "provider_symbol": "RELIANCE.NS",
+        "adjustment_policy": "unadjusted",
+    }

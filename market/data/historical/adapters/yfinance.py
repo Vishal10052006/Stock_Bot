@@ -111,6 +111,26 @@ class YFinanceHistoricalMarketDataProvider(
 
         return timestamp
 
+    def provenance(
+        self,
+        request: HistoricalDataRequest,
+    ) -> dict[str, str]:
+        """Return deterministic Yahoo Finance source metadata."""
+        if not isinstance(request, HistoricalDataRequest):
+            raise TypeError(
+                "request must be a HistoricalDataRequest"
+            )
+
+        return {
+            "provider": "yfinance",
+            "provider_symbol": self._provider_symbol(request),
+            "adjustment_policy": (
+                "adjusted"
+                if self.auto_adjust
+                else "unadjusted"
+            ),
+        }
+
     def get_bars(
         self,
         request: HistoricalDataRequest,

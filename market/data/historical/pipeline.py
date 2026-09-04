@@ -17,6 +17,7 @@ from market.data.historical.nse_calendar import NSETradingCalendar
 from market.data.historical.providers import (
     HistoricalDataPurpose,
     HistoricalMarketDataProvider,
+    HistoricalProviderProvenance,
     HistoricalProviderRole,
 )
 from market.data.historical.storage import HistoricalDatasetStore
@@ -96,6 +97,20 @@ class HistoricalMarketDataPipeline:
                 f"provider role is {self._provider.role.value}"
             )
 
+        has_provenance = isinstance(
+            self._provider,
+            HistoricalProviderProvenance,
+        )
+
+        if (
+            self._purpose == HistoricalDataPurpose.CANONICAL
+            and not has_provenance
+        ):
+            raise ValueError(
+                "canonical historical ingestion requires "
+                "provider provenance"
+            )
+
         bars: Sequence[Candle] = self._provider.get_bars(request)
 
         if not isinstance(bars, Sequence):
@@ -119,15 +134,32 @@ class HistoricalMarketDataPipeline:
                 + "; ".join(validation.errors)
             )
 
+        metadata = {
+            "provider": type(self._provider).__name__,
+            "pipeline_version": "1",
+        }
+
+        if has_provenance:
+            provenance = self._provider.provenance(request)
+
+            if not isinstance(provenance, dict):
+                provenance = dict(provenance)
+
+            for key, value in provenance.items():
+                if not isinstance(key, str) or not isinstance(value, str):
+                    raise TypeError(
+                        "provider provenance must contain string "
+                        "keys and values"
+                    )
+
+            metadata.update(provenance)
+
         dataset = HistoricalDataset(
             symbol=request.symbol,
             exchange=request.exchange,
             timeframe_minutes=request.timeframe_minutes,
             bars=tuple(bars),
-            metadata={
-                "provider": type(self._provider).__name__,
-                "pipeline_version": "1",
-            },
+            metadata=metadata,
         )
 
         if destination is not None:

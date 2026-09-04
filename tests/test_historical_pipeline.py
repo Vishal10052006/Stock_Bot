@@ -585,6 +585,11 @@ def test_upstox_historical_provider_integrates_with_pipeline(tmp_path):
     assert result.dataset.timeframe_minutes == 5
     assert len(result.dataset.bars) == 2
 
+    assert result.dataset.metadata["provider"] == "upstox"
+    assert result.dataset.metadata["instrument_key"] == (
+        "NSE_EQ|INE002A01018"
+    )
+
     assert destination.exists()
 
     assert session.headers["Authorization"] == (

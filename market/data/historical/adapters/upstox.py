@@ -223,6 +223,22 @@ class UpstoxHistoricalMarketDataProvider(
                 "Upstox returned an invalid canonical candle"
             ) from exc
 
+    def provenance(
+        self,
+        request: HistoricalDataRequest,
+    ) -> dict[str, str]:
+        """Return deterministic Upstox source identity metadata."""
+        self._validate_request(request)
+
+        identity = self.instrument_mapper.identity(
+            request.symbol
+        )
+
+        return {
+            "provider": "upstox",
+            "instrument_key": identity.instrument_key,
+        }
+
     def get_bars(
         self,
         request: HistoricalDataRequest,

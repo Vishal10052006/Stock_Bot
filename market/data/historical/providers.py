@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from enum import Enum
-from typing import Protocol, runtime_checkable
+from typing import Mapping, Protocol, runtime_checkable
 
 from market.candles.models import Candle
 from market.data.historical.models import HistoricalDataRequest
@@ -23,6 +23,18 @@ class HistoricalDataPurpose(str, Enum):
 
     RESEARCH = "research"
     CANONICAL = "canonical"
+
+
+@runtime_checkable
+class HistoricalProviderProvenance(Protocol):
+    """Provider-neutral provenance information for a historical request."""
+
+    def provenance(
+        self,
+        request: HistoricalDataRequest,
+    ) -> Mapping[str, str]:
+        """Return deterministic source-identification metadata."""
+        ...
 
 
 @runtime_checkable
