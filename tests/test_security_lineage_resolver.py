@@ -395,3 +395,118 @@ def test_resolver_rejects_no_matching_scope() -> None:
                 ),
             ),
         )
+
+
+def make_evidence(
+    *,
+    observed_on: date,
+    symbol: str,
+    fin_instrm_id: str,
+    isin: str,
+    deletion_flag: str,
+):
+    from market.data.historical.nse_security_master_evidence import (
+        NSESecurityMasterEvidence,
+    )
+    from market.data.historical.nse_security_master_lifecycle import (
+        NSESecurityMasterLifecycle,
+    )
+    from market.data.historical.nse_security_master import (
+        NSESecurityMasterRecord,
+    )
+
+    return NSESecurityMasterEvidence(
+        identity=NSESecurityMasterRecord(
+            snapshot_date=observed_on,
+            fin_instrm_id=fin_instrm_id,
+            symbol=symbol,
+            series="EQ",
+            isin=isin,
+        ),
+        lifecycle=NSESecurityMasterLifecycle(
+            listing_date=date(2000, 1, 1),
+            removal_date=(
+                observed_on
+                if deletion_flag == "Y"
+                else None
+            ),
+            readmission_date=None,
+            normal_market_status="3",
+            normal_market_eligibility="0",
+            deletion_flag=deletion_flag,
+        ),
+    )
+
+
+def test_evidence_resolver_allows_retained_deleted_old_record() -> None:
+    from market.data.historical.security_lineage_resolver import (
+        resolve_security_lineage_transition_from_evidence,
+    )
+
+    result = resolve_security_lineage_transition_from_evidence(
+        make_transition(),
+        (
+            make_evidence(
+                observed_on=date(2026, 9, 2),
+                symbol="OLD",
+                fin_instrm_id="100",
+                isin="INE000A01000",
+                deletion_flag="N",
+            ),
+            make_evidence(
+                observed_on=date(2026, 9, 3),
+                symbol="OLD",
+                fin_instrm_id="100",
+                isin="INE000A01000",
+                deletion_flag="Y",
+            ),
+            make_evidence(
+                observed_on=date(2026, 9, 3),
+                symbol="NEW",
+                fin_instrm_id="200",
+                isin="INE000A01001",
+                deletion_flag="N",
+            ),
+        ),
+    )
+
+    assert result.before.symbol == "OLD"
+    assert result.after.symbol == "NEW"
+
+
+def test_evidence_resolver_rejects_active_old_record_after_transition() -> None:
+    from market.data.historical.security_lineage_resolver import (
+        resolve_security_lineage_transition_from_evidence,
+        SecurityLineageResolutionError,
+    )
+
+    with pytest.raises(
+        SecurityLineageResolutionError,
+        match="active old-symbol observation exists on or after",
+    ):
+        resolve_security_lineage_transition_from_evidence(
+            make_transition(),
+            (
+                make_evidence(
+                    observed_on=date(2026, 9, 2),
+                    symbol="OLD",
+                    fin_instrm_id="100",
+                    isin="INE000A01000",
+                    deletion_flag="N",
+                ),
+                make_evidence(
+                    observed_on=date(2026, 9, 3),
+                    symbol="OLD",
+                    fin_instrm_id="100",
+                    isin="INE000A01000",
+                    deletion_flag="N",
+                ),
+                make_evidence(
+                    observed_on=date(2026, 9, 3),
+                    symbol="NEW",
+                    fin_instrm_id="200",
+                    isin="INE000A01001",
+                    deletion_flag="N",
+                ),
+            ),
+        )
