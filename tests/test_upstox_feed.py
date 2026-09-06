@@ -578,6 +578,91 @@ def test_events_records_connection_failure_before_reconnect(monkeypatch):
 
     assert snapshot.connection_failures == 1
 
+
+def test_events_reconnects_resubscribes_and_resumes_stream(monkeypatch):
+    """A connection failure must reconnect, resubscribe, and resume events."""
+
+    from market.data.ingestion.providers.upstox.generated import (
+        MarketDataFeedV3_pb2,
+    )
+    from market.data.metrics import DataQualityMetrics
+
+    first_websocket = FakeWebSocket()
+    second_websocket = FakeWebSocket()
+
+    websocket_module = FakeWebSocketModule(first_websocket)
+    metrics = DataQualityMetrics()
+
+    response = MarketDataFeedV3_pb2.FeedResponse()
+    response.type = MarketDataFeedV3_pb2.live_feed
+
+    feed = response.feeds["NSE_EQ|RELIANCE"]
+    feed.ltpc.ltp = 1425.30
+    feed.ltpc.ltt = 1_756_537_500_000
+    feed.ltpc.ltq = 125
+
+    second_websocket.messages = [
+        response.SerializeToString(),
+        None,
+    ]
+
+    market_feed = UpstoxMarketFeed(
+        make_config(),
+        make_mapper(),
+        protobuf_module=MarketDataFeedV3_pb2,
+        websocket_module=websocket_module,
+        metrics=metrics,
+    )
+
+    market_feed._ws = first_websocket
+    market_feed._subscribed_symbols.add("RELIANCE")
+
+    def raise_connection_error():
+        raise ConnectionError("simulated connection failure")
+
+    monkeypatch.setattr(
+        first_websocket,
+        "recv",
+        raise_connection_error,
+    )
+
+    connections = iter((second_websocket,))
+
+    monkeypatch.setattr(
+        websocket_module,
+        "create_connection",
+        lambda uri, timeout: next(connections),
+    )
+
+    monkeypatch.setattr(
+        "market.data.ingestion.providers.upstox.feed.get_authorized_websocket_uri",
+        lambda access_token, timeout_seconds: (
+            "wss://example.test/reconnected"
+        ),
+    )
+
+    events = list(market_feed.events())
+
+    assert len(events) == 1
+    assert events[0].symbol == "RELIANCE"
+    assert events[0].price == 1425.30
+
+    assert first_websocket.closed is True
+    assert market_feed._ws is second_websocket
+
+    assert len(second_websocket.sent) == 1
+    subscription = second_websocket.sent[0]["payload"]
+    assert b'"method": "sub"' in subscription
+    assert b'"NSE_EQ|RELIANCE"' in subscription
+
+    snapshot = metrics.snapshot()
+
+    assert snapshot.connection_failures == 1
+    assert snapshot.reconnect_attempts == 1
+    assert snapshot.reconnect_successes == 1
+    assert snapshot.reconnect_failures == 0
+    assert snapshot.events_received == 1
+
 def test_events_validate_and_record_metrics():
     """Valid events should be yielded and recorded by the metrics layer."""
 

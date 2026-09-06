@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from math import ceil
 from statistics import mean
 
+from market.data.events import MarketEvent
 from market.data.validation import EventValidationResult
 
 
@@ -70,6 +71,31 @@ class DataQualityMetrics:
         self._reconnect_failures = 0
 
         self._missing_data_gaps = 0
+
+    def record_unvalidated_event(
+        self,
+        event: MarketEvent,
+    ) -> None:
+        """Record a decoded event when no validator is configured.
+
+        This records receipt and successful admission at the feed boundary.
+        Validator-derived fields such as stale and duplicate status remain
+        unavailable because no validation result exists.
+        """
+        if not isinstance(event, MarketEvent):
+            raise TypeError("event must be a MarketEvent")
+
+        self._events_received += 1
+        self._events_accepted += 1
+
+        latency_ms = (
+            event.received_timestamp - event.exchange_timestamp
+        ).total_seconds() * 1000.0
+
+        self._latency_samples_ms.append(latency_ms)
+
+        if latency_ms < 0:
+            self._clock_skew_events += 1
 
     def record_validation(
         self,

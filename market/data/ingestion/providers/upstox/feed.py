@@ -323,7 +323,7 @@ class UpstoxMarketFeed(MarketFeed):
                     sequence_number=record.sequence_number,
                 )
 
-                # Validate and record telemetry only when the components are configured.
+                # Validate and record telemetry when a validator is configured.
                 if self.event_validator is not None:
                     validation_result = self.event_validator.validate(event)
 
@@ -333,6 +333,11 @@ class UpstoxMarketFeed(MarketFeed):
                     # Invalid events must never enter the downstream trading pipeline.
                     if not validation_result.valid:
                         continue
+                elif self.metrics is not None:
+                    # Without a validator, the feed has still successfully
+                    # decoded and admitted this event. Record that fact without
+                    # inventing stale/duplicate validation results.
+                    self.metrics.record_unvalidated_event(event)
 
                 yield event
 
