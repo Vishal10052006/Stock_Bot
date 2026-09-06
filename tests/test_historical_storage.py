@@ -12,6 +12,11 @@ from market.data.historical.corporate_actions import (
     CorporateAction,
     CorporateActionType,
 )
+from market.data.historical.instrument_status import (
+    InstrumentStatus,
+    InstrumentStatusTimeline,
+    InstrumentStatusType,
+)
 from market.data.historical.models import HistoricalDataset
 from market.data.historical.storage import (
     HistoricalDatasetStore,
@@ -179,7 +184,7 @@ def test_schema_version_is_written(tmp_path: Path):
 
     payload = path.read_text(encoding="utf-8")
 
-    assert '"schema_version": "2"' in payload
+    assert '"schema_version": "3"' in payload
 
 
 def test_metadata_is_deterministically_sorted(tmp_path: Path):
@@ -367,3 +372,140 @@ def test_save_rejects_directory(tmp_path: Path):
         match="must be a file",
     ):
         store.save(dataset, destination)
+
+
+def test_round_trip_preserves_instrument_status(tmp_path: Path):
+    dataset = make_dataset()
+
+    status_timeline = InstrumentStatusTimeline(
+        (
+            InstrumentStatus(
+                symbol="RELIANCE",
+                status=InstrumentStatusType.ACTIVE,
+                effective_from=date(2026, 1, 1),
+                effective_to=date(2026, 2, 1),
+            ),
+            InstrumentStatus(
+                symbol="RELIANCE",
+                status=InstrumentStatusType.SUSPENDED,
+                effective_from=date(2026, 2, 2),
+            ),
+        )
+    )
+
+    dataset = HistoricalDataset(
+        symbol=dataset.symbol,
+        exchange=dataset.exchange,
+        timeframe_minutes=dataset.timeframe_minutes,
+        bars=dataset.bars,
+        metadata=dataset.metadata,
+        corporate_actions=dataset.corporate_actions,
+        instrument_status=status_timeline,
+    )
+
+    store = JsonHistoricalDatasetStore()
+    path = tmp_path / "historical.json"
+
+    store.save(dataset, path)
+    restored = store.load(path)
+
+    assert restored.instrument_status == status_timeline
+    assert restored.instrument_status is not None
+    assert restored.instrument_status.symbol == "RELIANCE"
+    assert restored.instrument_status.status_on(
+        date(2026, 1, 15)
+    ) is InstrumentStatusType.ACTIVE
+    assert restored.instrument_status.status_on(
+        date(2026, 2, 5)
+    ) is InstrumentStatusType.SUSPENDED
+
+
+
+
+def test_round_trip_preserves_instrument_status(tmp_path: Path):
+    dataset = make_dataset()
+
+    status_timeline = InstrumentStatusTimeline(
+        (
+            InstrumentStatus(
+                symbol="RELIANCE",
+                status=InstrumentStatusType.ACTIVE,
+                effective_from=date(2026, 1, 1),
+                effective_to=date(2026, 2, 1),
+            ),
+            InstrumentStatus(
+                symbol="RELIANCE",
+                status=InstrumentStatusType.SUSPENDED,
+                effective_from=date(2026, 2, 2),
+            ),
+        )
+    )
+
+    dataset = HistoricalDataset(
+        symbol=dataset.symbol,
+        exchange=dataset.exchange,
+        timeframe_minutes=dataset.timeframe_minutes,
+        bars=dataset.bars,
+        metadata=dataset.metadata,
+        corporate_actions=dataset.corporate_actions,
+        instrument_status=status_timeline,
+    )
+
+    store = JsonHistoricalDatasetStore()
+    path = tmp_path / "historical.json"
+
+    store.save(dataset, path)
+    restored = store.load(path)
+
+    assert restored.instrument_status == status_timeline
+    assert restored.instrument_status is not None
+    assert restored.instrument_status.symbol == "RELIANCE"
+    assert (
+        restored.instrument_status.status_on(date(2026, 1, 15))
+        is InstrumentStatusType.ACTIVE
+    )
+    assert (
+        restored.instrument_status.status_on(date(2026, 2, 5))
+        is InstrumentStatusType.SUSPENDED
+    )
+
+
+def test_schema_two_artifact_remains_loadable(tmp_path: Path):
+    path = tmp_path / "schema-two.json"
+
+    payload = {
+        "schema_version": "2",
+        "symbol": "RELIANCE",
+        "exchange": "NSE",
+        "timeframe_minutes": 5,
+        "metadata": {
+            "provider": "legacy",
+        },
+        "corporate_actions": [],
+        "bars": [
+            {
+                "symbol": "RELIANCE",
+                "exchange": "NSE",
+                "timeframe_minutes": 5,
+                "timestamp": "2026-08-27T09:15:00+05:30",
+                "open": 2500.0,
+                "high": 2520.0,
+                "low": 2490.0,
+                "close": 2510.0,
+                "volume": 100000.0,
+            }
+        ],
+    }
+
+    import json
+
+    path.write_text(
+        json.dumps(payload),
+        encoding="utf-8",
+    )
+
+    store = JsonHistoricalDatasetStore()
+    restored = store.load(path)
+
+    assert restored.corporate_actions == ()
+    assert restored.instrument_status is None

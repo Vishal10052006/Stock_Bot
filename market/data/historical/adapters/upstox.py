@@ -230,13 +230,13 @@ class UpstoxHistoricalMarketDataProvider(
         """Return deterministic Upstox source identity metadata."""
         self._validate_request(request)
 
-        identity = self.instrument_mapper.identity(
+        instrument_key = self.instrument_mapper.instrument_key(
             request.symbol
         )
 
         return {
             "provider": "upstox",
-            "instrument_key": identity.instrument_key,
+            "instrument_key": instrument_key,
         }
 
     def get_bars(

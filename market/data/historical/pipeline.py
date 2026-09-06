@@ -13,6 +13,9 @@ from market.data.historical.models import (
     HistoricalDataRequest,
     HistoricalDataset,
 )
+from market.data.historical.instrument_status import (
+    InstrumentStatusTimeline,
+)
 from market.data.historical.nse_calendar import NSETradingCalendar
 from market.data.historical.providers import (
     HistoricalDataPurpose,
@@ -47,6 +50,7 @@ class HistoricalMarketDataPipeline:
         require_complete_sessions: bool = True,
         as_of: datetime | None = None,
         purpose: HistoricalDataPurpose = HistoricalDataPurpose.RESEARCH,
+        instrument_status: InstrumentStatusTimeline | None = None,
     ) -> None:
         self._provider = provider
         self._validator = (
@@ -63,6 +67,7 @@ class HistoricalMarketDataPipeline:
         self._require_complete_sessions = require_complete_sessions
         self._as_of = as_of
         self._purpose = purpose
+        self._instrument_status = instrument_status
 
     def ingest(
         self,
@@ -126,6 +131,7 @@ class HistoricalMarketDataPipeline:
             calendar=self._calendar,
             require_complete_sessions=self._require_complete_sessions,
             as_of=self._as_of,
+            instrument_status=self._instrument_status,
         )
 
         if not validation.valid:
@@ -160,6 +166,7 @@ class HistoricalMarketDataPipeline:
             timeframe_minutes=request.timeframe_minutes,
             bars=tuple(bars),
             metadata=metadata,
+            instrument_status=self._instrument_status,
         )
 
         if destination is not None:

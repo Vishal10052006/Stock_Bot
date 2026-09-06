@@ -596,3 +596,179 @@ def test_upstox_historical_provider_integrates_with_pipeline(tmp_path):
         "Bearer test-access-token"
     )
     assert session.timeout == 10.0
+
+
+def test_upstox_nse_index_passes_canonical_pipeline(tmp_path):
+    from datetime import datetime, timezone
+
+    from market.data.historical.adapters.upstox import (
+        UpstoxHistoricalMarketDataProvider,
+    )
+    from market.data.historical.models import HistoricalDataRequest
+    from market.data.historical.pipeline import (
+        HistoricalMarketDataPipeline,
+    )
+    from market.data.historical.providers import (
+        HistoricalDataPurpose,
+    )
+    from market.data.historical.storage import (
+        JsonHistoricalDatasetStore,
+    )
+    from market.data.ingestion.providers.upstox.instrument_mapper import (
+        UpstoxInstrumentMapper,
+    )
+
+    class FakeResponse:
+        ok = True
+        status_code = 200
+
+        def json(self):
+            return {
+                "status": "success",
+                "data": {
+                    "candles": [
+                        [
+                            "2026-09-01T09:15:00+00:00",
+                            100.0,
+                            101.0,
+                            99.0,
+                            100.5,
+                            0,
+                            0,
+                        ],
+                        [
+                            "2026-09-01T09:20:00+00:00",
+                            100.5,
+                            102.0,
+                            100.0,
+                            101.5,
+                            0,
+                            0,
+                        ],
+                    ]
+                },
+            }
+
+    class FakeSession:
+        def get(self, url, *, headers, timeout):
+            return FakeResponse()
+
+    provider = UpstoxHistoricalMarketDataProvider(
+        "test-access-token",
+        UpstoxInstrumentMapper(
+            {"NIFTY50": "NSE_INDEX|Nifty 50"}
+        ),
+        session=FakeSession(),
+        base_url="https://example.test/v3/historical-candle",
+    )
+
+    request = HistoricalDataRequest(
+        symbol="NIFTY50",
+        exchange="NSE",
+        timeframe_minutes=5,
+        start=datetime(
+            2026,
+            9,
+            1,
+            9,
+            15,
+            tzinfo=timezone.utc,
+        ),
+        end=datetime(
+            2026,
+            9,
+            1,
+            9,
+            25,
+            tzinfo=timezone.utc,
+        ),
+    )
+
+    destination = tmp_path / "nifty50.json"
+
+    pipeline = HistoricalMarketDataPipeline(
+        provider=provider,
+        store=JsonHistoricalDatasetStore(),
+        require_complete_sessions=False,
+        purpose=HistoricalDataPurpose.CANONICAL,
+    )
+
+    result = pipeline.ingest(
+        request,
+        destination=destination,
+    )
+
+    assert result.validation.valid is True
+    assert result.dataset.symbol == "NIFTY50"
+    assert result.dataset.metadata["provider"] == "upstox"
+    assert result.dataset.metadata["instrument_key"] == (
+        "NSE_INDEX|Nifty 50"
+    )
+    assert destination.exists()
+
+
+def test_pipeline_exempts_suspended_instrument_from_complete_session():
+    from datetime import date
+
+    from market.data.historical.instrument_status import (
+        InstrumentStatus,
+        InstrumentStatusTimeline,
+        InstrumentStatusType,
+    )
+
+    status_timeline = InstrumentStatusTimeline(
+        (
+            InstrumentStatus(
+                symbol="RELIANCE",
+                status=InstrumentStatusType.SUSPENDED,
+                effective_from=date(2026, 1, 2),
+            ),
+        )
+    )
+
+    pipeline = HistoricalMarketDataPipeline(
+        provider=StaticHistoricalMarketDataProvider(
+            make_bars()
+        ),
+        require_complete_sessions=True,
+        instrument_status=status_timeline,
+    )
+
+    result = pipeline.ingest(make_request())
+
+    assert result.validation.valid
+    assert result.dataset.instrument_status == status_timeline
+
+
+def test_pipeline_still_rejects_incomplete_active_instrument_session():
+    from datetime import date
+
+    from market.data.historical.instrument_status import (
+        InstrumentStatus,
+        InstrumentStatusTimeline,
+        InstrumentStatusType,
+    )
+
+    status_timeline = InstrumentStatusTimeline(
+        (
+            InstrumentStatus(
+                symbol="RELIANCE",
+                status=InstrumentStatusType.ACTIVE,
+                effective_from=date(2026, 1, 2),
+            ),
+        )
+    )
+
+    pipeline = HistoricalMarketDataPipeline(
+        provider=StaticHistoricalMarketDataProvider(
+            make_bars()
+        ),
+        require_complete_sessions=True,
+        instrument_status=status_timeline,
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="historical dataset validation failed",
+    ):
+        pipeline.ingest(make_request())

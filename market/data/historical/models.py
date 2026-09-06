@@ -9,6 +9,7 @@ from typing import Mapping
 
 from market.candles.models import Candle
 from market.data.historical.corporate_actions import CorporateAction
+from market.data.historical.instrument_status import InstrumentStatusTimeline
 
 
 @dataclass(frozen=True, slots=True)
@@ -72,6 +73,7 @@ class HistoricalDataset:
     bars: tuple[Candle, ...]
     metadata: Mapping[str, str]
     corporate_actions: tuple[CorporateAction, ...] = ()
+    instrument_status: InstrumentStatusTimeline | None = None
 
     def __post_init__(self) -> None:
         """Validate and freeze the dataset contract."""
@@ -152,4 +154,20 @@ class HistoricalDataset:
             if not isinstance(action, CorporateAction):
                 raise TypeError(
                     f"corporate_actions[{index}] must be a CorporateAction"
+                )
+
+        if self.instrument_status is not None:
+            if not isinstance(
+                self.instrument_status,
+                InstrumentStatusTimeline,
+            ):
+                raise TypeError(
+                    "instrument_status must be an "
+                    "InstrumentStatusTimeline or None"
+                )
+
+            if self.instrument_status.symbol != self.symbol:
+                raise ValueError(
+                    "historical dataset contains instrument status "
+                    "for a different symbol"
                 )

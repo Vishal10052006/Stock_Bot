@@ -63,7 +63,10 @@ class UpstoxInstrumentMapper:
         self._mapping = normalized
 
     @classmethod
-    def from_env(cls) -> "UpstoxInstrumentMapper":
+    def from_env(
+        cls,
+        env_var: str = "UPSTOX_INSTRUMENT_MAP",
+    ) -> "UpstoxInstrumentMapper":
         """Build an instrument mapper from a JSON environment variable.
 
         Expected format:
@@ -72,7 +75,12 @@ class UpstoxInstrumentMapper:
         Provider-specific identifiers stay in runtime configuration rather
         than being hard-coded into the trading core.
         """
-        raw_mapping = os.getenv("UPSTOX_INSTRUMENT_MAP", "").strip()
+        if not isinstance(env_var, str) or not env_var.strip():
+            raise ValueError("env_var must be a non-empty string")
+
+        env_var = env_var.strip()
+
+        raw_mapping = os.getenv(env_var, "").strip()
         if not raw_mapping:
             raise ValueError(
                 "UPSTOX_INSTRUMENT_MAP is required for the live market feed"

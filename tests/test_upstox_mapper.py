@@ -68,3 +68,20 @@ def test_mapper_identity_rejects_unknown_symbol():
 
     with pytest.raises(KeyError, match="No Upstox instrument key"):
         mapper.identity("INFY")
+
+
+def test_mapper_loads_context_instrument_map_from_separate_environment(
+    monkeypatch,
+):
+    """Market context must use a separate provider instrument universe."""
+    monkeypatch.setenv(
+        "UPSTOX_CONTEXT_INSTRUMENT_MAP",
+        '{"NIFTY50":"NSE_INDEX|Nifty 50"}',
+    )
+
+    mapper = UpstoxInstrumentMapper.from_env(
+        "UPSTOX_CONTEXT_INSTRUMENT_MAP"
+    )
+
+    assert mapper.symbols() == ("NIFTY50",)
+    assert mapper.instrument_key("NIFTY50") == "NSE_INDEX|Nifty 50"

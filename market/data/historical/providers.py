@@ -8,6 +8,10 @@ from typing import Mapping, Protocol, runtime_checkable
 
 from market.candles.models import Candle
 from market.data.historical.models import HistoricalDataRequest
+from market.data.historical.security_lineage import (
+    SecurityLineage,
+    SecurityLineageObservation,
+)
 
 
 class HistoricalProviderRole(str, Enum):
@@ -93,3 +97,52 @@ class StaticHistoricalMarketDataProvider:
                 )
 
         return self._bars
+
+
+@runtime_checkable
+class InstrumentLifecycleProvider(Protocol):
+    """Provider-neutral source of historical instrument lifecycle data."""
+
+    def get_status_timeline(
+        self,
+        symbol: str,
+    ) -> "InstrumentStatusTimeline":
+        """Return the point-in-time status timeline for an instrument."""
+        ...
+
+
+@runtime_checkable
+class InstrumentUniverseProvider(Protocol):
+    """Provider-neutral source of historical instrument universe membership."""
+
+    def get_membership_timeline(
+        self,
+        symbol: str,
+        exchange: str,
+    ) -> "UniverseMembershipTimeline":
+        """Return point-in-time universe membership for an instrument."""
+        ...
+
+
+@runtime_checkable
+class InstrumentSymbolHistoryProvider(Protocol):
+    """Provider-neutral source of historical exchange-symbol mappings."""
+
+    def get_symbol_timeline(
+        self,
+        isin: str,
+        exchange: str,
+    ) -> "InstrumentSymbolTimeline":
+        """Return the point-in-time symbol history for a security."""
+        ...
+
+@runtime_checkable
+class SecurityLineageProvider(Protocol):
+    """Provider-neutral source of verified security lineage."""
+
+    def get_security_lineage(
+        self,
+        observation: "SecurityLineageObservation",
+    ) -> "SecurityLineage":
+        """Return the verified lineage containing an instrument observation."""
+        ...

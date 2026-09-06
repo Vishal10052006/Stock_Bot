@@ -14,6 +14,11 @@ from market.data.historical.corporate_actions import (
     CorporateAction,
     CorporateActionType,
 )
+from market.data.historical.instrument_status import (
+    InstrumentStatus,
+    InstrumentStatusTimeline,
+    InstrumentStatusType,
+)
 from market.data.historical.models import HistoricalDataset
 
 
@@ -39,8 +44,8 @@ class HistoricalDatasetStore:
 class JsonHistoricalDatasetStore(HistoricalDatasetStore):
     """Persist HistoricalDataset objects as deterministic JSON."""
 
-    SCHEMA_VERSION = "2"
-    SUPPORTED_SCHEMA_VERSIONS = frozenset({"1", "2"})
+    SCHEMA_VERSION = "3"
+    SUPPORTED_SCHEMA_VERSIONS = frozenset({"1", "2", "3"})
 
     @staticmethod
     def _serialize(dataset: HistoricalDataset) -> dict:
@@ -79,6 +84,25 @@ class JsonHistoricalDatasetStore(HistoricalDatasetStore):
                 }
                 for action in dataset.corporate_actions
             ],
+            "instrument_status": (
+                [
+                    {
+                        "symbol": status.symbol,
+                        "status": status.status.value,
+                        "effective_from": (
+                            status.effective_from.isoformat()
+                        ),
+                        "effective_to": (
+                            status.effective_to.isoformat()
+                            if status.effective_to is not None
+                            else None
+                        ),
+                    }
+                    for status in dataset.instrument_status.statuses
+                ]
+                if dataset.instrument_status is not None
+                else None
+            ),
             "bars": [
                 {
                     "symbol": bar.symbol,
@@ -177,7 +201,7 @@ class JsonHistoricalDatasetStore(HistoricalDatasetStore):
 
             corporate_actions: list[CorporateAction] = []
 
-            if schema_version == "2":
+            if schema_version in {"2", "3"}:
                 raw_actions = payload.get("corporate_actions", [])
 
                 if not isinstance(raw_actions, list):
@@ -247,6 +271,74 @@ class JsonHistoricalDatasetStore(HistoricalDatasetStore):
                             f"action at index {index}"
                         ) from exc
 
+            instrument_status = None
+
+            if schema_version == "3":
+                raw_statuses = payload.get("instrument_status")
+
+                if raw_statuses is not None:
+                    if not isinstance(raw_statuses, list):
+                        raise ValueError(
+                            "historical dataset instrument_status must be "
+                            "a JSON list or null"
+                        )
+
+                    statuses: list[InstrumentStatus] = []
+
+                    for index, raw_status in enumerate(raw_statuses):
+                        if not isinstance(raw_status, dict):
+                            raise ValueError(
+                                "historical dataset instrument status "
+                                f"{index} must be a JSON object"
+                            )
+
+                        try:
+                            statuses.append(
+                                InstrumentStatus(
+                                    symbol=raw_status["symbol"],
+                                    status=InstrumentStatusType(
+                                        raw_status["status"]
+                                    ),
+                                    effective_from=date.fromisoformat(
+                                        raw_status["effective_from"]
+                                    ),
+                                    effective_to=(
+                                        date.fromisoformat(
+                                            raw_status["effective_to"]
+                                        )
+                                        if raw_status.get(
+                                            "effective_to"
+                                        ) is not None
+                                        else None
+                                    ),
+                                )
+                            )
+                        except (
+                            KeyError,
+                            TypeError,
+                            ValueError,
+                        ) as exc:
+                            raise ValueError(
+                                "invalid historical dataset instrument "
+                                f"status at index {index}"
+                            ) from exc
+
+                    if not statuses:
+                        raise ValueError(
+                            "historical dataset instrument_status must "
+                            "contain at least one status"
+                        )
+
+                    try:
+                        instrument_status = InstrumentStatusTimeline(
+                            tuple(statuses)
+                        )
+                    except (TypeError, ValueError) as exc:
+                        raise ValueError(
+                            "invalid historical dataset instrument "
+                            "status timeline"
+                        ) from exc
+
             return HistoricalDataset(
                 symbol=payload["symbol"],
                 exchange=payload["exchange"],
@@ -254,6 +346,7 @@ class JsonHistoricalDatasetStore(HistoricalDatasetStore):
                 bars=tuple(bars),
                 metadata=metadata,
                 corporate_actions=tuple(corporate_actions),
+                instrument_status=instrument_status,
             )
         except (KeyError, TypeError, ValueError) as exc:
             raise ValueError(

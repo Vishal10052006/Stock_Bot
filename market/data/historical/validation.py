@@ -7,6 +7,10 @@ from datetime import date, datetime, timedelta
 from typing import Sequence
 
 from market.candles.models import Candle
+from market.data.historical.instrument_status import (
+    InstrumentStatusTimeline,
+    InstrumentStatusType,
+)
 from market.data.historical.calendar import MarketSessionCalendar
 
 
@@ -37,6 +41,7 @@ class HistoricalDatasetValidator:
         calendar: MarketSessionCalendar | None = None,
         require_complete_sessions: bool = False,
         as_of: datetime | None = None,
+        instrument_status: InstrumentStatusTimeline | None = None,
     ) -> DatasetValidationResult:
         """
         Validate historical candles without modifying them.
@@ -57,6 +62,11 @@ class HistoricalDatasetValidator:
                 determine whether the final represented session is
                 currently open. If it falls inside a represented
                 trading session, that session may be partial.
+            instrument_status:
+                Optional lifecycle timeline for the represented
+                instrument. Sessions where the instrument was explicitly
+                suspended or delisted are exempt from completeness
+                enforcement.
         """
 
         errors: list[str] = []
@@ -376,6 +386,18 @@ class HistoricalDatasetValidator:
                 # have completeness inferred.
                 if session is None:
                     continue
+
+                # A session where the instrument was explicitly
+                # suspended or delisted cannot be expected to contain
+                # a complete candle set.
+                if instrument_status is not None:
+                    status = instrument_status.status_on(session_date)
+
+                    if status in {
+                        InstrumentStatusType.SUSPENDED,
+                        InstrumentStatusType.DELISTED,
+                    }:
+                        continue
 
                 # When an explicit as_of timestamp falls inside this
                 # represented session, the session is currently open.

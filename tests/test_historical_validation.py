@@ -1,6 +1,6 @@
 """Tests for historical market-data validation."""
 
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -11,6 +11,11 @@ from market.data.historical.calendar import (
 )
 from market.data.historical.nse_calendar import (
     NSETradingCalendar,
+)
+from market.data.historical.instrument_status import (
+    InstrumentStatus,
+    InstrumentStatusTimeline,
+    InstrumentStatusType,
 )
 from market.data.historical.validation import (
     DatasetValidationResult,
@@ -691,5 +696,142 @@ def test_as_of_rejects_future_observation() -> None:
     assert not result.valid
     assert any(
         "occurs after as_of" in error
+        for error in result.errors
+    )
+
+
+def test_suspended_instrument_session_is_exempt_from_completeness():
+    from market.data.historical.instrument_status import (
+        InstrumentStatus,
+        InstrumentStatusTimeline,
+        InstrumentStatusType,
+    )
+
+    timestamps = [
+        datetime(
+            2026,
+            1,
+            2,
+            9,
+            15,
+            tzinfo=IST,
+        ) + timedelta(minutes=5 * index)
+        for index in range(73)
+    ]
+
+    bars = make_sequence(timestamps)
+
+    status_timeline = InstrumentStatusTimeline(
+        (
+            InstrumentStatus(
+                symbol="RELIANCE",
+                status=InstrumentStatusType.SUSPENDED,
+                effective_from=datetime(
+                    2026,
+                    1,
+                    2,
+                    tzinfo=IST,
+                ).date(),
+                effective_to=datetime(
+                    2026,
+                    1,
+                    2,
+                    tzinfo=IST,
+                ).date(),
+            ),
+        )
+    )
+
+    result = HistoricalDatasetValidator().validate(
+        bars,
+        expected_interval=timedelta(minutes=5),
+        calendar=NSETradingCalendar(),
+        require_complete_sessions=True,
+        instrument_status=status_timeline,
+    )
+
+    assert result.valid
+    assert result.errors == ()
+
+
+def test_delisted_instrument_session_is_exempt_from_completeness():
+    from market.data.historical.instrument_status import (
+        InstrumentStatus,
+        InstrumentStatusTimeline,
+        InstrumentStatusType,
+    )
+
+    timestamps = [
+        datetime(
+            2026,
+            1,
+            2,
+            9,
+            15,
+            tzinfo=IST,
+        ) + timedelta(minutes=5 * index)
+        for index in range(73)
+    ]
+
+    bars = make_sequence(timestamps)
+
+    status_timeline = InstrumentStatusTimeline(
+        (
+            InstrumentStatus(
+                symbol="RELIANCE",
+                status=InstrumentStatusType.DELISTED,
+                effective_from=date(2026, 1, 2),
+            ),
+        )
+    )
+
+    result = HistoricalDatasetValidator().validate(
+        bars,
+        expected_interval=timedelta(minutes=5),
+        calendar=NSETradingCalendar(),
+        require_complete_sessions=True,
+        instrument_status=status_timeline,
+    )
+
+    assert result.valid
+    assert result.errors == ()
+
+
+def test_active_instrument_still_rejects_incomplete_session():
+    timestamps = [
+        datetime(
+            2026,
+            1,
+            2,
+            9,
+            15,
+            tzinfo=IST,
+        ) + timedelta(minutes=5 * index)
+        for index in range(73)
+    ]
+
+    bars = make_sequence(timestamps)
+
+    status_timeline = InstrumentStatusTimeline(
+        (
+            InstrumentStatus(
+                symbol="RELIANCE",
+                status=InstrumentStatusType.ACTIVE,
+                effective_from=date(2026, 1, 1),
+            ),
+        )
+    )
+
+    result = HistoricalDatasetValidator().validate(
+        bars,
+        expected_interval=timedelta(minutes=5),
+        calendar=NSETradingCalendar(),
+        require_complete_sessions=True,
+        instrument_status=status_timeline,
+    )
+
+    assert not result.valid
+    assert any(
+        "incomplete trading session" in error
         for error in result.errors
     )

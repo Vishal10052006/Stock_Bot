@@ -212,3 +212,67 @@ def test_static_provider_rejects_symbol_mismatch() -> None:
 
     with pytest.raises(ValueError, match="different symbol"):
         provider.get_bars(request)
+
+
+def test_historical_dataset_accepts_instrument_status_timeline():
+    from datetime import date
+
+    from market.data.historical.instrument_status import (
+        InstrumentStatus,
+        InstrumentStatusTimeline,
+        InstrumentStatusType,
+    )
+
+    timeline = InstrumentStatusTimeline(
+        (
+            InstrumentStatus(
+                symbol="RELIANCE",
+                status=InstrumentStatusType.SUSPENDED,
+                effective_from=date(2026, 1, 2),
+            ),
+        )
+    )
+
+    dataset = HistoricalDataset(
+        symbol="RELIANCE",
+        exchange="NSE",
+        timeframe_minutes=5,
+        bars=(make_candle(),),
+        metadata={},
+        instrument_status=timeline,
+    )
+
+    assert dataset.instrument_status is timeline
+
+
+def test_historical_dataset_rejects_status_timeline_for_different_symbol():
+    from datetime import date
+
+    from market.data.historical.instrument_status import (
+        InstrumentStatus,
+        InstrumentStatusTimeline,
+        InstrumentStatusType,
+    )
+
+    timeline = InstrumentStatusTimeline(
+        (
+            InstrumentStatus(
+                symbol="TCS",
+                status=InstrumentStatusType.ACTIVE,
+                effective_from=date(2026, 1, 1),
+            ),
+        )
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="different symbol",
+    ):
+        HistoricalDataset(
+            symbol="RELIANCE",
+            exchange="NSE",
+            timeframe_minutes=5,
+            bars=(make_candle(),),
+            metadata={},
+            instrument_status=timeline,
+        )

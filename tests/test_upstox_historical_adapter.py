@@ -809,3 +809,80 @@ def test_provider_filters_bars_to_exact_requested_time_window():
         request.start <= timestamp < request.end
         for timestamp in timestamps
     )
+
+
+def test_provider_fetches_nse_index_historical_candles():
+    mapper = UpstoxInstrumentMapper(
+        {"NIFTY50": "NSE_INDEX|Nifty 50"}
+    )
+
+    response = FakeResponse(
+        {
+            "status": "success",
+            "data": {
+                "candles": [
+                    [
+                        "2026-09-01T09:15:00+00:00",
+                        100.0,
+                        101.0,
+                        99.0,
+                        100.5,
+                        0,
+                        0,
+                    ],
+                    [
+                        "2026-09-01T09:20:00+00:00",
+                        100.5,
+                        102.0,
+                        100.0,
+                        101.5,
+                        0,
+                        0,
+                    ],
+                ]
+            },
+        }
+    )
+
+    session = FakeSession(response)
+
+    provider = UpstoxHistoricalMarketDataProvider(
+        "test-access-token",
+        mapper,
+        session=session,
+        base_url="https://example.test/v3/historical-candle",
+    )
+
+    request = HistoricalDataRequest(
+        symbol="NIFTY50",
+        exchange="NSE",
+        timeframe_minutes=5,
+        start=datetime(
+            2026,
+            9,
+            1,
+            9,
+            15,
+            tzinfo=timezone.utc,
+        ),
+        end=datetime(
+            2026,
+            9,
+            1,
+            15,
+            30,
+            tzinfo=timezone.utc,
+        ),
+    )
+
+    bars = provider.get_bars(request)
+
+    assert len(bars) == 2
+    assert bars[0].symbol == "NIFTY50"
+    assert bars[0].exchange == "NSE"
+    assert bars[0].timeframe_minutes == 5
+
+    assert session.url == (
+        "https://example.test/v3/historical-candle/"
+        "NSE_INDEX%7CNifty%2050/minutes/5/2026-09-01/2026-09-01"
+    )
