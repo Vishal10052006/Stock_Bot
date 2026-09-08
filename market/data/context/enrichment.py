@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import numpy as np
 import pandas as pd
 
 from market.data.context.alignment import align_context
@@ -47,8 +48,8 @@ def _validate_price_context(
 def _point_in_time_sector_index(
     observations: pd.DataFrame,
     mappings: tuple[SectorMapping, ...],
-) -> pd.DataFrame:
-    """Attach the sector index valid on each observation date."""
+) -> pd.Series:
+    """Return the sector index valid at every observation timestamp."""
     validate_sector_mappings(mappings)
 
     mapping_frame = pd.DataFrame(
@@ -56,7 +57,10 @@ def _point_in_time_sector_index(
             {
                 "symbol": mapping.symbol,
                 "sector_index_symbol": mapping.sector_index_symbol,
-                "effective_from": pd.Timestamp(mapping.effective_from, tz="Asia/Kolkata"),
+                "effective_from": pd.Timestamp(
+                    mapping.effective_from,
+                    tz="Asia/Kolkata",
+                ),
                 "effective_to": (
                     pd.Timestamp(mapping.effective_to, tz="Asia/Kolkata")
                     if mapping.effective_to is not None
@@ -68,8 +72,12 @@ def _point_in_time_sector_index(
     )
 
     left = observations[["timestamp", "symbol"]].copy()
-    left = left.sort_values(["symbol", "timestamp"])
-    mapping_frame = mapping_frame.sort_values(["symbol", "effective_from"])
+    left["_row_id"] = observations.index
+    left = left.sort_values(["timestamp", "symbol"], kind="stable")
+    mapping_frame = mapping_frame.sort_values(
+        ["effective_from", "symbol"],
+        kind="stable",
+    )
 
     result = pd.merge_asof(
         left,
@@ -86,7 +94,21 @@ def _point_in_time_sector_index(
     )
     result.loc[~valid, "sector_index_symbol"] = pd.NA
 
-    return result
+    return result.set_index("_row_id")["sector_index_symbol"].reindex(
+        observations.index
+    )
+
+
+def _stock_returns(observations: pd.DataFrame) -> pd.DataFrame:
+    """Compute causal stock returns independently per symbol."""
+    result = observations[["timestamp", "symbol", "close"]].copy()
+    result["_row_id"] = result.index
+    result = result.sort_values(["symbol", "timestamp"], kind="stable")
+
+    grouped = result.groupby("symbol", sort=False)["close"]
+    result["stock_return_1"] = grouped.pct_change(1)
+    result = result.set_index("_row_id").reindex(observations.index)
+    return result[["stock_return_1"]]
 
 
 def enrich_market_sector_context(
@@ -98,7 +120,7 @@ def enrich_market_sector_context(
 ) -> pd.DataFrame:
     """Add causal market and sector context to stock observations.
 
-    ``market_context`` must contain one series identified by timestamp.
+    ``market_context`` must contain one index series identified by timestamp.
     ``sector_context`` contains multiple sector-index series identified by
     ``sector_index_symbol`` and timestamp. Sector membership is selected
     using only mappings effective on or before each observation timestamp.
@@ -114,7 +136,6 @@ def enrich_market_sector_context(
         key_column=None,
     )
 
-    result = observations.copy()
     market_columns = (
         "return_1",
         "return_3",
@@ -127,6 +148,10 @@ def enrich_market_sector_context(
             "market_context missing columns: "
             f"{sorted(missing_market)}"
         )
+
+    stock_returns = _stock_returns(observations)
+    result = observations.copy()
+    result["stock_return_1"] = stock_returns["stock_return_1"]
 
     result = align_context(
         result,
@@ -148,7 +173,7 @@ def enrich_market_sector_context(
         "sector_return_12",
         "sector_volatility_20",
     ):
-        result[column] = float("nan")
+        result[column] = np.nan
 
     if sector_context is not None:
         _validate_price_context(
@@ -162,53 +187,61 @@ def enrich_market_sector_context(
                 "sector_context missing columns: "
                 f"{sorted(missing_sector)}"
             )
-
         if not sector_mappings:
             raise ValueError(
                 "sector_mappings are required when sector_context is supplied"
             )
 
-        mapping = _point_in_time_sector_index(
+        result["_sector_index_symbol"] = _point_in_time_sector_index(
             observations,
             sector_mappings,
         )
 
-        sector_lookup = mapping[
-            ["symbol", "timestamp", "sector_index_symbol"]
-        ]
-        sector_lookup = sector_lookup.set_index(observations.index)
-        result["_sector_index_symbol"] = sector_lookup["sector_index_symbol"]
-
-        sector_rows = result[["timestamp", "_sector_index_symbol"]].copy()
-        sector_rows = sector_rows.rename(
+        sector_rows = result[
+            ["timestamp", "_sector_index_symbol"]
+        ].rename(
             columns={"_sector_index_symbol": "sector_index_symbol"}
         )
-        sector_rows = sector_rows.reset_index(drop=False)
-
-        sector_aligned = align_context(
-            sector_rows,
-            sector_context,
-            context_columns=market_columns,
-            context_key="sector_index_symbol",
+        sector_rows["_row_id"] = sector_rows.index
+        sector_rows = sector_rows.sort_values(
+            ["timestamp", "sector_index_symbol"],
+            kind="stable",
         )
-        sector_aligned = sector_aligned.set_index("index")
 
-        result["sector_return_1"] = sector_aligned["return_1"]
-        result["sector_return_3"] = sector_aligned["return_3"]
-        result["sector_return_12"] = sector_aligned["return_12"]
-        result["sector_volatility_20"] = sector_aligned["volatility_20"]
+        # Rows without a valid point-in-time mapping remain NaN.
+        mapped = sector_rows.dropna(subset=["sector_index_symbol"])
+        if not mapped.empty:
+            sector_aligned = align_context(
+                mapped,
+                sector_context,
+                context_columns=market_columns,
+                context_key="sector_index_symbol",
+            )
+            sector_aligned = sector_aligned.set_index("_row_id")
+            result.loc[
+                sector_aligned.index,
+                "sector_return_1",
+            ] = sector_aligned["return_1"]
+            result.loc[
+                sector_aligned.index,
+                "sector_return_3",
+            ] = sector_aligned["return_3"]
+            result.loc[
+                sector_aligned.index,
+                "sector_return_12",
+            ] = sector_aligned["return_12"]
+            result.loc[
+                sector_aligned.index,
+                "sector_volatility_20",
+            ] = sector_aligned["volatility_20"]
+
         result = result.drop(columns=["_sector_index_symbol"])
 
     result["stock_vs_market_return_1"] = (
-        result["return_1"] - result["market_return_1"]
-        if "return_1" in result.columns
-        else float("nan")
+        result["stock_return_1"] - result["market_return_1"]
     )
-    result["stock_vs_sector_return_1"] = float("nan")
+    result["stock_vs_sector_return_1"] = (
+        result["stock_return_1"] - result["sector_return_1"]
+    )
 
-    if "return_1" in result.columns:
-        result["stock_vs_sector_return_1"] = (
-            result["return_1"] - result["sector_return_1"]
-        )
-
-    return result.drop(columns=["return_1"], errors="ignore")
+    return result.drop(columns=["stock_return_1"])
