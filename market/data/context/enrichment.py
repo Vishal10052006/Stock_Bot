@@ -45,39 +45,51 @@ def _validate_price_context(
         raise TypeError(f"{name}.close must be numeric")
 
 
+def _localize_mapping_date(value: object, timezone: object) -> pd.Timestamp:
+    """Represent an exchange-local mapping date in the observation timezone."""
+    return pd.Timestamp(value).tz_localize(timezone)
+
+
 def _point_in_time_sector_index(
     observations: pd.DataFrame,
     mappings: tuple[SectorMapping, ...],
 ) -> pd.Series:
     """Return the sector index valid at every observation timestamp."""
     validate_sector_mappings(mappings)
+    timezone = observations["timestamp"].dt.tz
 
-    mapping_frame = pd.DataFrame(
-        [
+    mapping_rows: list[dict[str, object]] = []
+    for mapping in mappings:
+        effective_to = None
+        if mapping.effective_to is not None:
+            # SectorMapping.effective_to is inclusive for the entire exchange
+            # day, so represent it as the final nanosecond of that local day.
+            effective_to = (
+                _localize_mapping_date(mapping.effective_to, timezone)
+                + pd.Timedelta(days=1)
+                - pd.Timedelta(nanoseconds=1)
+            )
+
+        mapping_rows.append(
             {
                 "symbol": mapping.symbol,
                 "sector_index_symbol": mapping.sector_index_symbol,
-                "effective_from": pd.Timestamp(
+                "effective_from": _localize_mapping_date(
                     mapping.effective_from,
-                    tz="Asia/Kolkata",
+                    timezone,
                 ),
-                "effective_to": (
-                    pd.Timestamp(mapping.effective_to, tz="Asia/Kolkata")
-                    if mapping.effective_to is not None
-                    else pd.NaT
-                ),
+                "effective_to": effective_to,
             }
-            for mapping in mappings
-        ]
+        )
+
+    mapping_frame = pd.DataFrame(mapping_rows).sort_values(
+        ["effective_from", "symbol"],
+        kind="stable",
     )
 
     left = observations[["timestamp", "symbol"]].copy()
     left["_row_id"] = observations.index
     left = left.sort_values(["timestamp", "symbol"], kind="stable")
-    mapping_frame = mapping_frame.sort_values(
-        ["effective_from", "symbol"],
-        kind="stable",
-    )
 
     result = pd.merge_asof(
         left,
@@ -208,7 +220,6 @@ def enrich_market_sector_context(
             kind="stable",
         )
 
-        # Rows without a valid point-in-time mapping remain NaN.
         mapped = sector_rows.dropna(subset=["sector_index_symbol"])
         if not mapped.empty:
             sector_aligned = align_context(
@@ -218,22 +229,18 @@ def enrich_market_sector_context(
                 context_key="sector_index_symbol",
             )
             sector_aligned = sector_aligned.set_index("_row_id")
-            result.loc[
-                sector_aligned.index,
-                "sector_return_1",
-            ] = sector_aligned["return_1"]
-            result.loc[
-                sector_aligned.index,
-                "sector_return_3",
-            ] = sector_aligned["return_3"]
-            result.loc[
-                sector_aligned.index,
-                "sector_return_12",
-            ] = sector_aligned["return_12"]
-            result.loc[
-                sector_aligned.index,
-                "sector_volatility_20",
-            ] = sector_aligned["volatility_20"]
+            result.loc[sector_aligned.index, "sector_return_1"] = (
+                sector_aligned["return_1"]
+            )
+            result.loc[sector_aligned.index, "sector_return_3"] = (
+                sector_aligned["return_3"]
+            )
+            result.loc[sector_aligned.index, "sector_return_12"] = (
+                sector_aligned["return_12"]
+            )
+            result.loc[sector_aligned.index, "sector_volatility_20"] = (
+                sector_aligned["volatility_20"]
+            )
 
         result = result.drop(columns=["_sector_index_symbol"])
 
