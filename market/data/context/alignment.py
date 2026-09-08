@@ -27,20 +27,22 @@ def _validate_frame(
             raise ValueError(
                 f"{name} contains duplicate key/timestamp rows"
             )
-        ordered = data.sort_values(
-            ["timestamp", key_column],
-            kind="stable",
-        ).index
+
+        # A keyed context may legitimately contain multiple series at the
+        # same timestamp. Validate chronology independently within each key;
+        # do not require one global key/timestamp ordering because the
+        # downstream merge_asof operation performs its own canonical sort.
+        for _, group in data.groupby(key_column, sort=False, dropna=False):
+            if not group["timestamp"].is_monotonic_increasing:
+                raise ValueError(
+                    f"{name} timestamps must be chronological within "
+                    f"each {key_column}"
+                )
     else:
         if data["timestamp"].duplicated().any():
             raise ValueError(f"{name} contains duplicate timestamps")
-        ordered = data.sort_values(
-            "timestamp",
-            kind="stable",
-        ).index
-
-    if not data.index.equals(ordered):
-        raise ValueError(f"{name} timestamps must be chronological")
+        if not data["timestamp"].is_monotonic_increasing:
+            raise ValueError(f"{name} timestamps must be chronological")
 
 
 def _as_nanosecond_timestamps(data: pd.DataFrame) -> pd.DataFrame:
