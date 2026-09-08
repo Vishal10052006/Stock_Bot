@@ -5,11 +5,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from market.data.context import (
-    SectorMapping,
-    align_context,
-    build_context_returns,
-)
+from market.data.context import SectorMapping, align_context, build_context_returns
 from market.data.context.enrichment import enrich_market_sector_context
 
 
@@ -116,7 +112,12 @@ def test_future_context_perturbation_does_not_change_past_features() -> None:
 
 
 def test_sector_mapping_is_point_in_time() -> None:
-    timestamps = _timestamps(4)
+    timestamps = pd.DatetimeIndex([
+        pd.Timestamp("2026-08-31 09:15", tz="Asia/Kolkata"),
+        pd.Timestamp("2026-08-31 09:20", tz="Asia/Kolkata"),
+        pd.Timestamp("2026-09-01 09:15", tz="Asia/Kolkata"),
+        pd.Timestamp("2026-09-01 09:20", tz="Asia/Kolkata"),
+    ])
     observations = pd.DataFrame({
         "timestamp": timestamps,
         "symbol": "AAA",
@@ -126,7 +127,8 @@ def test_sector_mapping_is_point_in_time() -> None:
     sector_values = pd.DataFrame({
         "timestamp": timestamps.tolist() * 2,
         "sector_index_symbol": ["BANK"] * 4 + ["IT"] * 4,
-        "close": [100.0, 101.0, 102.0, 103.0] + [200.0, 202.0, 204.0, 206.0],
+        "close": [100.0, 101.0, 102.0, 103.0]
+        + [200.0, 202.0, 204.0, 206.0],
     }).sort_values(["timestamp", "sector_index_symbol"], kind="stable")
     sector = build_context_returns(
         sector_values,
@@ -138,7 +140,7 @@ def test_sector_mapping_is_point_in_time() -> None:
             symbol="AAA",
             sector_index_symbol="BANK",
             effective_from=timestamps[0].date(),
-            effective_to=timestamps[1].date(),
+            effective_to=timestamps[0].date(),
         ),
         SectorMapping(
             symbol="AAA",
@@ -154,9 +156,7 @@ def test_sector_mapping_is_point_in_time() -> None:
         sector_mappings=mappings,
     )
 
-    assert result.loc[0, "sector_return_1"] is np.nan or pd.isna(
-        result.loc[0, "sector_return_1"]
-    )
+    assert pd.isna(result.loc[0, "sector_return_1"])
     assert result.loc[2, "sector_return_1"] == sector.loc[
         (sector["sector_index_symbol"] == "IT")
         & (sector["timestamp"] == timestamps[2]),
