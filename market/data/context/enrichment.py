@@ -39,7 +39,7 @@ def _validate_price_context(
     missing = required.difference(data.columns)
     if missing:
         raise ValueError(f"{name} missing columns: {sorted(missing)}")
-    if not pd.api.types.is_datetime64tz_dtype(data["timestamp"]):
+    if not isinstance(data["timestamp"].dtype, pd.DatetimeTZDtype):
         raise ValueError(f"{name}.timestamp must be timezone-aware")
     if not pd.api.types.is_numeric_dtype(data["close"]):
         raise TypeError(f"{name}.close must be numeric")
@@ -82,12 +82,17 @@ def _point_in_time_sector_index(
             }
         )
 
-    mapping_frame = pd.DataFrame(mapping_rows).sort_values(
+    mapping_frame = pd.DataFrame(mapping_rows)
+    mapping_frame["effective_from"] = mapping_frame["effective_from"].dt.as_unit("ns")
+    if mapping_frame["effective_to"].notna().any():
+        mapping_frame["effective_to"] = mapping_frame["effective_to"].dt.as_unit("ns")
+    mapping_frame = mapping_frame.sort_values(
         ["effective_from", "symbol"],
         kind="stable",
     )
 
     left = observations[["timestamp", "symbol"]].copy()
+    left["timestamp"] = left["timestamp"].dt.as_unit("ns")
     left["_row_id"] = observations.index
     left = left.sort_values(["timestamp", "symbol"], kind="stable")
 
