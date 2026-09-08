@@ -17,7 +17,7 @@ def _validate_frame(
         raise ValueError(f"{name} must not be empty")
     if "timestamp" not in data.columns:
         raise ValueError(f"{name} must contain timestamp")
-    if not pd.api.types.is_datetime64tz_dtype(data["timestamp"]):
+    if not isinstance(data["timestamp"].dtype, pd.DatetimeTZDtype):
         raise ValueError(f"{name}.timestamp must be timezone-aware")
 
     if key_column is not None:
@@ -43,6 +43,13 @@ def _validate_frame(
         raise ValueError(f"{name} timestamps must be chronological")
 
 
+def _as_nanosecond_timestamps(data: pd.DataFrame) -> pd.DataFrame:
+    """Normalize timestamp resolution for pandas as-of joins."""
+    result = data.copy()
+    result["timestamp"] = result["timestamp"].dt.as_unit("ns")
+    return result
+
+
 def align_context(
     observations: pd.DataFrame,
     context: pd.DataFrame,
@@ -56,7 +63,11 @@ def align_context(
     ``context.timestamp <= observation.timestamp``. Exact timestamp matches
     are allowed because canonical bars represent the same completed interval.
     """
-    _validate_frame(observations, "observations")
+    _validate_frame(
+        observations,
+        "observations",
+        key_column=context_key,
+    )
     _validate_frame(context, "context", key_column=context_key)
 
     missing = set(context_columns).difference(context.columns)
@@ -68,12 +79,14 @@ def align_context(
             f"observations missing key column: {context_key}"
         )
 
-    left = observations.copy()
+    left = _as_nanosecond_timestamps(observations)
     right_columns = ["timestamp"] + list(context_columns)
     if context_key is not None:
         right_columns.append(context_key)
 
-    right = context.loc[:, list(dict.fromkeys(right_columns))].copy()
+    right = _as_nanosecond_timestamps(
+        context.loc[:, list(dict.fromkeys(right_columns))]
+    )
 
     if context_key is None:
         right = right.sort_values("timestamp", kind="stable")
