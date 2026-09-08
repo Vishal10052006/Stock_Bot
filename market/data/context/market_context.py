@@ -30,7 +30,7 @@ def build_context_returns(
         raise ValueError("data must contain timestamp")
     if price_column not in data.columns:
         raise ValueError(f"data must contain {price_column}")
-    if not pd.api.types.is_datetime64tz_dtype(data["timestamp"]):
+    if not isinstance(data["timestamp"].dtype, pd.DatetimeTZDtype):
         raise ValueError("timestamp must be timezone-aware")
     if not pd.api.types.is_numeric_dtype(data[price_column]):
         raise TypeError(f"{price_column} must be numeric")
@@ -62,7 +62,10 @@ def build_context_returns(
     )
     if key_column is not None:
         log_return = result.groupby(key_column, sort=False)[price_column].transform(
-            lambda values: np.log(values.where(values > 0) / values.where(values > 0).shift(1))
+            lambda values: np.log(
+                values.where(values > 0)
+                / values.where(values > 0).shift(1)
+            )
         )
 
     if key_column is None:
