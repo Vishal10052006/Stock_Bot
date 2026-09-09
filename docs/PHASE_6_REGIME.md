@@ -10,7 +10,7 @@ Phase 6 provides a deterministic, causal market-state layer over the Phase 5 mar
 - `HIGH_VOLATILITY`
 - `LOW_VOLATILITY`
 
-The roadmap explicitly assigns rule-based detection to V1; clustering/HMM experiments belong to V2 and must only be retained if they improve robustness. fileciteturn48file1
+The project roadmap assigns rule-based detection to V1; K-Means, Gaussian Mixture, and Hidden Markov Model experiments belong to V2 and must only be retained if they improve robustness.
 
 ## Inputs
 
