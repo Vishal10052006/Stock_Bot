@@ -4,6 +4,11 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from market.features.builder import build_features
+from market.indicators.engine import IndicatorEngine
+
+from market.data.context import build_context_returns
+
 from market.regime import MarketRegime, detect_market_regime, validate_regime_dataset
 
 
@@ -104,3 +109,81 @@ def test_invalid_probability_is_rejected() -> None:
     data.loc[21, "regime_probability"] = 1.1
     with pytest.raises(ValueError, match="between 0 and 1"):
         validate_regime_dataset(data)
+
+
+def test_phase5_features_integrate_with_phase6_regime_detector() -> None:
+    """Verify the real Phase 4 -> Phase 5 -> Phase 6 pipeline."""
+
+    timestamps = pd.date_range(
+        "2026-08-31 09:15",
+        periods=80,
+        freq="5min",
+        tz="Asia/Kolkata",
+    )
+
+    # Create deterministic stock OHLCV data for the Phase 4 indicator engine.
+    base = np.arange(80, dtype=float)
+
+    stock = pd.DataFrame({
+        "timestamp": timestamps,
+        "symbol": "TEST",
+        "open": 100.0 + base * 0.20,
+        "high": 100.5 + base * 0.20,
+        "low": 99.5 + base * 0.20,
+        "close": 100.0 + base * 0.20,
+        "volume": 1000.0 + base * 10.0,
+    })
+
+    # Build the actual Phase 4 indicator output.
+    indicators = IndicatorEngine().calculate(stock)
+
+    # Build deterministic market-index context through the real Phase 5
+    # context-return pipeline.
+    market_raw = pd.DataFrame({
+        "timestamp": timestamps,
+        "close": 200.0 + base * 0.30,
+    })
+
+    market_context = build_context_returns(market_raw)
+
+    # Build the actual Phase 5 FeatureDataset, including market context.
+    features = build_features(
+        indicators,
+        market_context=market_context,
+    )
+
+    # Phase 5 must expose the fields required by Phase 6.
+    assert {
+        "timestamp",
+        "symbol",
+        "market_return_3",
+        "market_return_12",
+        "market_volatility_20",
+    }.issubset(features.columns)
+
+    # Run the actual Phase 6 detector against the Phase 5 output.
+    regimes = detect_market_regime(features)
+
+    # The Phase 6 output contract must be exact.
+    assert tuple(regimes.columns) == (
+        "timestamp",
+        "regime",
+        "regime_probability",
+    )
+
+    # Warm-up rows are allowed to remain unclassified.
+    assert regimes["timestamp"].equals(features["timestamp"])
+
+    # After sufficient history, the detector must produce classifications.
+    classified = regimes.dropna(subset=["regime"])
+
+    assert not classified.empty
+
+    # Every classified row must contain a valid confidence value.
+    assert classified["regime_probability"].between(
+        0.0,
+        1.0,
+    ).all()
+
+    # The complete Phase 6 output must satisfy its validation contract.
+    validate_regime_dataset(regimes)
