@@ -153,3 +153,24 @@ class LabelingOutcome:
     outcome_timestamp: Optional[pd.Timestamp]
     outcome_bars: Optional[int]
     outcome_reason: str
+
+@dataclass(frozen=True)
+class DecisionLabelingOutcome:
+    """
+    Decision-level prediction target.
+
+    A single decision timestamp may have both a LONG and SHORT
+    candidate evaluated independently. This model combines those
+    directional outcomes into exactly one ML target.
+    """
+
+    timestamp: pd.Timestamp
+    symbol: str
+    label: PredictionLabel
+
+    long_outcome: LabelingOutcome
+    short_outcome: LabelingOutcome
+
+    outcome_timestamp: Optional[pd.Timestamp]
+    outcome_bars: Optional[int]
+    outcome_reason: str

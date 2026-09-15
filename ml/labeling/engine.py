@@ -335,3 +335,127 @@ def label_candidates(
             for outcome in outcomes
         ]
     )
+
+def label_decision(
+    candles: pd.DataFrame,
+    long_candidate: TradeCandidate,
+    short_candidate: TradeCandidate,
+    config: LabelingConfig | None = None,
+) -> "DecisionLabelingOutcome":
+    """
+    Produce exactly one prediction label for a decision timestamp.
+
+    Both directional candidates are evaluated independently using
+    future candles. Their outcomes are then combined into one
+    decision-level target.
+
+    Rules:
+        - Only LONG succeeds -> LONG_SUCCESS
+        - Only SHORT succeeds -> SHORT_SUCCESS
+        - Neither succeeds -> NO_EDGE
+        - Both succeed on different bars -> earlier success wins
+        - Both succeed on the same bar -> NO_EDGE
+
+    Future candles are used only for research labeling.
+    """
+
+    from .models import DecisionLabelingOutcome
+
+    if long_candidate.direction != TradeDirection.LONG:
+        raise ValueError(
+            "long_candidate must have LONG direction."
+        )
+
+    if short_candidate.direction != TradeDirection.SHORT:
+        raise ValueError(
+            "short_candidate must have SHORT direction."
+        )
+
+    if long_candidate.timestamp != short_candidate.timestamp:
+        raise ValueError(
+            "LONG and SHORT candidates must have the same timestamp."
+        )
+
+    if long_candidate.symbol != short_candidate.symbol:
+        raise ValueError(
+            "LONG and SHORT candidates must have the same symbol."
+        )
+
+    long_outcome = label_candidate(
+        candles=candles,
+        candidate=long_candidate,
+        config=config,
+    )
+
+    short_outcome = label_candidate(
+        candles=candles,
+        candidate=short_candidate,
+        config=config,
+    )
+
+    long_success = (
+        long_outcome.label == PredictionLabel.LONG_SUCCESS
+    )
+
+    short_success = (
+        short_outcome.label == PredictionLabel.SHORT_SUCCESS
+    )
+
+    if long_success and not short_success:
+        label = PredictionLabel.LONG_SUCCESS
+        outcome_timestamp = long_outcome.outcome_timestamp
+        outcome_bars = long_outcome.outcome_bars
+        outcome_reason = "LONG_SUCCESS"
+
+    elif short_success and not long_success:
+        label = PredictionLabel.SHORT_SUCCESS
+        outcome_timestamp = short_outcome.outcome_timestamp
+        outcome_bars = short_outcome.outcome_bars
+        outcome_reason = "SHORT_SUCCESS"
+
+    elif long_success and short_success:
+        if (
+            long_outcome.outcome_bars is not None
+            and short_outcome.outcome_bars is not None
+        ):
+            if long_outcome.outcome_bars < short_outcome.outcome_bars:
+                label = PredictionLabel.LONG_SUCCESS
+                outcome_timestamp = long_outcome.outcome_timestamp
+                outcome_bars = long_outcome.outcome_bars
+                outcome_reason = "LONG_SUCCESS_BEFORE_SHORT"
+
+            elif short_outcome.outcome_bars < long_outcome.outcome_bars:
+                label = PredictionLabel.SHORT_SUCCESS
+                outcome_timestamp = short_outcome.outcome_timestamp
+                outcome_bars = short_outcome.outcome_bars
+                outcome_reason = "SHORT_SUCCESS_BEFORE_LONG"
+
+            else:
+                label = PredictionLabel.NO_EDGE
+                outcome_timestamp = long_outcome.outcome_timestamp
+                outcome_bars = long_outcome.outcome_bars
+                outcome_reason = (
+                    "AMBIGUOUS_LONG_AND_SHORT_SUCCESS_SAME_BAR"
+                )
+        else:
+            label = PredictionLabel.NO_EDGE
+            outcome_timestamp = None
+            outcome_bars = None
+            outcome_reason = "AMBIGUOUS_DIRECTIONAL_OUTCOME"
+
+    else:
+        label = PredictionLabel.NO_EDGE
+        outcome_timestamp = None
+        outcome_bars = None
+        outcome_reason = "NO_DIRECTIONAL_SUCCESS"
+
+    return DecisionLabelingOutcome(
+        timestamp=long_candidate.timestamp,
+        symbol=long_candidate.symbol,
+        label=label,
+        long_outcome=long_outcome,
+        short_outcome=short_outcome,
+        outcome_timestamp=outcome_timestamp,
+        outcome_bars=outcome_bars,
+        outcome_reason=outcome_reason,
+    )

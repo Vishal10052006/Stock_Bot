@@ -30,6 +30,7 @@ from ml.labeling import (
     validate_candidate_against_candles,
     validate_labeling_output,
 )
+from ml.labeling import label_decision
 
 
 def make_candles(
@@ -538,3 +539,149 @@ def test_target_distance_is_exactly_1_5_r():
     assert outcome.target_price == pytest.approx(
         expected_target
     )
+
+def test_decision_label_long_success():
+    """LONG success should become the decision-level target."""
+
+    candles = make_candles(
+        highs=[100.5, 101.0, 102.0, 103.5],
+        lows=[99.5, 99.8, 100.5, 101.5],
+    )
+
+    outcome = label_decision(
+        candles,
+        make_long_candidate(),
+        make_short_candidate(),
+    )
+
+    assert outcome.label == PredictionLabel.LONG_SUCCESS
+    assert outcome.outcome_bars == 3
+
+
+def test_decision_label_short_success():
+    """SHORT success should become the decision-level target."""
+
+    candles = make_candles(
+        highs=[100.5, 100.2, 99.0, 96.5],
+        lows=[99.5, 99.0, 98.5, 96.5],
+    )
+
+    outcome = label_decision(
+        candles,
+        make_long_candidate(),
+        make_short_candidate(),
+    )
+
+    assert outcome.label == PredictionLabel.SHORT_SUCCESS
+    assert outcome.outcome_bars == 3
+
+
+def test_decision_label_no_edge_when_neither_succeeds():
+    """No successful direction should produce NO_EDGE."""
+
+    candles = make_candles(
+        highs=[100.5] * 13,
+        lows=[99.5] * 13,
+    )
+
+    outcome = label_decision(
+        candles,
+        make_long_candidate(),
+        make_short_candidate(),
+    )
+
+    assert outcome.label == PredictionLabel.NO_EDGE
+    assert outcome.outcome_reason == "NO_DIRECTIONAL_SUCCESS"
+
+
+def test_decision_label_requires_same_timestamp():
+    """Both directional candidates must represent one decision."""
+
+    long_candidate = make_long_candidate(
+        timestamp="2026-09-13 10:00"
+    )
+
+    short_candidate = make_short_candidate(
+        timestamp="2026-09-13 10:05"
+    )
+
+    candles = make_candles(
+        highs=[100.5, 101.0, 102.0, 103.5],
+        lows=[99.5, 99.8, 100.5, 101.5],
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="same timestamp",
+    ):
+        label_decision(
+            candles,
+            long_candidate,
+            short_candidate,
+        )
+
+
+def test_decision_label_rejects_wrong_direction():
+    """The LONG slot must actually contain a LONG candidate."""
+
+    candles = make_candles(
+        highs=[100.5, 101.0],
+        lows=[99.5, 99.8],
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="long_candidate must have LONG direction",
+    ):
+        label_decision(
+            candles,
+            make_short_candidate(),
+            make_short_candidate(),
+        )
+
+def test_decision_label_both_successes_earlier_direction_wins():
+    """When both directions eventually succeed, the earlier one wins."""
+
+    long_candidate = TradeCandidate(
+        timestamp=pd.Timestamp("2026-09-13 10:00"),
+        symbol="RELIANCE",
+        direction=TradeDirection.LONG,
+        entry_price=100.0,
+        stop_price=99.0,
+    )
+
+    short_candidate = TradeCandidate(
+        timestamp=pd.Timestamp("2026-09-13 10:00"),
+        symbol="RELIANCE",
+        direction=TradeDirection.SHORT,
+        entry_price=100.0,
+        stop_price=105.0,
+    )
+
+    candles = make_candles(
+        highs=[100.5, 101.0, 102.0, 100.0],
+        lows=[99.5, 99.5, 99.5, 92.0],
+    )
+
+    outcome = label_decision(
+        candles,
+        long_candidate,
+        short_candidate,
+    )
+
+    assert outcome.label == PredictionLabel.LONG_SUCCESS
+    assert outcome.outcome_bars == 2
+    assert outcome.outcome_reason == "LONG_SUCCESS_BEFORE_SHORT"
+
+    assert (
+        outcome.long_outcome.label
+        == PredictionLabel.LONG_SUCCESS
+    )
+
+    assert (
+        outcome.short_outcome.label
+        == PredictionLabel.SHORT_SUCCESS
+    )
+
+    assert outcome.long_outcome.outcome_bars == 2
+    assert outcome.short_outcome.outcome_bars == 3
