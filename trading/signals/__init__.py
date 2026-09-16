@@ -2,6 +2,7 @@
 
 from .adapter import build_candidate_from_decision
 from .candidate import build_candidate
+from .directional import build_directional_candidates
 from .models import (
     CandidateConfig,
     CandidateDirection,
@@ -17,6 +18,7 @@ __all__ = [
     "CandidateDirection",
     "TradeCandidate",
     "build_candidate",
+    "build_directional_candidates",
     "build_candidate_from_decision",
     "validate_candidate",
     "validate_candidates",

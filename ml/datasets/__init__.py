@@ -14,6 +14,10 @@ from .validation import (
     VALID_LABELS,
     validate_training_dataset,
 )
+from .pipeline import (
+    Phase9DatasetResult,
+    build_phase9_dataset,
+)
 
 __all__ = [
     "EXPECTED_COLUMNS",
@@ -24,4 +28,6 @@ __all__ = [
     "build_training_dataset",
     "temporal_split",
     "validate_training_dataset",
+    "Phase9DatasetResult",
+    "build_phase9_dataset",
 ]

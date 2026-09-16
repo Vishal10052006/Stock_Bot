@@ -38,3 +38,17 @@ __all__ += [
     "NSESecurityMasterAdapter",
     "NSESecurityMasterDataError",
 ]
+
+from market.data.historical.adapters.yfinance_index import (
+    YFinanceHistoricalIndexMarketDataProvider,
+)
+
+__all__ += [
+    "YFinanceHistoricalIndexMarketDataProvider",
+]
+
+from market.data.historical.adapters.nse_bhavcopy import (
+    NSEBhavcopyAdapter,
+    NSEBhavcopyDataError,
+    NSEBhavcopyRow,
+)

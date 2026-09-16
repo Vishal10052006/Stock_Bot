@@ -113,6 +113,10 @@ __all__ += [
     "UniversePolicy",
     "UniverseSnapshot",
     "build_universe_snapshot",
+    "PointInTimeUniverseResult",
+    "UniverseExclusion",
+    "UniverseIdentityRecord",
+    "build_point_in_time_universe",
 ]
 
 from market.data.historical.identity import (
@@ -180,3 +184,10 @@ __all__ += [
     "SecurityLineageTransition",
     "resolve_security_lineage_transition",
 ]
+
+from market.data.historical.point_in_time_universe import (
+    PointInTimeUniverseResult,
+    UniverseExclusion,
+    UniverseIdentityRecord,
+    build_point_in_time_universe,
+)

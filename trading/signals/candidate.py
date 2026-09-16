@@ -102,6 +102,9 @@ def _structural_stop(
     is used.
 
     The selected level must be on the correct side of entry.
+    This makes candidate construction explicitly directional:
+    a LONG candidate requires a structural reference below entry,
+    while a SHORT candidate requires one above entry.
     """
 
     period = config.structural_lookback
