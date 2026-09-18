@@ -22,6 +22,7 @@ from ml.datasets.models import TrainingDataset
 from ml.datasets.splitting import temporal_split
 from ml.models.calibration import IsotonicProbabilityCalibrator
 from ml.models.logistic import LogisticOutcomeModel
+from ml.models.random_forest import RandomForestConfig, RandomForestOutcomeModel
 from ml.preprocessing.pipeline import FeaturePreprocessor
 
 from .models import TrainingConfig, TrainingResult
@@ -83,33 +84,35 @@ def _split_training_for_calibration(
     )
 
 
-def train_baseline(
-    dataset: TrainingDataset,
-    config: TrainingConfig | None = None,
-) -> TrainingResult:
-    """Train the Phase 9 calibrated Logistic Regression baseline."""
-    if config is None:
-        config = TrainingConfig()
 
+def _train_with_model(
+    dataset: TrainingDataset,
+    *,
+    split_config,
+    preprocessing_config,
+    calibration_ratio: float,
+    model: object,
+) -> TrainingResult:
+    """Train and calibrate one Phase 9 probability model.
+
+    The temporal split and chronological calibration protocol are shared by
+    every Phase 9 model family. The external test partition remains untouched.
+    """
     if not isinstance(dataset, TrainingDataset):
         raise TypeError("dataset must be a TrainingDataset.")
 
-    split = temporal_split(dataset, config=config.split)
+    split = temporal_split(dataset, config=split_config)
 
     classifier_train, calibration_train = _split_training_for_calibration(
         split.train,
-        config.calibration_ratio,
+        calibration_ratio,
     )
 
-    preprocessor = FeaturePreprocessor(config=config.preprocessing)
+    preprocessor = FeaturePreprocessor(config=preprocessing_config)
 
     X_train = preprocessor.fit_transform(classifier_train.X)
-
-    model = LogisticOutcomeModel(config=config.model)
     model.fit(X_train, classifier_train.y)
 
-    # Calibration data is later than classifier-training data, but still
-    # earlier than the untouched validation partition.
     X_calibration = preprocessor.transform(calibration_train.X)
     raw_calibration_probabilities = model.predict_proba(X_calibration)
 
@@ -138,4 +141,42 @@ def train_baseline(
         preprocessor=preprocessor,
         model=model,
         calibrator=calibrator,
+    )
+
+
+def train_baseline(
+    dataset: TrainingDataset,
+    config: TrainingConfig | None = None,
+) -> TrainingResult:
+    """Train the Phase 9 calibrated Logistic Regression baseline."""
+    if config is None:
+        config = TrainingConfig()
+
+    return _train_with_model(
+        dataset,
+        split_config=config.split,
+        preprocessing_config=config.preprocessing,
+        calibration_ratio=config.calibration_ratio,
+        model=LogisticOutcomeModel(config=config.model),
+    )
+
+
+def train_random_forest(
+    dataset: TrainingDataset,
+    config: TrainingConfig | None = None,
+    model_config: RandomForestConfig | None = None,
+) -> TrainingResult:
+    """Train the Phase 9 calibrated Random Forest benchmark."""
+    if config is None:
+        config = TrainingConfig()
+
+    if model_config is None:
+        model_config = RandomForestConfig()
+
+    return _train_with_model(
+        dataset,
+        split_config=config.split,
+        preprocessing_config=config.preprocessing,
+        calibration_ratio=config.calibration_ratio,
+        model=RandomForestOutcomeModel(config=model_config),
     )
