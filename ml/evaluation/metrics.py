@@ -129,6 +129,61 @@ def evaluate_predictions(
     }
 
 
+def multiclass_brier_score(
+    y_true: pd.Series | np.ndarray,
+    probabilities: pd.DataFrame,
+) -> float:
+    """Calculate the multiclass Brier score for probability quality."""
+    y_array = _validate_y_true(y_true)
+    values = _validate_probabilities(probabilities)
+
+    if len(y_array) != len(values):
+        raise ValueError("y_true and probabilities must contain the same number of observations.")
+
+    targets = np.zeros_like(values)
+    for index, label in enumerate(EVALUATION_CLASSES):
+        targets[:, index] = (y_array == label).astype(float)
+
+    return float(np.mean(np.sum((values - targets) ** 2, axis=1)))
+
+
+def expected_calibration_error(
+    y_true: pd.Series | np.ndarray,
+    probabilities: pd.DataFrame,
+    bins: int = 10,
+) -> float:
+    """Calculate confidence-based expected calibration error (ECE)."""
+    if bins <= 0:
+        raise ValueError("bins must be greater than 0.")
+
+    y_array = _validate_y_true(y_true)
+    values = _validate_probabilities(probabilities)
+
+    if len(y_array) != len(values):
+        raise ValueError("y_true and probabilities must contain the same number of observations.")
+
+    confidence = values.max(axis=1)
+    predictions = values.argmax(axis=1)
+    class_names = np.asarray(EVALUATION_CLASSES)
+    correct = (class_names[predictions] == y_array).astype(float)
+
+    edges = np.linspace(0.0, 1.0, bins + 1)
+    error = 0.0
+
+    for lower, upper in zip(edges[:-1], edges[1:]):
+        mask = (confidence >= lower) & (
+            confidence < upper if upper < 1.0 else confidence <= upper
+        )
+        count = int(mask.sum())
+        if count == 0:
+            continue
+        error += (count / len(values)) * abs(
+            float(correct[mask].mean()) - float(confidence[mask].mean())
+        )
+
+    return float(error)
+
+
 def _validate_y_true(
     y_true: pd.Series | np.ndarray,
 ) -> np.ndarray:
