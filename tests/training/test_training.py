@@ -24,6 +24,7 @@ from ml.training import (
     TrainingConfig,
     TrainingResult,
     train_baseline,
+    train_random_forest,
 )
 
 
@@ -331,3 +332,27 @@ def test_default_training_config_matches_phase9_baseline():
     assert config.model.C == 1.0
     assert config.model.max_iter == 1000
     assert config.model.random_state == 42
+
+
+def test_train_random_forest_returns_calibrated_training_result():
+    """Random Forest uses the same leakage-safe training contract."""
+    dataset = make_dataset()
+
+    result = train_random_forest(dataset)
+
+    assert isinstance(result, TrainingResult)
+    assert result.preprocessor.is_fitted
+    assert result.model.is_fitted
+    assert result.calibrator.is_fitted
+    assert list(result.validation_probabilities.columns) == [
+        "LONG_SUCCESS",
+        "SHORT_SUCCESS",
+        "NO_EDGE",
+    ]
+    assert result.validation_rows == len(result.validation_probabilities)
+    np.testing.assert_allclose(
+        result.validation_probabilities.sum(axis=1).to_numpy(),
+        np.ones(result.validation_rows),
+        rtol=0,
+        atol=1e-10,
+    )
