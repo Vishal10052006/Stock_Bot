@@ -31,13 +31,7 @@ class CEO:
         self.strategy_engine = StrategyEngine()
         self.weight_manager = WeightManager()
 
-        self.execution_engine = ExecutionEngine(
-            self.trust_manager,
-            self.memory_manager,
-            self.learning_engine,
-            self.reinforcement_engine,
-            self.reliability_manager
-        )
+        self.execution_engine = ExecutionEngine()
 
         self.decision_engine = DecisionEngine(
             self.memory_manager,
@@ -70,12 +64,12 @@ class CEO:
 
         decision = self.decision_engine.make_decision(
             task_type=command,
-            critic_score=8,  # (temporary, later from critic system)
+            critic_score=None,
             goal="default",
             available_workers=available_workers,
             trust_manager=self.trust_manager
         )
-        worker_name = decision.get("worker_name", "strategy_worker")
+        worker_name = decision.get("worker")
 
         # Only execute if allowed
         if decision["decision"] == "EXECUTE":
@@ -84,28 +78,12 @@ class CEO:
                 worker_name
             )
 
-            # REINFORCEMENT LEARNING BLOCK
-
-            # 1. predicted
-            predicted = decision["confidence"]
-
-            # 2. actual (convert result → score)
-            actual = self.evaluate_result(results)
-
-            # 3. reward
-            reward = self.reinforcement_engine.calculate_reward(predicted, actual)
-
-            # 4. feedback
-            feedback = self.reinforcement_engine.generate_feedback(
-                decision["factors"],
-                reward
-            )
-
-            # 5. update weights
-            self.weight_manager.update_weights(feedback)
-
-            # DEBUG
-            print("🧠 UPDATED WEIGHTS:", self.weight_manager.get_weights())
+            # Trading reinforcement is intentionally disabled here.
+            #
+            # A worker/execution response is not a realized market
+            # outcome. Trading learning may only update from an
+            # objectively observed result such as realized P&L after
+            # a completed position.
 
         else:
             return {

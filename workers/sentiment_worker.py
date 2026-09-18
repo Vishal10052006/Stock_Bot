@@ -1,14 +1,67 @@
+"""Deterministic sentiment-analysis worker.
+
+The worker consumes externally supplied sentiment evidence.
+It never invents sentiment, confidence, or trading signals.
+
+Sentiment is contextual evidence only. Final trading decisions belong
+to the downstream strategy/decision/risk pipeline.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Mapping
+from typing import Any
+
 from workers.base_worker import BaseWorker
-import random
+
 
 class SentimentWorker(BaseWorker):
-    name = "sentiment_worker"
+    """Adapter for validated external sentiment information."""
 
-    def execute(self, task):
-        print("[SentimentWorker] Analyzing news sentiment...")
+    name = "sentiment_worker"
+    capabilities = [
+        "sentiment_analysis",
+        "news_analysis",
+    ]
+
+    def execute(self, task: Any) -> dict[str, Any]:
+        """Return supplied sentiment evidence without inventing data.
+
+        Supported input:
+
+            {"sentiment": {...}}
+
+        The worker deliberately does not convert sentiment into BUY/SELL.
+        """
+
+        sentiment = self._extract_sentiment(task)
+
+        if sentiment is None:
+            return {
+                "sentiment": "UNAVAILABLE",
+                "confidence": None,
+                "signal": "NO_SIGNAL",
+                "success": False,
+                "reason": (
+                    "Sentiment analysis requires validated external "
+                    "news/sentiment data; none was supplied."
+                ),
+            }
 
         return {
-            "signal": random.choice(["BUY", "SELL", "HOLD"]),
-            "confidence": random.uniform(0.4, 0.85),
-            "success": True
+            "sentiment": sentiment,
+            "confidence": None,
+            "signal": "NO_SIGNAL",
+            "success": True,
+            "reason": (
+                "External sentiment evidence received. "
+                "No trading decision was made."
+            ),
         }
+
+    @staticmethod
+    def _extract_sentiment(task: Any) -> Any:
+        if isinstance(task, Mapping):
+            return task.get("sentiment")
+
+        return None

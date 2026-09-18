@@ -64,23 +64,14 @@ class DecisionEngine:
 # 3. Main function to execute decision and learn from result
     def make_decision(self, task_type, critic_score, goal, available_workers, trust_manager):
 
-        import random
-
-        # Dynamic exploration rate
-        experience = self.learning_engine.get_experience()
-        exploration_rate = max(0.1, 0.4 - experience * 0.01)
-
-        if random.random() < exploration_rate:
-            worker_name = random.choice(available_workers)
-            print("Exploring worker:", worker_name)
-
+        if not available_workers:
             return {
-                "worker": worker_name,
-                "decision": "EXECUTE",
-                "confidence": 0.5,
-                "risk": "medium",
+                "worker": None,
+                "decision": "BLOCK",
+                "confidence": 0.0,
+                "risk": "high",
                 "factors": {},
-                "reason": "Exploration mode"
+                "reason": "No workers are available."
             }
 
         strategy_output = self.strategy_engine.create_strategy(task_type)
@@ -98,58 +89,41 @@ class DecisionEngine:
 
         print(f"Selected worker: {worker_name}")
 
-        # confidence
-        confidence = critic_score / 10
-
-        # adjust using memory
-        memory = self.memory_manager.load_memory()
-        failures = [
-            m for m in memory
-            if m.get("worker") == worker_name and m.get("result") == "FAILED"
-        ]
-
-        if len(failures) >= 3:
-            confidence *= 0.7
-
-        # risk label
-        if confidence > 0.7:
-            decision = "EXECUTE"
-            risk_label = "low"
-        elif confidence > 0.4:
-            decision = "ASK_USER"
-            risk_label = "medium"
-        else:
-            decision = "BLOCK"
-            risk_label = "high"
+        # ---------------------------------------------------------
+        # SAFETY BOUNDARY
+        # ---------------------------------------------------------
+        #
+        # The legacy worker/critic score is NOT a trading confidence
+        # measure. It must never authorize a financial transaction.
+        #
+        # Until a validated trading strategy and risk decision are
+        # supplied by the production trading pipeline, this legacy
+        # coordinator fails closed.
+        #
+        # Real trading confidence must eventually come from the
+        # strategy/model pipeline using causally valid market features,
+        # followed by independent risk validation.
+        # ---------------------------------------------------------
 
         result = {
             "worker": worker_name,
-            "decision": decision,
-            "confidence": round(confidence, 2),
-            "risk": risk_label,
+            "decision": "BLOCK",
+            "confidence": None,
+            "risk": "high",
             "factors": best_factors,
-            "reason": f"Worker: {worker_name} | Score: {round(best_score, 3)} | Confidence: {confidence}"
-                }
+            "reason": (
+                "Legacy DecisionEngine cannot authorize trading. "
+                "A validated strategy and risk decision are required."
+            ),
+        }
 
-        import random
+        # Learning is deliberately NOT performed here.
+        #
+        # A decision prediction is not a realized trading outcome.
+        # Reinforcement updates require an objectively observed market
+        # result such as realized P&L after a completed trade.
 
-        predicted = result["confidence"]
-        actual = random.uniform(0.4, 1.0)
-
-        reward = self.reinforcement_engine.calculate_reward(predicted, actual)
-
-        weights = self.weight_manager.get_weights()
-
-        feedback = self.reinforcement_engine.generate_feedback(
-            best_factors,
-            reward
-        )
-
-        self.weight_manager.update_weights(feedback)
-
-        print("🧠 UPDATED WEIGHTS:", self.weight_manager.get_weights())
-
-        # ✅ FINAL RETURN
+        # FINAL RETURN
         return result
 
 # 4. Function to execute task and learn from result
