@@ -51,6 +51,33 @@ def test_invalid_quantity_is_rejected():
         )
 
 
+def test_fractional_quantity_is_rejected():
+    """Fractional quantities must not pass the integer order contract."""
+
+    with pytest.raises(ValueError, match="quantity must be an integer"):
+        PaperOrder(
+            symbol="RELIANCE",
+            side="BUY",
+            quantity=0.5,
+            price=2500.0,
+            timestamp=datetime(2026, 8, 27, 9, 30),
+        )
+
+
+def test_non_finite_price_is_rejected():
+    """NaN and infinity must not enter paper execution."""
+
+    for value in (float("nan"), float("inf"), float("-inf")):
+        with pytest.raises(ValueError, match="price must be finite"):
+            PaperOrder(
+                symbol="RELIANCE",
+                side="BUY",
+                quantity=10,
+                price=value,
+                timestamp=datetime(2026, 8, 27, 9, 30),
+            )
+
+
 def test_invalid_price_is_rejected():
     """Non-positive prices should be rejected."""
 
