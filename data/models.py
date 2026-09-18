@@ -6,6 +6,7 @@ market-data, signal, strategy, risk, and trading layers.
 """
 
 from dataclasses import dataclass
+from math import isfinite
 from datetime import datetime
 from typing import Literal
 
@@ -30,6 +31,12 @@ class MarketBar:
 
         if not self.symbol:
             raise ValueError("symbol must not be empty")
+
+        if not all(
+            isfinite(float(value))
+            for value in (self.open, self.high, self.low, self.close, self.volume)
+        ):
+            raise ValueError("OHLCV values must be finite")
 
         if self.open <= 0 or self.high <= 0 or self.low <= 0 or self.close <= 0:
             raise ValueError("OHLC prices must be greater than zero")
