@@ -7,6 +7,7 @@ from unittest.mock import patch
 
 from market.candles.models import Candle
 from market.data.context.models import SectorMapping
+from market.data.context.sector_mapping_io import load_sector_mappings_csv
 from market.data.context.sector_context import (
     build_sector_context,
     candles_to_context_frame,
@@ -154,3 +155,37 @@ def test_sector_mapping_is_explicitly_point_in_time() -> None:
     )
 
     assert mapping.effective_from == date(2026, 9, 9)
+
+
+def test_sector_mapping_csv_loader_is_strict(tmp_path) -> None:
+    path = tmp_path / "sector_mappings.csv"
+    path.write_text(
+        "symbol,sector_index_symbol,effective_from,effective_to\n"
+        "RELIANCE,NIFTY_OIL_AND_GAS,2026-09-09,\n"
+        "TCS,NIFTY_IT,2026-01-01,2026-08-31\n",
+        encoding="utf-8",
+    )
+
+    mappings = load_sector_mappings_csv(path)
+
+    assert len(mappings) == 2
+    assert mappings[0].symbol == "RELIANCE"
+    assert mappings[0].effective_to is None
+    assert mappings[1].effective_to == date(2026, 8, 31)
+
+
+def test_sector_mapping_csv_loader_rejects_overlapping_history(tmp_path) -> None:
+    path = tmp_path / "sector_mappings.csv"
+    path.write_text(
+        "symbol,sector_index_symbol,effective_from,effective_to\n"
+        "RELIANCE,NIFTY_OIL_AND_GAS,2026-01-01,\n"
+        "RELIANCE,NIFTY_ENERGY,2026-07-01,\n",
+        encoding="utf-8",
+    )
+
+    try:
+        load_sector_mappings_csv(path)
+    except ValueError as exc:
+        assert "open-ended sector mapping" in str(exc)
+    else:
+        raise AssertionError("overlapping sector mapping was accepted")
