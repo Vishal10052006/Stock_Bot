@@ -12,6 +12,10 @@ from market.data.context.sector_context import (
     candles_to_context_frame,
 )
 from market.data.context.sector_mapping_io import load_sector_mappings_csv
+from market.data.context.sector_membership import (
+    PointInTimeSectorMembershipProvider,
+    SectorMembershipResolution,
+)
 from market.data.context.sector_registry import (
     DEFAULT_YFINANCE_INDEX_SYMBOLS,
     SECTOR_INDEX_SYMBOLS,
@@ -21,6 +25,8 @@ from market.data.context.sector_registry import (
 __all__ = [
     "CONTEXT_FEATURE_COLUMNS",
     "SectorMapping",
+    "SectorMembershipResolution",
+    "PointInTimeSectorMembershipProvider",
     "align_context",
     "build_context_returns",
     "build_sector_context",
