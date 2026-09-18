@@ -8,6 +8,7 @@ import pandas as pd
 from ml.datasets import TrainingDataset
 from ml.models import IsotonicProbabilityCalibrator, LogisticOutcomeModel
 from ml.prediction import SignalModel
+from market.features.builder import FEATURE_COLUMNS
 from ml.preprocessing import BOOLEAN_FEATURES, NUMERIC_FEATURES
 
 
@@ -45,6 +46,7 @@ def make_components():
     calibrator = IsotonicProbabilityCalibrator()
     calibrator.fit(raw, labels)
 
+    features = features.loc[:, list(FEATURE_COLUMNS)]
     return preprocessor, model, calibrator, features
 
 
