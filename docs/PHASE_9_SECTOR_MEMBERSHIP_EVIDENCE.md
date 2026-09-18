@@ -35,7 +35,7 @@ https://www.niftyindices.com/Press_Release/ind_prs23042026.pdf
 
 ### 2026-06-17 — Vedanta follow-up
 
-NSE Indices subsequently excluded Vedanta Power (VEDPOWER) and Vedanta Iron and Steel (VISL) from various indices, including Nifty Metal, effective June 19, 2026. This is a corporate-action event and therefore must be considered when constructing historical Nifty Metal membership.
+NSE Indices subsequently excluded Vedanta Power (VEDPOWER) and Vedanta Iron and Steel (VISL) from various indices, including Nifty Metal, effective June 19, 2026.
 
 Source:
 https://www.niftyindices.com/Press_Release/ind_prs17062026.pdf
@@ -47,35 +47,34 @@ The June 10 notice concerns strategy-index changes and criteria revisions rather
 Source:
 https://www.niftyindices.com/Press_Release/ind_prs10062026.pdf
 
-The July 13 notice includes a Nifty Pharma replacement caused by the amalgamation of J.B. Chemicals & Pharmaceuticals into Torrent Pharmaceuticals, effective July 17, 2026. This is a sector-index event and must be represented if either affected symbol is part of a Phase 9 universe.
+The July 13 notice includes a Nifty Pharma replacement caused by the amalgamation of J.B. Chemicals & Pharmaceuticals into Torrent Pharmaceuticals, effective July 17, 2026. Neither affected symbol is present in the current 70-symbol Phase 9 universe, so this event does not add a mapping for the current sample.
 
 Source:
 https://www.niftyindices.com/Press_Release/ind_prs13072026_1.pdf
 
-The July 17 notice for changes effective July 31 concerns ESG/Shariah indices and does not itself establish a Phase 9 sector-index membership change.
+The July 17 notice for changes effective July 31 concerns ESG/Shariah indices and does not establish a Phase 9 sector-index membership change.
 
 Source:
 https://www.niftyindices.com/Press_Release/ind_prs17072026_1.pdf
 
-The August 10 notice for changes effective August 31 is a Shariah-index review. The August 31 effective date is after the August 26 Phase 9 research date and before the September 11 research date, so any affected Phase 9 sector index must be checked separately before the September 11 snapshot is finalized.
+## Authoritative-data boundary
 
-NSE archive:
-https://www.niftyindices.com/press-release
+NSE Indices exposes historical index-level data publicly, but its data-subscription documentation states that index constituent data is a separate data product and is available through subscription/data vendors. Therefore the public press-release archive does not provide a complete historical constituent snapshot for every sector index and every Phase 9 research date.
 
-## Important boundary
+Sources:
+https://www.niftyindices.com/reports
+https://www.niftyindices.com/offerings/data-subscription
 
-These notices are reconstitution/change evidence. They are not, by themselves, complete historical constituent snapshots for every Phase 9 sector index.
-
-Therefore:
-1. A documented inclusion/exclusion may be encoded as a dated membership event.
-2. A no-changes statement may preserve a previously established baseline.
-3. A complete baseline cannot be fabricated from today's constituent list.
-4. Any symbol whose historical membership cannot be established remains unresolved until authoritative evidence is available.
-5. The Phase 9 dataset must not be rebuilt with sector features merely to eliminate NaNs.
+Consequences for Phase 9:
+1. Dated inclusion/exclusion events can be encoded as authoritative membership events.
+2. Explicit no-change statements can preserve an already established baseline.
+3. A complete baseline must come from an authoritative historical constituent snapshot; it must not be synthesized from today's constituent list.
+4. Symbols without provable historical membership remain unresolved.
+5. The dataset builder must fail or preserve missing sector context rather than silently fabricating membership.
 
 ## Reconstitution cadence
 
-NSE Indices' reconstitution calendar states that Nifty Auto and Nifty Bank are reviewed semi-annually on the last working day of March and September. The sector-index calendar is part of the evidence chain, but it does not replace constituent evidence or corporate-action notices.
+NSE Indices' reconstitution calendar states that Nifty Auto and Nifty Bank are reviewed semi-annually on the last working day of March and September. The calendar is part of the evidence chain, but it does not replace constituent evidence or corporate-action notices.
 
 Source:
 https://niftyindices.com/resources/index-rebalancing-schedule
