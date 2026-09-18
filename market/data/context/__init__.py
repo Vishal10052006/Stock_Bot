@@ -11,6 +11,7 @@ from market.data.context.sector_context import (
     build_sector_context,
     candles_to_context_frame,
 )
+from market.data.context.sector_mapping_io import load_sector_mappings_csv
 from market.data.context.sector_registry import (
     DEFAULT_YFINANCE_INDEX_SYMBOLS,
     SECTOR_INDEX_SYMBOLS,
@@ -27,5 +28,6 @@ __all__ = [
     "DEFAULT_YFINANCE_INDEX_SYMBOLS",
     "SECTOR_INDEX_SYMBOLS",
     "provider_symbols_for",
+    "load_sector_mappings_csv",
     "enrich_market_sector_context",
 ]
