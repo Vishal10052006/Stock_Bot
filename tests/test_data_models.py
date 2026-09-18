@@ -41,6 +41,22 @@ def test_invalid_market_bar_prices():
         )
 
 
+def test_non_finite_market_bar_is_rejected():
+    """NaN and infinity must not enter the market-data contract."""
+
+    for value in (float("nan"), float("inf"), float("-inf")):
+        with pytest.raises(ValueError, match="OHLCV values must be finite"):
+            MarketBar(
+                symbol="RELIANCE",
+                timestamp=datetime(2026, 8, 27, 9, 30),
+                open=value,
+                high=2520.0,
+                low=2490.0,
+                close=2510.0,
+                volume=100000,
+            )
+
+
 def test_valid_signal_result():
     """A valid normalized signal should be accepted."""
 
