@@ -12,7 +12,11 @@ from __future__ import annotations
 from ml.datasets.models import TrainingDataset
 from ml.training.models import TrainingResult
 
-from .metrics import evaluate_predictions
+from .metrics import (
+    evaluate_predictions,
+    expected_calibration_error,
+    multiclass_brier_score,
+)
 from .models import EvaluationConfig, EvaluationResult
 
 
@@ -114,6 +118,14 @@ def evaluate_training_result(
         ],
         macro_f1=metrics["macro_f1"],
         log_loss=metrics["log_loss"],
+        brier_score=multiclass_brier_score(
+            validation_dataset.y,
+            probabilities,
+        ),
+        expected_calibration_error=expected_calibration_error(
+            validation_dataset.y,
+            probabilities,
+        ),
         confusion_matrix=metrics[
             "confusion_matrix"
         ],
