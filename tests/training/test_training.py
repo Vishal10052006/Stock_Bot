@@ -119,6 +119,7 @@ def test_preprocessor_and_model_are_fitted():
 
     assert result.preprocessor.is_fitted
     assert result.model.is_fitted
+    assert result.calibrator.is_fitted
 
 
 def test_validation_probabilities_have_canonical_schema():
@@ -202,6 +203,8 @@ def test_training_only_fit_boundary(monkeypatch):
         "preprocessor_fit_rows": None,
         "preprocessor_transform_rows": [],
         "model_fit_rows": None,
+        "calibrator_fit_rows": None,
+        "calibrator_transform_rows": None,
     }
 
     class SpyPreprocessor:
@@ -229,6 +232,21 @@ def test_training_only_fit_boundary(monkeypatch):
                 (len(X), len(X.columns)),
                 dtype=float,
             )
+
+    class SpyCalibrator:
+        """Minimal probability-calibration spy."""
+
+        def __init__(self):
+            self.is_fitted = False
+
+        def fit(self, probabilities, y_true):
+            calls["calibrator_fit_rows"] = len(probabilities)
+            self.is_fitted = True
+            return self
+
+        def transform(self, probabilities):
+            calls["calibrator_transform_rows"] = len(probabilities)
+            return probabilities
 
     class SpyModel:
         """Minimal model-training spy."""
@@ -268,6 +286,12 @@ def test_training_only_fit_boundary(monkeypatch):
         SpyModel,
     )
 
+    monkeypatch.setattr(
+        trainer_module,
+        "IsotonicProbabilityCalibrator",
+        SpyCalibrator,
+    )
+
     result = train_baseline(dataset)
 
     assert (
@@ -280,16 +304,16 @@ def test_training_only_fit_boundary(monkeypatch):
         == result.train_rows
     )
 
-    assert calls[
-        "preprocessor_transform_rows"
-    ] == [result.validation_rows]
+    assert calls["preprocessor_fit_rows"] == result.train_rows
+    assert calls["model_fit_rows"] == result.train_rows
 
-    assert (
-        result.validation_rows
-        not in calls[
-            "preprocessor_transform_rows"
-        ][1:]
-    )
+    assert calls["preprocessor_transform_rows"] == [
+        result.calibration_rows,
+        result.validation_rows,
+    ]
+
+    assert calls["calibrator_fit_rows"] == result.calibration_rows
+    assert calls["calibrator_transform_rows"] == result.validation_rows
 
 
 def test_default_training_config_matches_phase9_baseline():
