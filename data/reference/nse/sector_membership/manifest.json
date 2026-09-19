@@ -1,0 +1,82 @@
+{
+  "schema_version": "1.1",
+  "description": "Point-in-time NSE stock-to-sector-index membership used by Phase 9.",
+  "rules": {
+    "effective_to_is_inclusive": true,
+    "missing_membership_is_missing": true,
+    "current_membership_must_not_be_backfilled": true,
+    "ticker_or_company_name_inference_forbidden": true,
+    "broad_industry_classification_is_not_sector_index_membership": true
+  },
+  "reconstruction": {
+    "baseline_as_of": "2026-08-31",
+    "historical_start": "2026-03-30",
+    "research_dates": [
+      "2026-06-29",
+      "2026-07-15",
+      "2026-08-05",
+      "2026-08-26",
+      "2026-09-11"
+    ],
+    "method": "Event-sourced reconstruction from the official 2026-08-31 constituent baseline and dated NSE sector-index/corporate-action notices. Only Phase 9 symbols present in the official baseline are mapped.",
+    "limitations": "The 12 baseline CSVs were downloaded locally on 2026-09-19. Their SHA-256 values were not captured in the repository-side environment; source URLs and dated NSE notices are recorded here. No broad-industry or ticker inference is used."
+  },
+  "sources": [
+    "https://www.niftyindices.com/indices/equity/sectoral-indices/nifty-auto",
+    "https://www.niftyindices.com/indices/equity/sectoral-indices/nifty-bank",
+    "https://www.niftyindices.com/indices/equity/sectoral-indices/nifty-financial-services",
+    "https://www.niftyindices.com/indices/equity/sectoral-indices/nifty-fmcg",
+    "https://www.niftyindices.com/indices/equity/sectoral-indices/nifty-it",
+    "https://www.niftyindices.com/indices/equity/sectoral-indices/nifty-media",
+    "https://www.niftyindices.com/indices/equity/sectoral-indices/nifty-metal",
+    "https://www.niftyindices.com/indices/equity/sectoral-indices/nifty-oil-and-gas-index",
+    "https://www.niftyindices.com/indices/equity/sectoral-indices/nifty-pharma",
+    "https://www.niftyindices.com/indices/equity/sectoral-indices/nifty-private-bank",
+    "https://www.niftyindices.com/indices/equity/sectoral-indices/nifty-psu-bank",
+    "https://www.niftyindices.com/indices/equity/sectoral-indices/nifty-realty",
+    "https://www.niftyindices.com/Press_Release/ind_prs23022026.pdf",
+    "https://www.niftyindices.com/Press_Release/ind_prs23042026.pdf",
+    "https://www.niftyindices.com/Press_Release/ind_prs17062026.pdf",
+    "https://www.niftyindices.com/Press_Release/ind_prs19062026.pdf",
+    "https://www.niftyindices.com/Press_Release/ind_prs22062026.pdf",
+    "https://www.niftyindices.com/Press_Release/ind_prs13072026_1.pdf",
+    "https://www.niftyindices.com/Press_Release/ind_prs10082026.pdf"
+  ],
+  "evidence": [
+    {
+      "effective_from": "2026-03-30",
+      "source": "NSE sector review",
+      "url": "https://www.niftyindices.com/Press_Release/ind_prs23022026.pdf"
+    },
+    {
+      "effective_from": "2026-04-30",
+      "source": "Vedanta demerger adjustment",
+      "url": "https://www.niftyindices.com/Press_Release/ind_prs23042026.pdf"
+    },
+    {
+      "effective_from": "2026-06-19",
+      "source": "Vedanta Power and Vedanta Iron and Steel exclusion",
+      "url": "https://www.niftyindices.com/Press_Release/ind_prs17062026.pdf"
+    },
+    {
+      "effective_from": "2026-06-23",
+      "source": "Vedanta Aluminium Metal exclusion",
+      "url": "https://www.niftyindices.com/Press_Release/ind_prs19062026.pdf"
+    },
+    {
+      "effective_from": "2026-06-24",
+      "source": "Vedanta Oil and Gas exclusion",
+      "url": "https://www.niftyindices.com/Press_Release/ind_prs22062026.pdf"
+    },
+    {
+      "effective_from": "2026-07-17",
+      "source": "Nifty Pharma replacement",
+      "url": "https://www.niftyindices.com/Press_Release/ind_prs13072026_1.pdf"
+    },
+    {
+      "effective_from": "2026-08-31",
+      "source": "Semi-annual sector review; WELCORP excluded from Nifty Metal and VAML included; no changes in Nifty Bank, Financial Services, IT, Oil & Gas, Pharma, Private Bank, PSU Bank and Realty",
+      "url": "https://www.niftyindices.com/Press_Release/ind_prs10082026.pdf"
+    }
+  ]
+}
