@@ -10,6 +10,7 @@ from typing import Any
 import yfinance as yf
 
 from market.candles.models import Candle
+from market.data.context.sector_registry import DEFAULT_YFINANCE_INDEX_SYMBOLS
 from market.data.historical.models import HistoricalDataRequest
 from market.data.historical.providers import (
     HistoricalMarketDataProvider,
@@ -32,10 +33,9 @@ class YFinanceHistoricalIndexMarketDataProvider(
         "Volume",
     )
 
-    DEFAULT_PROVIDER_SYMBOLS: Mapping[str, str] = {
-        "NIFTY50": "^NSEI",
-        "NIFTY_OIL_AND_GAS": "NIFTY_OIL_AND_GAS.NS",
-    }
+    DEFAULT_PROVIDER_SYMBOLS: Mapping[str, str] = (
+        DEFAULT_YFINANCE_INDEX_SYMBOLS
+    )
 
     def __init__(
         self,

@@ -24,6 +24,7 @@ from ml.training import (
     TrainingConfig,
     TrainingResult,
     train_baseline,
+    train_random_forest,
 )
 
 
@@ -119,6 +120,7 @@ def test_preprocessor_and_model_are_fitted():
 
     assert result.preprocessor.is_fitted
     assert result.model.is_fitted
+    assert result.calibrator.is_fitted
 
 
 def test_validation_probabilities_have_canonical_schema():
@@ -202,6 +204,8 @@ def test_training_only_fit_boundary(monkeypatch):
         "preprocessor_fit_rows": None,
         "preprocessor_transform_rows": [],
         "model_fit_rows": None,
+        "calibrator_fit_rows": None,
+        "calibrator_transform_rows": None,
     }
 
     class SpyPreprocessor:
@@ -229,6 +233,21 @@ def test_training_only_fit_boundary(monkeypatch):
                 (len(X), len(X.columns)),
                 dtype=float,
             )
+
+    class SpyCalibrator:
+        """Minimal probability-calibration spy."""
+
+        def __init__(self):
+            self.is_fitted = False
+
+        def fit(self, probabilities, y_true):
+            calls["calibrator_fit_rows"] = len(probabilities)
+            self.is_fitted = True
+            return self
+
+        def transform(self, probabilities):
+            calls["calibrator_transform_rows"] = len(probabilities)
+            return probabilities
 
     class SpyModel:
         """Minimal model-training spy."""
@@ -268,6 +287,12 @@ def test_training_only_fit_boundary(monkeypatch):
         SpyModel,
     )
 
+    monkeypatch.setattr(
+        trainer_module,
+        "IsotonicProbabilityCalibrator",
+        SpyCalibrator,
+    )
+
     result = train_baseline(dataset)
 
     assert (
@@ -280,16 +305,16 @@ def test_training_only_fit_boundary(monkeypatch):
         == result.train_rows
     )
 
-    assert calls[
-        "preprocessor_transform_rows"
-    ] == [result.validation_rows]
+    assert calls["preprocessor_fit_rows"] == result.train_rows
+    assert calls["model_fit_rows"] == result.train_rows
 
-    assert (
-        result.validation_rows
-        not in calls[
-            "preprocessor_transform_rows"
-        ][1:]
-    )
+    assert calls["preprocessor_transform_rows"] == [
+        result.calibration_rows,
+        result.validation_rows,
+    ]
+
+    assert calls["calibrator_fit_rows"] == result.calibration_rows
+    assert calls["calibrator_transform_rows"] == result.validation_rows
 
 
 def test_default_training_config_matches_phase9_baseline():
@@ -307,3 +332,27 @@ def test_default_training_config_matches_phase9_baseline():
     assert config.model.C == 1.0
     assert config.model.max_iter == 1000
     assert config.model.random_state == 42
+
+
+def test_train_random_forest_returns_calibrated_training_result():
+    """Random Forest uses the same leakage-safe training contract."""
+    dataset = make_dataset()
+
+    result = train_random_forest(dataset)
+
+    assert isinstance(result, TrainingResult)
+    assert result.preprocessor.is_fitted
+    assert result.model.is_fitted
+    assert result.calibrator.is_fitted
+    assert list(result.validation_probabilities.columns) == [
+        "LONG_SUCCESS",
+        "SHORT_SUCCESS",
+        "NO_EDGE",
+    ]
+    assert result.validation_rows == len(result.validation_probabilities)
+    np.testing.assert_allclose(
+        result.validation_probabilities.sum(axis=1).to_numpy(),
+        np.ones(result.validation_rows),
+        rtol=0,
+        atol=1e-10,
+    )
