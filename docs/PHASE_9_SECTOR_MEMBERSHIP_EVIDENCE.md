@@ -84,3 +84,9 @@ https://niftyindices.com/resources/index-rebalancing-schedule
 The PIT resolver and validation infrastructure are implemented. Historical membership data remains intentionally unpopulated until the evidence chain is complete enough to support each mapping.
 
 This is a deliberate data-integrity gate, not a missing implementation.
+
+## Phase 9 mapping artifact
+
+The PIT mapping artifact now contains explicit membership for the Phase 9 symbols that appear in the 2026-08-31 official sector constituent baseline. The reconstruction starts at the March 30, 2026 sector review and records the one current-universe sector change that affects a sampled symbol during the period: WELCORP is mapped to NIFTY_METAL through August 30, 2026 and is unmapped from NIFTY_METAL from August 31, 2026 because NSE's August 10 review replaces WELCORP with VAML. NSE also states that there were no changes in Nifty Bank, Nifty Financial Services, Nifty IT, Nifty Oil & Gas, Nifty Pharma, Nifty Private Bank, Nifty PSU Bank, or Nifty Realty in that August 31 review.
+
+The artifact deliberately does not create mappings for Phase 9 symbols that are not constituents of the selected sector indices. Missing sector membership therefore remains missing rather than being inferred from industry labels.
