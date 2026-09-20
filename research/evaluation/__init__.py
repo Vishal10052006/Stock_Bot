@@ -5,6 +5,11 @@ from research.evaluation.benchmark import (
     run_financial_phrasebank_benchmark,
     run_finbert_phrasebank_benchmark,
 )
+from research.evaluation.observation_builder import (
+    ResearchMarketObservation,
+    build_research_market_observations,
+    to_evaluation_observations,
+)
 from research.evaluation.intelligence import (
     ResearchEvaluationObservation,
     ResearchOutcomeEvaluation,
@@ -24,6 +29,9 @@ from research.evaluation.sentiment import (
 )
 
 __all__ = [
+    "ResearchMarketObservation",
+    "build_research_market_observations",
+    "to_evaluation_observations",
     "ResearchEvaluationObservation",
     "ResearchOutcomeEvaluation",
     "evaluate_research_outcomes",
