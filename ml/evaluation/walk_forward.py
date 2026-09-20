@@ -153,7 +153,7 @@ def evaluate_walk_forward(
                 train_end=split.train_end,
                 validation_start=split.validation_start,
                 validation_end=split.validation_end,
-                train_rows=split.train_rows if hasattr(split, "train_rows") else len(split.train.data),
+                train_rows=len(split.train.data),
                 validation_rows=len(split.validation.data),
                 accuracy=accuracy,
                 log_loss=log_loss,
