@@ -5,6 +5,11 @@ from research.evaluation.benchmark import (
     run_financial_phrasebank_benchmark,
     run_finbert_phrasebank_benchmark,
 )
+from research.evaluation.intelligence import (
+    ResearchEvaluationObservation,
+    ResearchOutcomeEvaluation,
+    evaluate_research_outcomes,
+)
 from research.evaluation.financial_phrasebank import (
     DATASET_ID,
     DATASET_VERSION,
@@ -19,6 +24,9 @@ from research.evaluation.sentiment import (
 )
 
 __all__ = [
+    "ResearchEvaluationObservation",
+    "ResearchOutcomeEvaluation",
+    "evaluate_research_outcomes",
     "FinancialPhraseBankBenchmark",
     "run_financial_phrasebank_benchmark",
     "run_finbert_phrasebank_benchmark",
