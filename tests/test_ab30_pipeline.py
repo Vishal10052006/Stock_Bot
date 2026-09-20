@@ -38,10 +38,11 @@ def _market_context(rows: int = 40) -> pd.DataFrame:
     return pd.DataFrame(
         {
             "timestamp": timestamps,
-            "market_return_1": [0.001] * rows,
-            "market_return_3": [0.006] * rows,
-            "market_return_12": [0.025] * rows,
-            "market_volatility_20": [0.015] * rows,
+            "close": [100.0] * rows,
+            "return_1": [0.001] * rows,
+            "return_3": [0.006] * rows,
+            "return_12": [0.025] * rows,
+            "volatility_20": [0.015] * rows,
         }
     )
 
