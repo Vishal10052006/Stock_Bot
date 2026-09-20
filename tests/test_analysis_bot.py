@@ -61,3 +61,22 @@ def test_feature_validation_rejects_infinity() -> None:
         assert "invalid feature value" in str(exc)
     else:
         raise AssertionError("infinity should be rejected")
+
+
+def test_analysis_engine_preserves_unknown_when_upstream_context_is_missing() -> None:
+    """Unknown input must not be promoted to a directional analytical state."""
+    import pandas as pd
+
+    from intelligence.analysis.contracts import AnalysisInput
+    from intelligence.analysis.engine import AnalysisEngine
+
+    context = AnalysisEngine().analyze(
+        AnalysisInput(
+            timestamp=pd.Timestamp("2026-09-20 10:25:00+05:30"),
+            symbol="TCS",
+            features={},
+        )
+    )
+
+    assert context.analytical_direction == "UNKNOWN"
+    assert context.analytical_state == "UNAVAILABLE"
