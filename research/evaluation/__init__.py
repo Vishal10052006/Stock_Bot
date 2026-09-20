@@ -1,5 +1,10 @@
 """Research NLP evaluation contracts and datasets."""
 
+from research.evaluation.benchmark import (
+    FinancialPhraseBankBenchmark,
+    run_financial_phrasebank_benchmark,
+    run_finbert_phrasebank_benchmark,
+)
 from research.evaluation.financial_phrasebank import (
     DATASET_ID,
     DATASET_VERSION,
@@ -14,6 +19,9 @@ from research.evaluation.sentiment import (
 )
 
 __all__ = [
+    "FinancialPhraseBankBenchmark",
+    "run_financial_phrasebank_benchmark",
+    "run_finbert_phrasebank_benchmark",
     "DATASET_ID",
     "DATASET_VERSION",
     "SOURCE_REFERENCE",
