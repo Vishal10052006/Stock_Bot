@@ -1,1 +1,1 @@
-"""Paper decision-loop integration."""\n
+"""Paper decision-loop integration."""
