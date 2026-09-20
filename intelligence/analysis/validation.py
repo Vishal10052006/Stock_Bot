@@ -1,10 +1,8 @@
 """Validation rules for AnalysisInput/AnalysisContext."""
 from __future__ import annotations
-
-from typing import Mapping, Any
-
+from typing import Any, Mapping
+import math
 import pandas as pd
-
 from intelligence.analysis.contracts import AnalysisContext
 
 
@@ -16,8 +14,6 @@ def validate_analysis_context(context: AnalysisContext) -> AnalysisContext:
         raise ValueError("analysis timestamp must be timezone-aware")
     if not context.symbol:
         raise ValueError("analysis symbol must not be empty")
-    if any(value != value for value in context.provenance.values() if isinstance(value, float)):
-        raise ValueError("provenance contains NaN")
     return context
 
 
@@ -30,5 +26,5 @@ def validate_feature_mapping(features: Mapping[str, Any]) -> None:
             number = float(value)
         except (TypeError, ValueError):
             continue
-        if number != number or number in (float("inf"), float("-inf")):
+        if not math.isfinite(number):
             raise ValueError(f"invalid feature value for {name}")
