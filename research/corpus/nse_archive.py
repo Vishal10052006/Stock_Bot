@@ -76,8 +76,20 @@ class NSEHistoricalArchiveClient:
                 subject = _first(normalized, "subject", "title")
                 details = _first(normalized, "details", "description", "content")
                 published_text = _first(normalized, "broadcast date/time", "broadcast_datetime", "broadcast date")
-                received_text = _first(normalized, "exchange received time", "received time", "received_time")
-                available_text = _first(normalized, "exchange dissemination time", "dissemination time", "dissemination_time")
+                received_text = _first(
+                    normalized,
+                    "exchange received time",
+                    "received time",
+                    "received_time",
+                    "receipt",
+                )
+                available_text = _first(
+                    normalized,
+                    "exchange dissemination time",
+                    "dissemination time",
+                    "dissemination_time",
+                    "dissemination",
+                )
                 if not symbol or not published_text or not received_text or not available_text:
                     raise ValueError("NSE archive row is missing PIT timestamp fields")
                 published_at = _parse_datetime(published_text)
