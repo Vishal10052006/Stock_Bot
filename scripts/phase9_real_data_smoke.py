@@ -3,6 +3,13 @@
 from __future__ import annotations
 
 from datetime import date
+from pathlib import Path
+import sys
+
+# Make the repository root importable when this file is executed directly.
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 import pandas as pd
 import yfinance as yf

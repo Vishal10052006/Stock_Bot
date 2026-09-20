@@ -62,6 +62,8 @@ class EvaluationResult:
     macro_f1: float
 
     log_loss: float
+    brier_score: float
+    expected_calibration_error: float
 
     confusion_matrix: np.ndarray
 
@@ -78,6 +80,8 @@ class EvaluationResult:
             self.macro_recall,
             self.macro_f1,
             self.log_loss,
+            self.brier_score,
+            self.expected_calibration_error,
         )
 
         if not all(
@@ -107,6 +111,16 @@ class EvaluationResult:
         if self.log_loss < 0.0:
             raise ValueError(
                 "log_loss must not be negative."
+            )
+
+        if self.brier_score < 0.0:
+            raise ValueError(
+                "brier_score must not be negative."
+            )
+
+        if not 0.0 <= self.expected_calibration_error <= 1.0:
+            raise ValueError(
+                "expected_calibration_error must lie in [0, 1]."
             )
 
         if self.sample_count <= 0:

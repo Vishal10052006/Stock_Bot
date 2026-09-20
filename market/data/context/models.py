@@ -54,20 +54,33 @@ def validate_sector_mappings(mappings: tuple[SectorMapping, ...]) -> None:
     if not mappings:
         raise ValueError("mappings must not be empty")
 
-    grouped: dict[str, list[SectorMapping]] = {}
+    grouped: dict[tuple[str, str], list[SectorMapping]] = {}
     for mapping in mappings:
         if not isinstance(mapping, SectorMapping):
             raise TypeError("mappings must contain SectorMapping values")
-        grouped.setdefault(mapping.symbol, []).append(mapping)
 
-    for symbol, values in grouped.items():
+        # A symbol may legitimately belong to multiple sector indices
+        # simultaneously. Validation therefore occurs independently for
+        # each symbol + sector-index membership series.
+        key = (
+            mapping.symbol,
+            mapping.sector_index_symbol,
+        )
+        grouped.setdefault(key, []).append(mapping)
+
+    for (symbol, sector_index_symbol), values in grouped.items():
         ordered = sorted(values, key=lambda item: item.effective_from)
+
         for previous, current in zip(ordered, ordered[1:]):
             if previous.effective_to is None:
                 raise ValueError(
-                    f"open-ended sector mapping for {symbol} cannot precede another mapping"
+                    "open-ended sector mapping for "
+                    f"{symbol}/{sector_index_symbol} cannot precede "
+                    "another mapping"
                 )
+
             if current.effective_from <= previous.effective_to:
                 raise ValueError(
-                    f"sector mappings overlap for {symbol}"
+                    "sector mappings overlap for "
+                    f"{symbol}/{sector_index_symbol}"
                 )

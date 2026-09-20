@@ -162,3 +162,67 @@ def test_sector_mapping_is_point_in_time() -> None:
         & (sector["timestamp"] == timestamps[2]),
         "return_1",
     ].iloc[0]
+
+
+def test_enrichment_uses_same_pit_sector_selection_as_provider() -> None:
+    from datetime import date
+
+    from market.data.context.models import SectorMapping
+    from market.data.context.sector_membership import (
+        PointInTimeSectorMembershipProvider,
+    )
+    from market.data.context.enrichment import _point_in_time_sector_index
+
+    timestamps = pd.DatetimeIndex(
+        [
+            pd.Timestamp("2026-08-26 09:15", tz="Asia/Kolkata"),
+            pd.Timestamp("2026-08-26 09:20", tz="Asia/Kolkata"),
+        ]
+    )
+
+    observations = pd.DataFrame(
+        {
+            "timestamp": timestamps,
+            "symbol": ["AXISBANK", "AXISBANK"],
+            "close": [100.0, 101.0],
+        }
+    )
+
+    mappings = (
+        SectorMapping(
+            symbol="AXISBANK",
+            sector_index_symbol="NIFTY_BANK",
+            effective_from=date(2026, 3, 30),
+        ),
+        SectorMapping(
+            symbol="AXISBANK",
+            sector_index_symbol="NIFTY_FINANCIAL_SERVICES",
+            effective_from=date(2026, 3, 30),
+        ),
+        SectorMapping(
+            symbol="AXISBANK",
+            sector_index_symbol="NIFTY_PRIVATE_BANK",
+            effective_from=date(2026, 3, 30),
+        ),
+    )
+
+    provider = PointInTimeSectorMembershipProvider(mappings)
+
+    expected = [
+        provider.resolve(
+            symbol=row.symbol,
+            as_of=row.timestamp.date(),
+        ).sector_index_symbol
+        for row in observations.itertuples(index=False)
+    ]
+
+    actual = _point_in_time_sector_index(
+        observations,
+        mappings,
+    ).tolist()
+
+    assert actual == expected
+    assert actual == [
+        "NIFTY_PRIVATE_BANK",
+        "NIFTY_PRIVATE_BANK",
+    ]
