@@ -1,11 +1,7 @@
 """Typed contracts for the STOCK_BOT Analysis Bot.
 
-The Analysis Bot consumes validated decision-time observations and emits
-an immutable, versioned analytical context. It never emits an order.
-
-Design references:
-    - STOCK_BOT — ANALYSIS BOT MASTER DEVELOPMENT PROMPT.
-    - ROADMAP_STOCK-BOT.pdf — existing Phase 4-6 market intelligence layers.
+The Analysis Bot consumes validated decision-time observations and emits an
+immutable, versioned analytical context. It never emits an order.
 """
 from __future__ import annotations
 
@@ -15,7 +11,6 @@ from typing import Any, Mapping
 
 import numpy as np
 import pandas as pd
-
 
 ANALYSIS_VERSION = "v1.0"
 FEATURE_CONTEXT_VERSION = "v1.0"
@@ -65,7 +60,6 @@ class AnalysisInput:
             raise AnalysisContractError("data_version must not be empty")
         if not self.feature_version:
             raise AnalysisContractError("feature_version must not be empty")
-
         object.__setattr__(self, "timestamp", timestamp)
         object.__setattr__(self, "symbol", symbol)
         object.__setattr__(self, "features", _sanitize_mapping(self.features))
@@ -80,7 +74,6 @@ class AnalysisContext:
 
     timestamp: pd.Timestamp
     symbol: str
-
     technical_context: Mapping[str, Any]
     structure_context: Mapping[str, Any]
     volume_context: Mapping[str, Any]
@@ -90,12 +83,10 @@ class AnalysisContext:
     relative_performance: Mapping[str, Any]
     research_context: Mapping[str, Any]
     feature_vector: Mapping[str, Any]
-
     analytical_direction: str = "UNKNOWN"
     analytical_state: str = "UNAVAILABLE"
     candidates: tuple[str, ...] = ()
     quality: Mapping[str, Any] = field(default_factory=dict)
-
     analysis_version: str = ANALYSIS_VERSION
     feature_version: str = FEATURE_CONTEXT_VERSION
     data_version: str = "unknown"
@@ -104,24 +95,14 @@ class AnalysisContext:
     def __post_init__(self) -> None:
         timestamp = _require_aware_timestamp(self.timestamp, "timestamp")
         symbol = self.symbol.strip().upper()
-
         if not symbol:
             raise AnalysisContractError("symbol must not be empty")
         if self.analytical_direction not in SUPPORTED_DIRECTIONS:
-            raise AnalysisContractError(
-                f"unsupported analytical_direction: {self.analytical_direction}"
-            )
+            raise AnalysisContractError(f"unsupported analytical_direction: {self.analytical_direction}")
         if self.analytical_state not in SUPPORTED_STATES:
-            raise AnalysisContractError(
-                f"unsupported analytical_state: {self.analytical_state}"
-            )
-        if not self.analysis_version:
-            raise AnalysisContractError("analysis_version must not be empty")
-        if not self.feature_version:
-            raise AnalysisContractError("feature_version must not be empty")
-        if not self.data_version:
-            raise AnalysisContractError("data_version must not be empty")
-
+            raise AnalysisContractError(f"unsupported analytical_state: {self.analytical_state}")
+        if not self.analysis_version or not self.feature_version or not self.data_version:
+            raise AnalysisContractError("version fields must be non-empty")
         object.__setattr__(self, "timestamp", timestamp)
         object.__setattr__(self, "symbol", symbol)
 
@@ -132,9 +113,7 @@ def dataframe_to_feature_mapping(row: pd.Series) -> dict[str, Any]:
     for column, value in row.items():
         if pd.isna(value):
             result[column] = None
-            continue
-
-        if isinstance(value, np.generic):
+        elif isinstance(value, np.generic):
             result[column] = value.item()
         elif isinstance(value, (pd.Timestamp, datetime)):
             result[column] = pd.Timestamp(value).isoformat()
