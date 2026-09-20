@@ -64,5 +64,5 @@ def test_research_outcome_rejects_non_future_outcome():
 def test_research_outcome_rejects_score_outside_model_contract():
     row = observation(1.5, 0.01)
 
-    with pytest.raises(ValueError, match="\[-1, 1\]"):
+    with pytest.raises(ValueError, match=r"\[-1, 1\]"):
         row.validate()
