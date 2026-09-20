@@ -174,12 +174,14 @@ def test_sector_mapping_csv_loader_is_strict(tmp_path) -> None:
     assert mappings[1].effective_to == date(2026, 8, 31)
 
 
-def test_sector_mapping_csv_loader_rejects_overlapping_history(tmp_path) -> None:
+def test_sector_mapping_csv_loader_rejects_overlapping_same_sector_history(
+    tmp_path,
+) -> None:
     path = tmp_path / "sector_mappings.csv"
     path.write_text(
         "symbol,sector_index_symbol,effective_from,effective_to\n"
         "RELIANCE,NIFTY_OIL_AND_GAS,2026-01-01,\n"
-        "RELIANCE,NIFTY_ENERGY,2026-07-01,\n",
+        "RELIANCE,NIFTY_OIL_AND_GAS,2026-07-01,\n",
         encoding="utf-8",
     )
 
@@ -188,4 +190,6 @@ def test_sector_mapping_csv_loader_rejects_overlapping_history(tmp_path) -> None
     except ValueError as exc:
         assert "open-ended sector mapping" in str(exc)
     else:
-        raise AssertionError("overlapping sector mapping was accepted")
+        raise AssertionError(
+            "overlapping same-sector membership was accepted"
+        )

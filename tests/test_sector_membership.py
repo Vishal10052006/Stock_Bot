@@ -127,3 +127,148 @@ def test_mappings_for_returns_only_active_mappings() -> None:
             effective_from=date(2026, 7, 1),
         ),
     )
+
+
+def test_resolve_selects_specific_sector_context_deterministically() -> None:
+    from datetime import date
+
+    from market.data.context.models import SectorMapping
+    from market.data.context.sector_membership import (
+        PointInTimeSectorMembershipProvider,
+    )
+
+    provider = PointInTimeSectorMembershipProvider(
+        (
+            SectorMapping(
+                symbol="AXISBANK",
+                sector_index_symbol="NIFTY_FINANCIAL_SERVICES",
+                effective_from=date(2026, 3, 30),
+            ),
+            SectorMapping(
+                symbol="AXISBANK",
+                sector_index_symbol="NIFTY_BANK",
+                effective_from=date(2026, 3, 30),
+            ),
+            SectorMapping(
+                symbol="AXISBANK",
+                sector_index_symbol="NIFTY_PRIVATE_BANK",
+                effective_from=date(2026, 3, 30),
+            ),
+        )
+    )
+
+    assert provider.resolve(
+        symbol="AXISBANK",
+        as_of=date(2026, 8, 26),
+    ).sector_index_symbol == "NIFTY_PRIVATE_BANK"
+
+
+def test_resolve_selects_psu_bank_for_sbin() -> None:
+    from datetime import date
+
+    from market.data.context.models import SectorMapping
+    from market.data.context.sector_membership import (
+        PointInTimeSectorMembershipProvider,
+    )
+
+    provider = PointInTimeSectorMembershipProvider(
+        (
+            SectorMapping(
+                symbol="SBIN",
+                sector_index_symbol="NIFTY_FINANCIAL_SERVICES",
+                effective_from=date(2026, 3, 30),
+            ),
+            SectorMapping(
+                symbol="SBIN",
+                sector_index_symbol="NIFTY_BANK",
+                effective_from=date(2026, 3, 30),
+            ),
+            SectorMapping(
+                symbol="SBIN",
+                sector_index_symbol="NIFTY_PSU_BANK",
+                effective_from=date(2026, 3, 30),
+            ),
+        )
+    )
+
+    assert provider.resolve(
+        symbol="SBIN",
+        as_of=date(2026, 8, 26),
+    ).sector_index_symbol == "NIFTY_PSU_BANK"
+
+
+def test_resolve_is_independent_of_mapping_order() -> None:
+    from datetime import date
+
+    from market.data.context.models import SectorMapping
+    from market.data.context.sector_membership import (
+        PointInTimeSectorMembershipProvider,
+    )
+
+    mappings = (
+        SectorMapping(
+            symbol="AXISBANK",
+            sector_index_symbol="NIFTY_FINANCIAL_SERVICES",
+            effective_from=date(2026, 3, 30),
+        ),
+        SectorMapping(
+            symbol="AXISBANK",
+            sector_index_symbol="NIFTY_PRIVATE_BANK",
+            effective_from=date(2026, 3, 30),
+        ),
+        SectorMapping(
+            symbol="AXISBANK",
+            sector_index_symbol="NIFTY_BANK",
+            effective_from=date(2026, 3, 30),
+        ),
+    )
+
+    expected = "NIFTY_PRIVATE_BANK"
+
+    for ordered in (
+        mappings,
+        (mappings[2], mappings[0], mappings[1]),
+        (mappings[1], mappings[2], mappings[0]),
+    ):
+        provider = PointInTimeSectorMembershipProvider(ordered)
+
+        assert provider.resolve(
+            symbol="AXISBANK",
+            as_of=date(2026, 8, 26),
+        ).sector_index_symbol == expected
+
+
+def test_sbin_resolution_is_independent_of_mapping_order() -> None:
+    from datetime import date
+
+    from market.data.context.models import SectorMapping
+    from market.data.context.sector_membership import (
+        PointInTimeSectorMembershipProvider,
+    )
+
+    mappings = (
+        SectorMapping(
+            symbol="SBIN",
+            sector_index_symbol="NIFTY_BANK",
+            effective_from=date(2026, 3, 30),
+        ),
+        SectorMapping(
+            symbol="SBIN",
+            sector_index_symbol="NIFTY_FINANCIAL_SERVICES",
+            effective_from=date(2026, 3, 30),
+        ),
+        SectorMapping(
+            symbol="SBIN",
+            sector_index_symbol="NIFTY_PSU_BANK",
+            effective_from=date(2026, 3, 30),
+        ),
+    )
+
+    provider = PointInTimeSectorMembershipProvider(
+        (mappings[1], mappings[2], mappings[0])
+    )
+
+    assert provider.resolve(
+        symbol="SBIN",
+        as_of=date(2026, 8, 26),
+    ).sector_index_symbol == "NIFTY_PSU_BANK"

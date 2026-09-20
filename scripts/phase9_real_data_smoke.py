@@ -2,12 +2,19 @@
 
 from __future__ import annotations
 
+from datetime import date
 from pathlib import Path
+import sys
+
+# Make the repository root importable when this file is executed directly.
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 import pandas as pd
 import yfinance as yf
 
-from market.data.context import build_context_returns, load_sector_mappings_csv
+from market.data.context import SectorMapping, build_context_returns
 from market.data.historical.adapters import (
     YFinanceHistoricalIndexMarketDataProvider,
     YFinanceHistoricalMarketDataProvider,
@@ -143,20 +150,13 @@ sector_context = build_context_returns(
     key_column="sector_index_symbol",
 )
 
-sector_mapping_path = Path(
-    "data/reference/nse/sector_membership/sector_membership.csv"
+sector_mapping = (
+    SectorMapping(
+        symbol="RELIANCE",
+        sector_index_symbol="NIFTY_OIL_AND_GAS",
+        effective_from=date(2026, 9, 9),
+    ),
 )
-sector_mappings = load_sector_mappings_csv(sector_mapping_path)
-sector_mapping = tuple(
-    mapping
-    for mapping in sector_mappings
-    if mapping.symbol == "RELIANCE"
-    and mapping.sector_index_symbol == "NIFTY_OIL_AND_GAS"
-)
-if not sector_mapping:
-    raise RuntimeError(
-        "RELIANCE/NIFTY_OIL_AND_GAS membership is missing from the PIT artifact"
-    )
 
 print("    Sector:", sector_request.symbol)
 print("    Provider symbol:",

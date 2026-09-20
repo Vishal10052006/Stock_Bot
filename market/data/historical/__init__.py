@@ -191,3 +191,13 @@ from market.data.historical.point_in_time_universe import (
     UniverseIdentityRecord,
     build_point_in_time_universe,
 )
+
+from market.data.historical.nse_security_master_history_provider import (
+    NSESecurityMasterHistoryProvider,
+    NSESecurityLineageProvider,
+)
+
+__all__ += [
+    "NSESecurityMasterHistoryProvider",
+    "NSESecurityLineageProvider",
+]

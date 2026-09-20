@@ -30,4 +30,15 @@ __all__ = [
     "validate_training_dataset",
     "Phase9DatasetResult",
     "build_phase9_dataset",
+    "MultiSymbolPhase9Failure",
+    "MultiSymbolPhase9InstrumentResult",
+    "MultiSymbolPhase9Result",
+    "build_multi_symbol_phase9_dataset",
 ]
+
+from .multi_symbol import (
+    MultiSymbolPhase9Failure,
+    MultiSymbolPhase9InstrumentResult,
+    MultiSymbolPhase9Result,
+    build_multi_symbol_phase9_dataset,
+)

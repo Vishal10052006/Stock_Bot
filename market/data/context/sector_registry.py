@@ -17,6 +17,7 @@ DEFAULT_YFINANCE_INDEX_SYMBOLS: Mapping[str, str] = MappingProxyType(
         "NIFTY50": "^NSEI",
         "NIFTY_AUTO": "^CNXAUTO",
         "NIFTY_BANK": "^NSEBANK",
+        "NIFTY_PRIVATE_BANK": "NIFTY_PVT_BANK.NS",
         "NIFTY_FINANCIAL_SERVICES": "NIFTY_FIN_SERVICE.NS",
         "NIFTY_FMCG": "^CNXFMCG",
         "NIFTY_IT": "^CNXIT",
@@ -37,6 +38,77 @@ DEFAULT_YFINANCE_INDEX_SYMBOLS: Mapping[str, str] = MappingProxyType(
         "NIFTY_SERVICES_SECTOR": "^CNXSERVICE",
     }
 )
+
+DEFAULT_UPSTOX_INDEX_INSTRUMENT_KEYS: Mapping[str, str] = MappingProxyType(
+    {
+        "NIFTY_AUTO": "NSE_INDEX|Nifty Auto",
+        "NIFTY_BANK": "NSE_INDEX|Nifty Bank",
+        "NIFTY_FINANCIAL_SERVICES": "NSE_INDEX|Nifty Fin Service",
+        "NIFTY_FMCG": "NSE_INDEX|Nifty FMCG",
+        "NIFTY_IT": "NSE_INDEX|Nifty IT",
+        "NIFTY_MEDIA": "NSE_INDEX|Nifty Media",
+        "NIFTY_METAL": "NSE_INDEX|Nifty Metal",
+        "NIFTY_OIL_AND_GAS": "NSE_INDEX|NIFTY OIL AND GAS",
+        "NIFTY_PHARMA": "NSE_INDEX|Nifty Pharma",
+        "NIFTY_PRIVATE_BANK": "NSE_INDEX|Nifty Pvt Bank",
+        "NIFTY_PSU_BANK": "NSE_INDEX|Nifty PSU Bank",
+        "NIFTY_REALTY": "NSE_INDEX|Nifty Realty",
+    }
+)
+
+
+# Deterministic model-side policy for reducing simultaneous PIT
+# memberships to the single sector context represented by the existing
+# sector_* feature family.
+#
+# This is NOT an NSE classification hierarchy. It is a feature-engineering
+# policy and therefore must remain explicit, versioned, and tested.
+SECTOR_CONTEXT_PRIORITY: tuple[str, ...] = (
+    "NIFTY_PRIVATE_BANK",
+    "NIFTY_PSU_BANK",
+    "NIFTY_BANK",
+    "NIFTY_AUTO",
+    "NIFTY_FMCG",
+    "NIFTY_IT",
+    "NIFTY_MEDIA",
+    "NIFTY_METAL",
+    "NIFTY_OIL_AND_GAS",
+    "NIFTY_PHARMA",
+    "NIFTY_REALTY",
+    "NIFTY_FINANCIAL_SERVICES",
+)
+
+_SECTOR_CONTEXT_PRIORITY_RANK = {
+    symbol: rank
+    for rank, symbol in enumerate(SECTOR_CONTEXT_PRIORITY)
+}
+
+def upstox_index_instrument_key(symbol: str) -> str:
+    """Return the verified Upstox instrument key for a canonical sector index."""
+    normalized = symbol.strip().upper()
+
+    try:
+        return DEFAULT_UPSTOX_INDEX_INSTRUMENT_KEYS[normalized]
+    except KeyError as exc:
+        raise ValueError(
+            f"unsupported canonical Upstox sector index: {normalized!r}"
+        ) from exc
+
+
+def sector_context_priority(sector_index_symbol: str) -> int:
+    """Return deterministic feature-context priority for a sector index.
+
+    Registered NSE sector indices use the explicit model policy.
+    Unknown identifiers are assigned a deterministic fallback priority
+    after all registered sectors. This keeps the resolver generic for
+    synthetic/test contexts without changing production ordering.
+    """
+    normalized = sector_index_symbol.strip().upper()
+
+    return _SECTOR_CONTEXT_PRIORITY_RANK.get(
+        normalized,
+        len(SECTOR_CONTEXT_PRIORITY),
+    )
 
 
 SECTOR_INDEX_SYMBOLS: tuple[str, ...] = tuple(

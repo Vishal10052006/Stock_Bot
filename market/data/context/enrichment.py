@@ -7,6 +7,7 @@ import pandas as pd
 
 from market.data.context.alignment import align_context
 from market.data.context.models import SectorMapping, validate_sector_mappings
+from market.data.context.sector_membership import PointInTimeSectorMembershipProvider
 
 
 CONTEXT_FEATURE_COLUMNS: tuple[str, ...] = (
@@ -54,65 +55,24 @@ def _point_in_time_sector_index(
     observations: pd.DataFrame,
     mappings: tuple[SectorMapping, ...],
 ) -> pd.Series:
-    """Return the sector index valid at every observation timestamp."""
+    """Return the explicitly selected PIT sector index per observation."""
     validate_sector_mappings(mappings)
-    timezone = observations["timestamp"].dt.tz
 
-    mapping_rows: list[dict[str, object]] = []
-    for mapping in mappings:
-        effective_to = None
-        if mapping.effective_to is not None:
-            # SectorMapping.effective_to is inclusive for the entire exchange
-            # day, so represent it as the final nanosecond of that local day.
-            effective_to = (
-                _localize_mapping_date(mapping.effective_to, timezone)
-                + pd.Timedelta(days=1)
-                - pd.Timedelta(nanoseconds=1)
-            )
+    provider = PointInTimeSectorMembershipProvider(mappings)
 
-        mapping_rows.append(
-            {
-                "symbol": mapping.symbol,
-                "sector_index_symbol": mapping.sector_index_symbol,
-                "effective_from": _localize_mapping_date(
-                    mapping.effective_from,
-                    timezone,
-                ),
-                "effective_to": effective_to,
-            }
+    values: list[str | None] = []
+    for row in observations[["timestamp", "symbol"]].itertuples(index=False):
+        values.append(
+            provider.resolve(
+                symbol=row.symbol,
+                as_of=row.timestamp.date(),
+            ).sector_index_symbol
         )
 
-    mapping_frame = pd.DataFrame(mapping_rows)
-    mapping_frame["effective_from"] = mapping_frame["effective_from"].dt.as_unit("ns")
-    if mapping_frame["effective_to"].notna().any():
-        mapping_frame["effective_to"] = mapping_frame["effective_to"].dt.as_unit("ns")
-    mapping_frame = mapping_frame.sort_values(
-        ["effective_from", "symbol"],
-        kind="stable",
-    )
-
-    left = observations[["timestamp", "symbol"]].copy()
-    left["timestamp"] = left["timestamp"].dt.as_unit("ns")
-    left["_row_id"] = observations.index
-    left = left.sort_values(["timestamp", "symbol"], kind="stable")
-
-    result = pd.merge_asof(
-        left,
-        mapping_frame,
-        left_on="timestamp",
-        right_on="effective_from",
-        by="symbol",
-        direction="backward",
-        allow_exact_matches=True,
-    )
-
-    valid = result["effective_to"].isna() | (
-        result["timestamp"] <= result["effective_to"]
-    )
-    result.loc[~valid, "sector_index_symbol"] = pd.NA
-
-    return result.set_index("_row_id")["sector_index_symbol"].reindex(
-        observations.index
+    return pd.Series(
+        values,
+        index=observations.index,
+        dtype="string",
     )
 
 

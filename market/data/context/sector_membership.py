@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from datetime import date
 
 from market.data.context.models import SectorMapping, validate_sector_mappings
+from market.data.context.sector_registry import sector_context_priority
 
 
 @dataclass(frozen=True, slots=True)
@@ -64,9 +65,21 @@ class PointInTimeSectorMembershipProvider:
             )
         ]
 
-        sector_index_symbol = (
-            matches[0].sector_index_symbol if matches else None
-        )
+        if matches:
+            # Multiple simultaneous sector memberships are valid. The
+            # existing feature schema has one sector_* family, so reduce
+            # them using the explicit, deterministic model-side policy.
+            selected = min(
+                matches,
+                key=lambda mapping: (
+                    sector_context_priority(mapping.sector_index_symbol),
+                    -mapping.effective_from.toordinal(),
+                    mapping.sector_index_symbol,
+                ),
+            )
+            sector_index_symbol = selected.sector_index_symbol
+        else:
+            sector_index_symbol = None
         return SectorMembershipResolution(
             symbol=normalized_symbol,
             as_of=as_of,

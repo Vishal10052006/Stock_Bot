@@ -19,6 +19,7 @@ from market.data.historical.providers import (
 from market.data.ingestion.providers.upstox.instrument_mapper import (
     UpstoxInstrumentMapper,
 )
+from market.data.context.sector_registry import upstox_index_instrument_key
 
 
 DEFAULT_HISTORICAL_URL = (
@@ -223,6 +224,17 @@ class UpstoxHistoricalMarketDataProvider(
                 "Upstox returned an invalid canonical candle"
             ) from exc
 
+    @staticmethod
+    def _instrument_key(
+        request: HistoricalDataRequest,
+        instrument_mapper: UpstoxInstrumentMapper,
+    ) -> str:
+        """Resolve canonical equity or Phase 9 sector-index identity."""
+        try:
+            return upstox_index_instrument_key(request.symbol)
+        except ValueError:
+            return instrument_mapper.instrument_key(request.symbol)
+
     def provenance(
         self,
         request: HistoricalDataRequest,
@@ -230,8 +242,9 @@ class UpstoxHistoricalMarketDataProvider(
         """Return deterministic Upstox source identity metadata."""
         self._validate_request(request)
 
-        instrument_key = self.instrument_mapper.instrument_key(
-            request.symbol
+        instrument_key = self._instrument_key(
+            request,
+            self.instrument_mapper,
         )
 
         return {
@@ -247,8 +260,9 @@ class UpstoxHistoricalMarketDataProvider(
 
         self._validate_request(request)
 
-        instrument_key = self.instrument_mapper.instrument_key(
-            request.symbol
+        instrument_key = self._instrument_key(
+            request,
+            self.instrument_mapper,
         )
 
         encoded_instrument = quote(

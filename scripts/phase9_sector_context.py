@@ -2,8 +2,7 @@
 
 This helper keeps sector membership resolution separate from market-data
 acquisition and fetches only sector indices explicitly mapped to the supplied
-Phase 9 symbols. It is intended for the date-scoped multi-symbol builder so
-intraday provider history limits do not require one oversized request.
+Phase 9 symbols.
 """
 
 from __future__ import annotations
@@ -36,16 +35,13 @@ def build_phase9_sector_context_for_date(
     lookback_days: int = 15,
     timeframe_minutes: int = 5,
 ) -> pd.DataFrame:
-    """Fetch only PIT-mapped sector indices for one research date.
-
-    The returned frame is causal sector-index context. Membership is resolved
-    as of the exchange-local research date before any sector series is fetched.
-    """
+    """Fetch only PIT-mapped sector indices for one research date."""
     if lookback_days <= 0:
         raise ValueError("lookback_days must be positive")
 
     mappings = load_sector_mappings_csv(MAPPING_PATH)
     membership = PointInTimeSectorMembershipProvider(mappings)
+
     resolved = membership.resolve_many(
         symbols=symbols,
         as_of=as_of,

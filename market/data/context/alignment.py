@@ -46,9 +46,17 @@ def _validate_frame(
 
 
 def _as_nanosecond_timestamps(data: pd.DataFrame) -> pd.DataFrame:
-    """Normalize timestamp resolution for pandas as-of joins."""
+    """Normalize timezone and timestamp resolution for pandas as-of joins.
+
+    All timezone-aware timestamps are converted to UTC so independently
+    sourced context and observation frames use one canonical datetime dtype.
+    """
     result = data.copy()
-    result["timestamp"] = result["timestamp"].dt.as_unit("ns")
+    result["timestamp"] = (
+        result["timestamp"]
+        .dt.tz_convert("UTC")
+        .dt.as_unit("ns")
+    )
     return result
 
 
@@ -89,6 +97,14 @@ def align_context(
     right = _as_nanosecond_timestamps(
         context.loc[:, list(dict.fromkeys(right_columns))]
     )
+
+    if context_key is not None:
+        # pandas merge_asof requires identical dtypes for `by=`.
+        # Explicitly use the Python-backed StringDtype on both sides
+        # so Arrow-backed/string-na_value differences cannot break
+        # otherwise valid keyed context alignment.
+        left[context_key] = left[context_key].astype("string[python]")
+        right[context_key] = right[context_key].astype("string[python]")
 
     if context_key is None:
         right = right.sort_values("timestamp", kind="stable")
