@@ -12,6 +12,8 @@ from datetime import datetime
 from typing import Sequence
 
 from research.contracts import ResearchDocument
+from research.corpus.adapter import archive_record_to_document
+from research.corpus.archive import HistoricalArchiveRecord
 from research.corpus.schema import (
     HistoricalResearchCorpus,
     ResearchCorpusDocument,
@@ -36,6 +38,34 @@ class HistoricalCorpusBuildAudit:
 class HistoricalResearchCorpusBuilder:
     """Build a PIT-valid corpus from archived ResearchDocument records."""
 
+    def build_from_archive_records(
+        self,
+        records: Sequence[HistoricalArchiveRecord],
+        *,
+        manifest: ResearchCorpusManifest,
+        symbols: Sequence[str] = (),
+        time_start: datetime | None = None,
+        time_end: datetime | None = None,
+        require_point_in_time: bool = True,
+        processed_at: datetime | None = None,
+    ) -> tuple[HistoricalResearchCorpus, HistoricalCorpusBuildAudit]:
+        """Adapt archived records, then build the normal validated corpus.
+
+        The adapter preserves all causal source timestamps. processed_at only
+        controls non-causal processing provenance on ResearchDocument.
+        """
+        documents = tuple(
+            archive_record_to_document(record, processed_at=processed_at)
+            for record in records
+        )
+        return self.build(
+            documents,
+            manifest=manifest,
+            symbols=symbols,
+            time_start=time_start,
+            time_end=time_end,
+            require_point_in_time=require_point_in_time,
+        )
     def build(
         self,
         documents: Sequence[ResearchDocument],
