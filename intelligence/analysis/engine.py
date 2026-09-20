@@ -22,6 +22,9 @@ class AnalysisEngine:
 
     def analyze(self, analysis_input: AnalysisInput) -> AnalysisContext:
         features = analysis_input.features
+        # Validate scalar feature health before analysis; missing values remain missing.
+        from intelligence.analysis.validation import validate_feature_mapping
+        validate_feature_mapping(features)
         technical = analyze_technical(features)
         structure = analyze_structure(features)
         volume = analyze_volume(features)
