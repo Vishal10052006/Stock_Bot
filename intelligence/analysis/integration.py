@@ -10,7 +10,7 @@ from typing import Any
 
 import pandas as pd
 
-from intelligence.analysis.contracts import AnalysisContext
+from intelligence.analysis.contracts import AnalysisContext, AnalysisInput
 from intelligence.analysis.engine import AnalysisEngine
 from market.features.validation import validate_feature_dataset
 
@@ -90,7 +90,7 @@ def build_analysis_context(
 
     engine = analysis_engine or AnalysisEngine()
     return engine.analyze(
-        __import__("intelligence.analysis.contracts", fromlist=["AnalysisInput"]).AnalysisInput(
+        AnalysisInput(
             timestamp=timestamp,
             symbol=symbol,
             features=features,
