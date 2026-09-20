@@ -73,28 +73,26 @@ def test_builder_deduplicates_document_ids_deterministically():
     assert audit.duplicate_documents == 1
 
 
-def test_builder_rejects_timezone_naive_historical_documents():
+def test_document_contract_rejects_mixed_timezone_timestamps():
     bad = doc("naive")
-    naive = ResearchDocument(
-        document_id=bad.document_id,
-        source_id=bad.source_id,
-        external_id=bad.external_id,
-        title=bad.title,
-        content=bad.content,
-        published_at=bad.published_at.replace(tzinfo=None),
-        observed_at=bad.observed_at,
-        processed_at=bad.processed_at,
-        available_at=bad.available_at,
-        symbols=bad.symbols,
-    )
 
-    corpus, audit = HistoricalResearchCorpusBuilder().build(
-        (naive,),
-        manifest=manifest(),
-    )
-
-    assert corpus.document_count == 0
-    assert audit.rejected_document_ids == ("naive",)
+    try:
+        ResearchDocument(
+            document_id=bad.document_id,
+            source_id=bad.source_id,
+            external_id=bad.external_id,
+            title=bad.title,
+            content=bad.content,
+            published_at=bad.published_at.replace(tzinfo=None),
+            observed_at=bad.observed_at,
+            processed_at=bad.processed_at,
+            available_at=bad.available_at,
+            symbols=bad.symbols,
+        )
+    except TypeError as exc:
+        assert "offset-naive" in str(exc)
+    else:
+        raise AssertionError("mixed timezone timestamps must be rejected")
 
 
 def test_builder_preserves_source_reference_and_fingerprint():
