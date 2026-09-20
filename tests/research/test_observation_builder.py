@@ -25,11 +25,12 @@ class FakeSentiment:
         )
 
 
-def make_doc(*, available_at, content="earnings increased"):
+def make_doc(*, available_at, document_id=None, content="earnings increased"):
+    minute_id = int((available_at - T0).total_seconds() // 60)
     return ResearchDocument(
-        document_id=f"doc-{available_at.minute}",
+        document_id=document_id or f"doc-{minute_id}",
         source_id="test-source",
-        external_id=f"x-{available_at.minute}",
+        external_id=f"x-{minute_id}",
         title="Test",
         content=content,
         published_at=available_at - timedelta(minutes=1),
@@ -60,8 +61,8 @@ def test_builder_uses_only_research_available_at_decision_close():
         for i in range(13)
     )
     docs = (
-        make_doc(available_at=T0 + timedelta(minutes=4)),
-        make_doc(available_at=T0 + timedelta(minutes=11)),
+        make_doc(available_at=T0 + timedelta(minutes=4), document_id="doc-4"),
+        make_doc(available_at=T0 + timedelta(minutes=11), document_id="doc-11"),
     )
 
     rows = build_research_market_observations(
@@ -91,7 +92,7 @@ def test_builder_requires_exact_future_candle_and_uses_close_to_close_return():
         make_candle(T0 + timedelta(minutes=10), 102.0),
         make_candle(T0 + timedelta(minutes=15), 103.0),
     )
-    docs = (make_doc(available_at=T0),)
+    docs = (make_doc(available_at=T0, document_id="doc-0"),)
 
     rows = build_research_market_observations(
         symbol="ABC",
@@ -105,6 +106,7 @@ def test_builder_requires_exact_future_candle_and_uses_close_to_close_return():
     )
 
     assert len(rows) == 2
+    assert rows[0].decision_time == T0 + timedelta(minutes=5)
     assert rows[0].decision_close == 101.0
     assert rows[0].outcome_close == 103.0
     assert rows[0].forward_return == pytest.approx(103.0 / 101.0 - 1.0)
@@ -116,7 +118,7 @@ def test_future_document_never_enters_context():
         make_candle(T0 + timedelta(minutes=5), 101.0),
         make_candle(T0 + timedelta(minutes=10), 102.0),
     )
-    future_doc = make_doc(available_at=T0 + timedelta(minutes=7))
+    future_doc = make_doc(available_at=T0 + timedelta(minutes=7), document_id="doc-7")
 
     rows = build_research_market_observations(
         symbol="ABC",
@@ -130,7 +132,8 @@ def test_future_document_never_enters_context():
         require_evidence=True,
     )
 
-    assert rows[0].decision_time == T0 + timedelta(minutes=10)
+    assert len(rows) == 1
+    assert rows[0].decision_time == T0 + timedelta(minutes=15)
     assert rows[0].source_document_ids == ("doc-7",)
 
 
@@ -139,7 +142,7 @@ def test_conversion_preserves_causal_contract():
         make_candle(T0, 100.0),
         make_candle(T0 + timedelta(minutes=5), 101.0),
     )
-    docs = (make_doc(available_at=T0),)
+    docs = (make_doc(available_at=T0, document_id="doc-0"),)
 
     rows = build_research_market_observations(
         symbol="ABC",
