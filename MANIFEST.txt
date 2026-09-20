@@ -1,0 +1,8 @@
+STOCK_BOT Research Bot Step 2
+
+New domain: research/
+Worker adapter: workers/research_worker.py
+Tests: tests/research/test_research_bot.py
+No existing files are overwritten by this package.
+No memory/long_term_memory.json modification is included.
+No git add/commit/push is performed by this artifact.
