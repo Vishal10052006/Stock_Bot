@@ -32,3 +32,16 @@ records = client.parse_csv(path, archived_at=datetime.now(ist))
 Do not commit raw archives unless their licensing and repository-size policy
 permit it. Prefer storing retrieval metadata and a checksum alongside the
 local archive.
+## CLI
+
+After the repository is pulled, a real archive can be downloaded and materialized with:
+
+```bash
+python scripts/research/ingest_nse_archive.py \
+  --start 2026-01-01 \
+  --end 2026-09-15 \
+  --version 2026-01-01_2026-09-15
+```
+
+The command creates a local raw CSV, historical_archive.jsonl, and manifest.json
+under data/research_archive/. The raw CSV is not automatically committed.
