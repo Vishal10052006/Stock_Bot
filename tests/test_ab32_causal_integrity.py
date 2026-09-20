@@ -14,7 +14,7 @@ from ml.datasets.splitting import temporal_split
 from ml.preprocessing.pipeline import FeaturePreprocessor
 
 
-def _candles(rows: int = 45) -> pd.DataFrame:
+def _candles(rows: int = 180) -> pd.DataFrame:
     timestamps = pd.date_range(
         "2026-09-20 09:15:00+05:30",
         periods=rows,
@@ -34,7 +34,7 @@ def _candles(rows: int = 45) -> pd.DataFrame:
     )
 
 
-def _market_context(rows: int = 45) -> pd.DataFrame:
+def _market_context(rows: int = 180) -> pd.DataFrame:
     timestamps = pd.date_range(
         "2026-09-20 09:15:00+05:30",
         periods=rows,
