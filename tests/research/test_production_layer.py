@@ -137,9 +137,10 @@ def test_walk_forward_has_purge():
         purge=timedelta(days=2),
     )
     assert folds
+    first_fold = folds[0]
     assert all(
-        times[i] < times[fold.validation_indices[0]]
-        for i in folds[0].train_indices
+        times[i] < times[first_fold.validation_indices[0]]
+        for i in first_fold.train_indices
     )
 
 
