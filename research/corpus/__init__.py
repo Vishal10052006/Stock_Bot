@@ -5,6 +5,7 @@ from research.corpus.archive import HISTORICAL_ARCHIVE_SCHEMA_VERSION, Historica
 from research.corpus.archive_jsonl import HistoricalArchiveJsonlLoader
 from research.corpus.builder import HistoricalCorpusBuildAudit, HistoricalResearchCorpusBuilder
 from research.corpus.loader import HistoricalResearchCorpusLoader
+from research.corpus.nse_archive import NSEHistoricalArchiveClient
 from research.corpus.schema import (
     CORPUS_SCHEMA_VERSION,
     HistoricalResearchCorpus,
@@ -22,6 +23,7 @@ __all__ = [
     "HistoricalResearchCorpus",
     "HistoricalResearchCorpusBuilder",
     "HistoricalResearchCorpusLoader",
+    "NSEHistoricalArchiveClient",
     "ResearchCorpusDocument",
     "ResearchCorpusManifest",
 ]
