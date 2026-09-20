@@ -25,6 +25,7 @@ This package implements the deterministic Research Bot foundation for RB-0 throu
 | RB-14 Monitoring | `research/monitoring/` |
 | RB-17.2.1 Historical Archive Contract | `research/corpus/archive.py` |
 | RB-17.2.4 Historical Archive JSONL Ingestion | `research/corpus/archive_jsonl.py` |
+| RB-17.2.5 NSE Historical Archive Intake | `research/corpus/nse_archive.py` |
 
 ## Important research safeguards
 
