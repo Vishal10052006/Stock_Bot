@@ -98,6 +98,7 @@ def test_archive_to_corpus_to_observation_preserves_pit_availability():
     assert rows
     assert rows[0].source_document_ids == ("archive-abc",)
     assert rows[0].feature_available_at == T0 + timedelta(minutes=3)
-    assert rows[0].decision_time == T0 + timedelta(minutes=10)
+    # The first 5-minute candle closes at T0+5; decision_time is candle completion.
+    assert rows[0].decision_time == T0 + timedelta(minutes=5)
     assert rows[0].feature_available_at < rows[0].decision_time
     assert rows[0].outcome_timestamp == T0 + timedelta(minutes=20)
