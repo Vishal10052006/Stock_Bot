@@ -67,14 +67,16 @@ def test_ab32_appending_future_candle_does_not_change_past_analysis() -> None:
     _, base_features = _feature_snapshot()
 
     past_features = base_features.iloc[:30].copy()
-    future_features = base_features.iloc[:31].copy()
+    extended_features = base_features.iloc[:31].copy()
 
-    past_context = build_analysis_context(past_features)
-    future_context = build_analysis_context(future_features)
+    # Analyze the same decision-time row in both histories. Appending data
+    # strictly after t must not alter the analytical snapshot at t.
+    past_context = build_analysis_context(past_features.tail(1))
+    extended_context = build_analysis_context(extended_features.iloc[29:30])
 
-    assert past_context.timestamp == future_context.timestamp
-    assert past_context.symbol == future_context.symbol
-    assert past_context.feature_vector == future_context.feature_vector
+    assert past_context.timestamp == extended_context.timestamp
+    assert past_context.symbol == extended_context.symbol
+    assert past_context.feature_vector == extended_context.feature_vector
 
 
 def test_ab32_future_regime_row_cannot_change_current_regime() -> None:
@@ -120,7 +122,23 @@ def test_ab32_preprocessor_does_not_fit_during_inference() -> None:
 
 def test_ab32_temporal_split_is_monotonic_and_non_overlapping() -> None:
     _, features = _feature_snapshot()
-    labeled = features.copy()
+    # Use enough timestamps to accommodate the existing 60-minute purge
+    # windows around both temporal boundaries.
+    repeated = pd.concat(
+        [
+            features.assign(
+                timestamp=features["timestamp"]
+                + pd.Timedelta(minutes=45 * offset)
+            )
+            for offset in range(4)
+        ],
+        ignore_index=True,
+    )
+    repeated = repeated.sort_values(
+        ["symbol", "timestamp"],
+        kind="stable",
+    ).reset_index(drop=True)
+    labeled = repeated.copy()
     labeled["label"] = ["NO_EDGE"] * len(labeled)
 
     dataset = TrainingDataset(
