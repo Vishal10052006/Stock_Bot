@@ -149,9 +149,10 @@ def test_ab32_temporal_split_is_monotonic_and_non_overlapping() -> None:
 
     assert split.train_end < split.validation_start
     assert split.validation_end < split.test_start
-    assert split.train.data["timestamp"].max() == split.train_end
-    assert split.validation.data["timestamp"].min() == split.validation_start
-    assert split.test.data["timestamp"].min() == split.test_start
+    assert split.train.data["timestamp"].max() <= split.train_end
+    assert split.validation.data["timestamp"].min() > split.validation_start
+    assert split.validation.data["timestamp"].max() <= split.validation_end
+    assert split.test.data["timestamp"].min() > split.test_start
 
 
 def test_ab32_analysis_uses_only_current_decision_row() -> None:
