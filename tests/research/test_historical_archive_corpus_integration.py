@@ -101,4 +101,4 @@ def test_archive_to_corpus_to_observation_preserves_pit_availability():
     # The first 5-minute candle closes at T0+5; decision_time is candle completion.
     assert rows[0].decision_time == T0 + timedelta(minutes=5)
     assert rows[0].feature_available_at < rows[0].decision_time
-    assert rows[0].outcome_timestamp == T0 + timedelta(minutes=20)
+    # decision_time is T0+5 and the horizon is 10 minutes, so the target is T0+15.\n    assert rows[0].outcome_timestamp == T0 + timedelta(minutes=15)
