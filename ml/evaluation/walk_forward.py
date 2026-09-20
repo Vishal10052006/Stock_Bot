@@ -116,14 +116,22 @@ def evaluate_walk_forward(
             dataset.data["timestamp"].isin(prefix_times)
         ].copy()
 
-        split = temporal_split(
-            TrainingDataset(
-                data=prefix_data,
-                feature_columns=dataset.feature_columns,
-                label_column=dataset.label_column,
-            ),
-            config=config,
-        )
+        # The prefix must contain enough history for the configured purge
+        # windows on both boundaries. Skip a prefix that cannot produce a
+        # non-empty validation partition rather than weakening the splitter.
+        try:
+            split = temporal_split(
+                TrainingDataset(
+                    data=prefix_data,
+                    feature_columns=dataset.feature_columns,
+                    label_column=dataset.label_column,
+                ),
+                config=config,
+            )
+        except ValueError as exc:
+            if "empty validation set" in str(exc) or "empty test set" in str(exc):
+                continue
+            raise
 
         preprocessor = FeaturePreprocessor()
         X_train = preprocessor.fit_transform(split.train.X)
@@ -158,6 +166,12 @@ def evaluate_walk_forward(
                 accuracy=accuracy,
                 log_loss=log_loss,
             )
+        )
+
+    if len(results) < folds:
+        raise ValueError(
+            "walk-forward evaluation could not produce the requested number "
+            f"of valid folds; requested={folds}, produced={len(results)}"
         )
 
     return WalkForwardReport(
