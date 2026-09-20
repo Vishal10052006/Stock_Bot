@@ -63,3 +63,41 @@ def test_archive_to_corpus_allows_explicit_non_causal_processing_time():
 
     assert corpus.documents[0].document.processed_at == processing_time
     assert corpus.documents[0].document.available_at == T0 + timedelta(minutes=3)
+
+def test_archive_to_corpus_to_observation_preserves_pit_availability():
+    from market.candles.models import Candle
+    from research.evaluation.observation_builder import build_research_market_observations
+
+    corpus, _ = HistoricalResearchCorpusBuilder().build_from_archive_records(
+        (_record(),),
+        manifest=_manifest(),
+    )
+    candles = tuple(
+        Candle(
+            symbol="ABC",
+            exchange="NSE",
+            timeframe_minutes=5,
+            timestamp=T0 + timedelta(minutes=5 * i),
+            open=100.0 + i,
+            high=100.0 + i,
+            low=100.0 + i,
+            close=100.0 + i,
+            volume=1000.0,
+        )
+        for i in range(4)
+    )
+
+    rows = build_research_market_observations(
+        symbol="ABC",
+        candles=candles,
+        documents=tuple(item.document for item in corpus.documents),
+        horizons_minutes=(10,),
+        require_evidence=True,
+    )
+
+    assert rows
+    assert rows[0].source_document_ids == ("archive-abc",)
+    assert rows[0].feature_available_at == T0 + timedelta(minutes=3)
+    assert rows[0].decision_time == T0 + timedelta(minutes=10)
+    assert rows[0].feature_available_at < rows[0].decision_time
+    assert rows[0].outcome_timestamp == T0 + timedelta(minutes=20)
