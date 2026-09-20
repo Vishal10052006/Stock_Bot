@@ -1,5 +1,7 @@
 from datetime import datetime, timezone
 
+import pytest
+
 from research.contracts import ResearchDocument
 from research.evaluation import FinancialSentimentExample, evaluate_sentiment_model
 from research.sentiment.finbert import FinBertSentiment
@@ -63,5 +65,5 @@ def test_finbert_adapter_produces_probability_derived_score():
     result = model.analyze(_document("n"))
 
     assert result.label == "negative"
-    assert result.score == -0.7
+    assert result.score == pytest.approx(-0.7)
     assert result.confidence == 0.8
