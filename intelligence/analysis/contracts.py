@@ -111,12 +111,16 @@ def dataframe_to_feature_mapping(row: pd.Series) -> dict[str, Any]:
     """Convert one feature row into JSON-safe scalar values."""
     result: dict[str, Any] = {}
     for column, value in row.items():
-        if pd.isna(value):
+        if value is None or value is pd.NA:
             result[column] = None
-        elif isinstance(value, np.generic):
-            result[column] = value.item()
-        elif isinstance(value, (pd.Timestamp, datetime)):
+            continue
+        if isinstance(value, (pd.Timestamp, datetime)):
             result[column] = pd.Timestamp(value).isoformat()
+            continue
+        if isinstance(value, np.generic):
+            value = value.item()
+        if isinstance(value, float) and np.isnan(value):
+            result[column] = None
         else:
             result[column] = value
     return result
