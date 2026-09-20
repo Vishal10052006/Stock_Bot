@@ -53,7 +53,10 @@ def test_evaluation_reports_multiclass_metrics():
 
     assert result.observations == 4
     assert result.accuracy == pytest.approx(0.75)
-    assert result.macro_f1 == pytest.approx((2 / 3 + 1.0 + 1.0) / 3)
+    # Gold: positive, negative, neutral, positive.
+    # Pred: positive, negative, neutral, negative.
+    # Positive F1 = 2/3; negative F1 = 2/3; neutral F1 = 1.0.
+    assert result.macro_f1 == pytest.approx((2 / 3 + 2 / 3 + 1.0) / 3)
     assert result.confusion_matrix == (
         (1, 1, 0),
         (0, 1, 0),
