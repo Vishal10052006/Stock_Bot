@@ -2,6 +2,8 @@
 
 from datetime import datetime, timezone
 
+import pytest
+
 from research.contracts import ResearchDocument
 from research.sentiment.finbert import FinBertSentiment
 
@@ -44,7 +46,7 @@ def test_finbert_adapter_maps_probabilities_to_signed_score():
     result = model.analyze(document())
 
     assert result.label == "positive"
-    assert result.score == 0.80
+    assert result.score == pytest.approx(0.80)
     assert result.confidence == 0.85
     assert result.model_version == "finbert:test-finbert"
 
@@ -68,4 +70,4 @@ def test_finbert_adapter_supports_legacy_pipeline_shape():
     result = model.analyze(document())
 
     assert result.label == "negative"
-    assert result.score == -0.50
+    assert result.score == pytest.approx(-0.50)
