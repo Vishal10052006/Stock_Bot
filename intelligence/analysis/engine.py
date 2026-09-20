@@ -31,13 +31,12 @@ class AnalysisEngine:
         relative = analyze_relative_performance(features)
         research = research_summary(analysis_input.research_context)
         candidates = generate_candidates(technical, structure, volume, relative)
-
         direction = technical["direction"]
         if direction == "UNKNOWN" and structure.get("trend") in {"BULLISH", "BEARISH"}:
             direction = structure["trend"]
         state = technical["state"]
-        if not market["available"] and not sector["available"]:
-            state = "UNAVAILABLE" if direction == "UNKNOWN" else state
+        if not market["available"] and not sector["available"] and direction == "UNKNOWN":
+            state = "UNAVAILABLE"
 
         return AnalysisContext(
             timestamp=analysis_input.timestamp,
