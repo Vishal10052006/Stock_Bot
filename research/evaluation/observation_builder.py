@@ -13,7 +13,7 @@ from datetime import datetime, timedelta
 from math import isfinite
 
 from market.candles.models import Candle
-from research.contracts import ResearchContext, ResearchDocument, SentimentResult
+from research.contracts import ResearchContext, ResearchDocument
 from research.evaluation.intelligence import (
     ResearchEvaluationObservation,
 )
