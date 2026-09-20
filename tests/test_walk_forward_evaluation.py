@@ -9,7 +9,7 @@ from ml.evaluation.walk_forward import evaluate_walk_forward
 from ml.preprocessing.models import BOOLEAN_FEATURES, NUMERIC_FEATURES
 
 
-def _dataset(rows: int = 72) -> TrainingDataset:
+def _dataset(rows: int = 180) -> TrainingDataset:
     timestamps = pd.date_range(
         "2026-01-01 09:15:00+05:30",
         periods=rows,
