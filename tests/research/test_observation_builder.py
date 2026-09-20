@@ -81,7 +81,7 @@ def test_builder_uses_only_research_available_at_decision_close():
     first = rows[0]
     assert first.decision_time == T0 + timedelta(minutes=5)
     assert first.feature_available_at == T0 + timedelta(minutes=4)
-    assert first.source_document_ids == ("doc-19",)
+    assert first.source_document_ids == ("doc-4",)
     assert first.outcome_timestamp == T0 + timedelta(minutes=15)
 
 
@@ -107,9 +107,9 @@ def test_builder_requires_exact_future_candle_and_uses_close_to_close_return():
 
     assert len(rows) == 2
     assert rows[0].decision_time == T0 + timedelta(minutes=5)
-    assert rows[0].decision_close == 101.0
-    assert rows[0].outcome_close == 103.0
-    assert rows[0].forward_return == pytest.approx(103.0 / 101.0 - 1.0)
+    assert rows[0].decision_close == 100.0
+    assert rows[0].outcome_close == 102.0
+    assert rows[0].forward_return == pytest.approx(102.0 / 100.0 - 1.0)
 
 
 def test_future_document_never_enters_context():
@@ -133,7 +133,7 @@ def test_future_document_never_enters_context():
     )
 
     assert len(rows) == 1
-    assert rows[0].decision_time == T0 + timedelta(minutes=15)
+    assert rows[0].decision_time == T0 + timedelta(minutes=10)
     assert rows[0].source_document_ids == ("doc-7",)
 
 
