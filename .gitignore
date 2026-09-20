@@ -7,3 +7,4 @@ Thumbs.db
 PIPELINE
 .env
 data/
+datasets/financial_phrasebank/
