@@ -6,11 +6,15 @@ before it is used for historical experiments.
 """
 from __future__ import annotations
 
+import hashlib
+import json
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Mapping, Sequence
 
 from research.contracts import ResearchDocument
+
+CORPUS_SCHEMA_VERSION = "1.0"
 
 
 @dataclass(frozen=True, slots=True)
@@ -26,6 +30,7 @@ class ResearchCorpusManifest:
     time_start: datetime | None = None
     time_end: datetime | None = None
     document_count: int | None = None
+    schema_version: str = CORPUS_SCHEMA_VERSION
     metadata: Mapping[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
@@ -35,6 +40,8 @@ class ResearchCorpusManifest:
             raise ValueError("version must be non-empty")
         if not self.source.strip():
             raise ValueError("source must be non-empty")
+        if not self.schema_version.strip():
+            raise ValueError("schema_version must be non-empty")
         if self.time_start and self.time_end and self.time_end < self.time_start:
             raise ValueError("time_end cannot precede time_start")
         if self.document_count is not None and self.document_count < 0:
@@ -152,3 +159,49 @@ class HistoricalResearchCorpus:
         if not self.documents:
             return self.manifest.time_end
         return max(item.document.published_at for item in self.documents)
+
+    @property
+    def fingerprint(self) -> str:
+        """Return a deterministic SHA-256 fingerprint of the corpus contents.
+
+        The fingerprint is independent of document ordering and local storage
+        paths. It includes the manifest identity and all ResearchDocument
+        fields that affect historical research interpretation.
+        """
+        payload = {
+            "schema_version": self.manifest.schema_version,
+            "dataset_id": self.manifest.dataset_id,
+            "dataset_version": self.manifest.version,
+            "documents": [
+                _document_fingerprint_payload(item.document)
+                for item in sorted(
+                    self.documents,
+                    key=lambda item: item.document.document_id,
+                )
+            ],
+        }
+        canonical = json.dumps(
+            payload,
+            ensure_ascii=True,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+        return hashlib.sha256(canonical).hexdigest()
+
+
+def _document_fingerprint_payload(document: ResearchDocument) -> dict[str, Any]:
+    """Build the stable, path-independent document fingerprint payload."""
+    return {
+        "document_id": document.document_id,
+        "source_id": document.source_id,
+        "external_id": document.external_id,
+        "title": document.title,
+        "content_hash": document.content_hash,
+        "published_at": document.published_at.isoformat(),
+        "observed_at": document.observed_at.isoformat(),
+        "processed_at": document.processed_at.isoformat(),
+        "available_at": document.available_at.isoformat(),
+        "symbols": list(document.symbols),
+        "entities": list(document.entities),
+        "language": document.language,
+    }
