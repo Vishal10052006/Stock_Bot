@@ -40,6 +40,8 @@ class AnalysisEngine:
         state = technical["state"]
         if not market["available"] and not sector["available"] and direction == "UNKNOWN":
             state = "UNAVAILABLE"
+        elif direction == "UNKNOWN":
+            state = "UNAVAILABLE"
 
         return AnalysisContext(
             timestamp=analysis_input.timestamp,
