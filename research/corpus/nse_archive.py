@@ -5,6 +5,7 @@ import csv
 import hashlib
 import io
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 from pathlib import Path
 from urllib.parse import urlencode
 from urllib.request import Request, build_opener, HTTPCookieProcessor
@@ -29,10 +30,12 @@ class NSEHistoricalArchiveClient:
         if end < start:
             raise ValueError("end cannot precede start")
 
+        nse_start = start.astimezone(ZoneInfo("Asia/Kolkata"))
+        nse_end = end.astimezone(ZoneInfo("Asia/Kolkata"))
         query = urlencode({
             "index": "equities",
-            "from_date": start.astimezone(timezone.utc).strftime("%d-%m-%Y"),
-            "to_date": end.astimezone(timezone.utc).strftime("%d-%m-%Y"),
+            "from_date": nse_start.strftime("%d-%m-%Y"),
+            "to_date": nse_end.strftime("%d-%m-%Y"),
             "csv": "true",
         })
         opener = build_opener(HTTPCookieProcessor(http.cookiejar.CookieJar()))
@@ -116,7 +119,7 @@ def _parse_datetime(value: str) -> datetime:
     value = value.strip()
     for fmt in ("%d-%b-%Y %H:%M:%S", "%d-%b-%y %H:%M:%S", "%d-%m-%Y %H:%M:%S", "%Y-%m-%d %H:%M:%S"):
         try:
-            return datetime.strptime(value, fmt).replace(tzinfo=timezone.utc)
+            return datetime.strptime(value, fmt).replace(tzinfo=ZoneInfo("Asia/Kolkata"))
         except ValueError:
             pass
     return datetime.fromisoformat(value.replace("Z", "+00:00")).astimezone(timezone.utc)
