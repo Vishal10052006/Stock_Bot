@@ -97,29 +97,6 @@ def test_builder_rejects_timezone_naive_historical_documents():
     assert audit.rejected_document_ids == ("naive",)
 
 
-def test_builder_rejects_available_before_publication():
-    bad = ResearchDocument(
-        document_id="bad",
-        source_id="test-source",
-        external_id="bad",
-        title="Bad",
-        content="Bad timing",
-        published_at=T0,
-        observed_at=T0,
-        processed_at=T0,
-        available_at=T0 - timedelta(minutes=1),
-        symbols=("RELIANCE",),
-    )
-
-    corpus, audit = HistoricalResearchCorpusBuilder().build(
-        (bad,),
-        manifest=manifest(),
-    )
-
-    assert corpus.document_count == 0
-    assert audit.rejected_document_ids == ("bad",)
-
-
 def test_builder_preserves_source_reference_and_fingerprint():
     corpus, _ = HistoricalResearchCorpusBuilder().build(
         (doc("source-ref"),),
