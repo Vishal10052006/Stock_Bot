@@ -122,4 +122,7 @@ def _parse_datetime(value: str) -> datetime:
             return datetime.strptime(value, fmt).replace(tzinfo=ZoneInfo("Asia/Kolkata"))
         except ValueError:
             pass
-    return datetime.fromisoformat(value.replace("Z", "+00:00")).astimezone(timezone.utc)
+    parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        raise ValueError("NSE timestamp must be timezone-aware")
+    return parsed
