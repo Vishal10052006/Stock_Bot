@@ -135,6 +135,12 @@ class ResearchIntelligenceModel:
             evidence_weight *= 1.0 + 0.5 * event_weight
 
             signed_score = max(-1.0, min(1.0, float(sentiment.score)))
+            # Non-informative evidence can legitimately have zero weight.
+            # It must not make a final aggregate non-finite.
+            if not isfinite(evidence_weight) or evidence_weight < 0.0:
+                raise ValueError(
+                    f"invalid evidence weight for document {document.document_id}"
+                )
             weighted_scores.append(signed_score * evidence_weight)
             weights.append(evidence_weight)
 
@@ -152,9 +158,23 @@ class ResearchIntelligenceModel:
         score = 0.0 if total_weight == 0 else sum(weighted_scores) / total_weight
         score = max(-1.0, min(1.0, score))
 
-        positive_fraction = positive_weight / total_weight if total_weight else 0.0
-        negative_fraction = negative_weight / total_weight if total_weight else 0.0
-        conflict_score = min(1.0, 2.0 * min(positive_fraction, negative_fraction))
+        # Fraction denominators must include only directional evidence. If all
+        # available evidence is neutral/non-directional, fractions are zero.
+        directional_weight = positive_weight + negative_weight
+        positive_fraction = (
+            positive_weight / directional_weight
+            if directional_weight > 0.0
+            else 0.0
+        )
+        negative_fraction = (
+            negative_weight / directional_weight
+            if directional_weight > 0.0
+            else 0.0
+        )
+        conflict_score = min(
+            1.0,
+            2.0 * min(positive_fraction, negative_fraction),
+        )
 
         source_count = len({d.source_id for d in context.documents})
         evidence_factor = min(1.0, len(context.documents) / 5.0)
