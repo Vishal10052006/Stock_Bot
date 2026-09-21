@@ -41,3 +41,26 @@ This package implements the deterministic Research Bot foundation for RB-0 throu
 ## Not implemented as hidden assumptions
 
 External news/filing APIs, paid feeds, vector databases, LLM APIs, and production database credentials are provider/deployment choices and therefore remain explicit adapters. No fake provider or synthetic market evidence is introduced.
+
+
+## Completion gates
+
+The Research Bot is considered complete only after these gates are satisfied with real
+data; unit-test coverage alone is not sufficient.
+
+| Gate | Implementation | Evidence required |
+|---|---|---|
+| Historical corpus | multi-file NSE intake | manifest, raw hashes, corpus fingerprint, PIT audit |
+| Market alignment | causal observation builder | research available_at <= decision_time < outcome_time |
+| OOS / walk-forward | evaluation/oos.py | chronological test-fold results on real observations |
+| Analysis contract | integration/analysis_contract.py | serialized RB-12 context with no order/risk authority |
+| Production audit | monitoring/production_check.py | passing structural audit plus executed real OOS folds |
+
+The official NSE corporate-filings announcements page exposes custom historical
+ranges and CSV downloads. The implementation therefore treats downloaded NSE
+CSV files as source evidence and preserves the exchange timestamps rather than
+replacing them with ingestion time.
+
+A production readiness PASS is not a predictive-performance claim. Predictive
+usefulness remains an empirical question and must be reported separately from
+the structural audit.
