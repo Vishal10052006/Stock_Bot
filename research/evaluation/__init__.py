@@ -1,4 +1,4 @@
-"""Research NLP evaluation contracts and datasets."""
+"""Research evaluation contracts and datasets."""
 
 from research.evaluation.benchmark import (
     FinancialPhraseBankBenchmark,
@@ -15,6 +15,7 @@ from research.evaluation.intelligence import (
     ResearchOutcomeEvaluation,
     evaluate_research_outcomes,
 )
+from research.evaluation.oos import ResearchOOSFoldResult, ResearchOOSResult, evaluate_research_oos
 from research.evaluation.financial_phrasebank import (
     DATASET_ID,
     DATASET_VERSION,
@@ -35,6 +36,9 @@ __all__ = [
     "ResearchEvaluationObservation",
     "ResearchOutcomeEvaluation",
     "evaluate_research_outcomes",
+    "ResearchOOSFoldResult",
+    "ResearchOOSResult",
+    "evaluate_research_oos",
     "FinancialPhraseBankBenchmark",
     "run_financial_phrasebank_benchmark",
     "run_finbert_phrasebank_benchmark",
