@@ -62,7 +62,7 @@ def ingest_nse_csv_files(
         records.extend(parsed)
 
     raw_collection_sha256 = hashlib.sha256(
-        json.dumps([item.sha256 for item in inputs], separators=(",", ":")).encode()
+        json.dumps(sorted(item.sha256 for item in inputs), separators=(",", ":")).encode()
     ).hexdigest()
 
     manifest = ResearchCorpusManifest(
