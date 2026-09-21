@@ -34,6 +34,7 @@ from trading.strategy.baseline import evaluate_row
 from trading.strategy.models import (
     BaselineStrategyConfig,
     StrategyDecision,
+    StrategyDirection,
 )
 
 
