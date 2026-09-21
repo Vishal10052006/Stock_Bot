@@ -20,7 +20,8 @@ def make_doc(
         source_id="nse-corporate-filings",
         external_id=document_id,
         title="  RELIANCE   earnings  ",
-        content=f"  {content}\n",
+        content=f"  {content}
+",
         published_at=available,
         observed_at=available,
         processed_at=available,
@@ -98,6 +99,33 @@ def test_model_rejects_future_document_inside_context():
 
     with pytest.raises(ValueError, match="future research document"):
         ResearchIntelligenceModel().score_context(context)
+
+
+def test_model_emits_finite_zero_fractions_for_neutral_only_evidence():
+    now = datetime(2026, 9, 21, 10, 0, tzinfo=UTC)
+    document = make_doc("neutral", content="quarterly filing update")
+    sentiment = SentimentResult(
+        label="neutral",
+        score=0.0,
+        confidence=1.0,
+        model_version="test",
+    )
+    context = ResearchContext(
+        symbol="RELIANCE",
+        as_of=now,
+        documents=(document,),
+        events=(),
+        sentiment=(sentiment,),
+        impacts=(),
+        provenance=(),
+    )
+
+    result = ResearchIntelligenceModel().score_context(context)
+
+    assert result.score == 0.0
+    assert result.positive_evidence_fraction == 0.0
+    assert result.negative_evidence_fraction == 0.0
+    assert result.conflict_score == 0.0
 
 
 def test_result_contract_rejects_out_of_range_values():
