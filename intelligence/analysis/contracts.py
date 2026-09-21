@@ -34,6 +34,22 @@ def _sanitize_mapping(value: Mapping[str, Any] | None) -> dict[str, Any]:
     """Copy a context mapping while preserving missing values."""
     return dict(value or {})
 
+def _dashboard_safe(value: Any) -> Any:
+    """Convert common pandas/NumPy values into dashboard-safe primitives."""
+    if value is None or value is pd.NA:
+        return None
+    if isinstance(value, (pd.Timestamp, datetime)):
+        return pd.Timestamp(value).isoformat()
+    if isinstance(value, np.generic):
+        return _dashboard_safe(value.item())
+    if isinstance(value, Mapping):
+        return {str(key): _dashboard_safe(item) for key, item in value.items()}
+    if isinstance(value, (tuple, list)):
+        return [_dashboard_safe(item) for item in value]
+    if isinstance(value, float) and not np.isfinite(value):
+        return None
+    return value
+
 
 @dataclass(frozen=True, slots=True)
 class AnalysisInput:
