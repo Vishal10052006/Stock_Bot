@@ -78,8 +78,8 @@ def test_model_rejects_misaligned_context():
 
 
 def test_model_rejects_future_document_inside_context():
-    now = datetime(2026, 9, 21, 10, 0, tzinfo=UTC)
-    document = make_doc("doc-1", available_minute=1)
+    as_of = datetime(2026, 9, 21, 9, 5, tzinfo=UTC)
+    document = make_doc("future", available_minute=6)
     sentiment = SentimentResult(
         label="positive",
         score=0.5,
@@ -88,7 +88,7 @@ def test_model_rejects_future_document_inside_context():
     )
     context = ResearchContext(
         symbol="RELIANCE",
-        as_of=now,
+        as_of=as_of,
         documents=(document,),
         events=(),
         sentiment=(sentiment,),
@@ -96,9 +96,8 @@ def test_model_rejects_future_document_inside_context():
         provenance=(),
     )
 
-    # This document is not actually future at 10:00, so the contract remains valid.
-    result = ResearchIntelligenceModel().score_context(context)
-    assert result.evidence_count == 1
+    with pytest.raises(ValueError, match="future research document"):
+        ResearchIntelligenceModel().score_context(context)
 
 
 def test_result_contract_rejects_out_of_range_values():
