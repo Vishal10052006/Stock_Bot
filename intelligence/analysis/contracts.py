@@ -106,6 +106,33 @@ class AnalysisContext:
         object.__setattr__(self, "timestamp", timestamp)
         object.__setattr__(self, "symbol", symbol)
 
+    def to_dashboard_payload(self) -> dict[str, Any]:
+        """Return a stable, JSON-safe dashboard/context payload."""
+        return _dashboard_safe(
+            {
+                "symbol": self.symbol,
+                "timestamp": self.timestamp,
+                "direction": self.analytical_direction,
+                "state": self.analytical_state,
+                "candidates": self.candidates,
+                "technical": self.technical_context,
+                "structure": self.structure_context,
+                "volume": self.volume_context,
+                "volatility": self.volatility_context,
+                "market": self.market_context,
+                "sector": self.sector_context,
+                "relative_performance": self.relative_performance,
+                "research": self.research_context,
+                "quality": self.quality,
+                "versions": {
+                    "analysis": self.analysis_version,
+                    "features": self.feature_version,
+                    "data": self.data_version,
+                },
+                "provenance": self.provenance,
+            }
+        )
+
 
 def dataframe_to_feature_mapping(row: pd.Series) -> dict[str, Any]:
     """Convert one feature row into JSON-safe scalar values."""
