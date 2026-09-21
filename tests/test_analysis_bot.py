@@ -54,6 +54,30 @@ def test_analysis_engine_is_structured_and_non_trading() -> None:
     validate_analysis_context(context)
 
 
+def test_dashboard_payload_is_json_safe_and_versioned() -> None:
+    timestamp = pd.Timestamp("2026-09-20 10:25:00+05:30")
+    context = AnalysisEngine().analyze(
+        AnalysisInput(
+            timestamp=timestamp,
+            symbol="reliance",
+            features=_features(),
+            data_version="market-v1",
+            feature_version="features-v1",
+        )
+    )
+
+    payload = context.to_dashboard_payload()
+
+    assert payload["symbol"] == "RELIANCE"
+    assert payload["timestamp"] == timestamp.isoformat()
+    assert payload["versions"] == {
+        "analysis": "v1.0",
+        "features": "features-v1",
+        "data": "market-v1",
+    }
+    assert payload["direction"] == "BULLISH"
+
+
 def test_feature_validation_rejects_infinity() -> None:
     try:
         validate_feature_mapping({"x": float("inf")})
