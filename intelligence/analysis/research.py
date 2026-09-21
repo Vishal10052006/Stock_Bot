@@ -8,10 +8,12 @@ def research_summary(context: Any | None) -> dict[str, Any]:
     if context is None:
         return {"available": False}
     result: dict[str, Any] = {"available": True}
-    for field in ("symbol", "as_of", "events", "sentiments", "impacts", "provenance"):
+    for field in ("symbol", "as_of", "events", "sentiment", "sentiments", "impacts", "provenance"):
         if hasattr(context, field):
             value = getattr(context, field)
             if field == "as_of" and value is not None:
                 value = value.isoformat()
+            if field == "sentiments" and hasattr(context, "sentiment"):
+                continue
             result[field] = value
     return result
