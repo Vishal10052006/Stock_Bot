@@ -115,6 +115,7 @@ class PaperTradeLifecycle:
         timestamp: pd.Timestamp,
         price: float,
         exit_fees: float = 0.0,
+        exit_slippage_cost: float = 0.0,
     ) -> TradeOutcome:
         """Close an open trade and create its immutable outcome record."""
         symbol = symbol.upper()
@@ -124,6 +125,8 @@ class PaperTradeLifecycle:
             raise ValueError("exit price must be positive")
         if exit_fees < 0:
             raise ValueError("exit_fees must be non-negative")
+        if exit_slippage_cost < 0:
+            raise ValueError("exit_slippage_cost must be non-negative")
 
         timestamp = pd.Timestamp(timestamp)
         if timestamp.tzinfo is None:
@@ -154,7 +157,10 @@ class PaperTradeLifecycle:
             quantity=order.quantity,
             gross_pnl=gross_pnl,
             fees=fees,
-            slippage_cost=order.slippage_cost,
+            slippage_cost=(
+                order.slippage_cost
+                + exit_slippage_cost
+            ),
             net_pnl=net_pnl,
             holding_minutes=(timestamp - order.timestamp).total_seconds() / 60.0,
             mae=float(record["mae"]),
