@@ -123,7 +123,7 @@ def test_no_trade_does_not_create_order() -> None:
 
 
 def test_trade_is_closed_at_end_of_historical_data() -> None:
-    """Open trades must be closed using the final available price."""
+    """Open trades must be closed using the configured exit fill."""
 
     rows = pd.DataFrame(
         [
@@ -145,7 +145,7 @@ def test_trade_is_closed_at_end_of_historical_data() -> None:
     outcome = result.outcomes[0]
 
     assert outcome.entry_price > 0
-    assert outcome.exit_price == 101.0
+    assert outcome.exit_price == pytest.approx(100.9495)
     assert outcome.exit_time == pd.Timestamp(
         "2026-01-01 09:20:00+05:30"
     )
