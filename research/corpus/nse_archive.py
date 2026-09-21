@@ -100,10 +100,25 @@ class NSEHistoricalArchiveClient:
                     external_id = hashlib.sha256(
                         f"{symbol}|{published_at.isoformat()}|{subject}|{details}".encode("utf-8")
                     ).hexdigest()[:32]
-                archive_id = hashlib.sha256(
-                    f"nse-corporate-filings|{external_id}".encode("utf-8")
-                ).hexdigest()[:32]
                 content = "\n\n".join(part for part in (subject, details) if part).strip()
+
+                # An NSE attachment/filing ID is not necessarily globally
+                # unique across symbols or timestamped broadcasts. Archive
+                # identity must include the causal record dimensions.
+                identity = "|".join(
+                    (
+                        "nse-corporate-filings",
+                        symbol,
+                        external_id,
+                        published_at.isoformat(),
+                        observed_at.isoformat(),
+                        available_at.isoformat(),
+                        hashlib.sha256(content.encode("utf-8")).hexdigest(),
+                    )
+                )
+                archive_id = hashlib.sha256(
+                    identity.encode("utf-8")
+                ).hexdigest()[:32]
                 rows.append(HistoricalArchiveRecord(
                     archive_id=archive_id,
                     source_id="nse-corporate-filings",
