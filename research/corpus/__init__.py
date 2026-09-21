@@ -6,6 +6,11 @@ from research.corpus.archive_jsonl import HistoricalArchiveJsonlLoader
 from research.corpus.builder import HistoricalCorpusBuildAudit, HistoricalResearchCorpusBuilder
 from research.corpus.intake import HistoricalIntakeResult, ingest_nse_csv
 from research.corpus.loader import HistoricalResearchCorpusLoader
+from research.corpus.multi_intake import (
+    CorpusInputFingerprint,
+    MultiFileHistoricalIntakeResult,
+    ingest_nse_csv_files,
+)
 from research.corpus.nse_archive import NSEHistoricalArchiveClient
 from research.corpus.schema import (
     CORPUS_SCHEMA_VERSION,
@@ -26,6 +31,9 @@ __all__ = [
     "HistoricalResearchCorpusLoader",
     "HistoricalIntakeResult",
     "ingest_nse_csv",
+    "CorpusInputFingerprint",
+    "MultiFileHistoricalIntakeResult",
+    "ingest_nse_csv_files",
     "NSEHistoricalArchiveClient",
     "ResearchCorpusDocument",
     "ResearchCorpusManifest",
