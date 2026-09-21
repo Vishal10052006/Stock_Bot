@@ -13,7 +13,6 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from research.contracts import ResearchContext, ResearchDocument
-from research.integration.analysis_contract import ResearchAnalysisContext
 from research.integration.context import ResearchContextBuilder
 from research.intelligence.model import (
     ResearchIntelligenceModel,
@@ -28,7 +27,7 @@ class ResearchIntelligenceRun:
 
     context: ResearchContext
     intelligence: ResearchIntelligenceResult
-    analysis_context: ResearchAnalysisContext
+    analysis_context: object
 
 
 class ResearchIntelligencePipeline:
@@ -61,6 +60,10 @@ class ResearchIntelligencePipeline:
             documents=normalized,
         )
         intelligence = self.model.score_context(context)
+        # Local import breaks the integration -> intelligence -> pipeline
+        # import cycle while preserving the stable runtime boundary.
+        from research.integration.analysis_contract import ResearchAnalysisContext
+
         analysis_context = ResearchAnalysisContext.from_context(
             context,
             intelligence,
