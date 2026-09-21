@@ -17,6 +17,8 @@ from datetime import timedelta
 
 import pandas as pd
 
+from backtesting.costs import CostConfig, TransactionCostModel
+from backtesting.fills import FillConfig, FillModel
 from execution.trading_execution import (
     ExecutionAuthorization,
     ExecutionAuthorizationStatus,
@@ -211,8 +213,8 @@ class HistoricalBacktestEngine:
                 return None
 
             # Opposite signal closes the existing position first.
-            self.lifecycle.close(
-                symbol,
+            self._close_trade(
+                symbol=symbol,
                 timestamp=authorization.timestamp,
                 price=price,
             )
@@ -248,8 +250,8 @@ class HistoricalBacktestEngine:
         )
 
         if age >= maximum_age:
-            self.lifecycle.close(
-                symbol,
+            self._close_trade(
+                symbol=symbol,
                 timestamp=timestamp,
                 price=price,
             )
@@ -273,11 +275,53 @@ class HistoricalBacktestEngine:
 
             final_row = group.iloc[-1]
 
-            self.lifecycle.close(
-                symbol,
+            self._close_trade(
+                symbol=symbol,
                 timestamp=pd.Timestamp(final_row["timestamp"]),
                 price=float(final_row[self.config.price_column]),
             )
+
+    def _close_trade(
+        self,
+        *,
+        symbol: str,
+        timestamp: pd.Timestamp,
+        price: float,
+    ) -> TradeOutcome:
+        """Close a trade using the configured deterministic exit model."""
+
+        order = self._open_trade(symbol)
+        if order is None:
+            raise RuntimeError(f"no open trade exists for {symbol}")
+
+        exit_direction = (
+            StrategyDirection.SHORT
+            if order.direction is StrategyDirection.LONG
+            else StrategyDirection.LONG
+        )
+
+        fill = FillModel(
+            FillConfig(slippage_bps=self.runtime.config.slippage_bps)
+        ).fill(
+            price=price,
+            quantity=order.quantity,
+            direction=exit_direction,
+        )
+
+        exit_fees = TransactionCostModel(
+            CostConfig(brokerage_bps=self.runtime.config.fee_bps)
+        ).calculate(
+            price=fill.fill_price,
+            quantity=order.quantity,
+        ).total
+
+        return self.lifecycle.close(
+            symbol,
+            timestamp=timestamp,
+            price=fill.fill_price,
+            exit_fees=exit_fees,
+            exit_slippage_cost=fill.slippage_cost,
+        )
 
     def _open_trade(
         self,
