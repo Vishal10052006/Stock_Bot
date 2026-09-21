@@ -64,11 +64,14 @@ class PaperPosition:
     """Current single-symbol paper position state."""
 
     symbol: str
+    direction: StrategyDirection
     quantity: float
     average_price: float
     realized_pnl: float = 0.0
 
     def __post_init__(self) -> None:
+        if self.direction is StrategyDirection.NO_TRADE:
+            raise ValueError("paper position direction cannot be NO_TRADE")
         if self.quantity < 0:
             raise ValueError("position quantity cannot be negative")
         if self.quantity > 0 and self.average_price <= 0:
@@ -138,36 +141,70 @@ class PaperTradingRuntime:
         slippage_cost = abs(fill_price - price) * quantity
 
         current = self._positions.get(symbol)
-        if current is None:
+        order_direction = authorization.direction
+
+        if current is None or current.quantity == 0:
             position = PaperPosition(
                 symbol=symbol,
+                direction=order_direction,
                 quantity=quantity,
                 average_price=fill_price,
             )
+        elif current.direction is order_direction:
+            new_quantity = current.quantity + quantity
+            weighted_price = (
+                current.average_price * current.quantity
+                + fill_price * quantity
+            ) / new_quantity
+            position = PaperPosition(
+                symbol=symbol,
+                direction=current.direction,
+                quantity=new_quantity,
+                average_price=weighted_price,
+                realized_pnl=current.realized_pnl,
+            )
         else:
-            if direction_sign > 0:
-                new_quantity = current.quantity + quantity
-                weighted_price = (
-                    current.average_price * current.quantity
-                    + fill_price * quantity
-                ) / new_quantity
-                position = PaperPosition(
-                    symbol=symbol,
-                    quantity=new_quantity,
-                    average_price=weighted_price,
-                    realized_pnl=current.realized_pnl,
-                )
-            else:
-                close_quantity = min(quantity, current.quantity)
+            # An opposite-side order first closes the existing exposure.
+            close_quantity = min(quantity, current.quantity)
+            if current.direction is StrategyDirection.LONG:
                 realized = (
                     fill_price - current.average_price
                 ) * close_quantity
-                remaining = current.quantity - close_quantity
+            else:
+                realized = (
+                    current.average_price - fill_price
+                ) * close_quantity
+
+            remaining_current = current.quantity - close_quantity
+            remaining_order = quantity - close_quantity
+
+            # Fees are charged once for the complete submitted order.
+            realized_pnl = current.realized_pnl + realized - fees
+
+            if remaining_order > 0:
+                # The excess opposite-side quantity opens a new position.
                 position = PaperPosition(
                     symbol=symbol,
-                    quantity=remaining,
-                    average_price=current.average_price if remaining else 0.0,
-                    realized_pnl=current.realized_pnl + realized - fees,
+                    direction=order_direction,
+                    quantity=remaining_order,
+                    average_price=fill_price,
+                    realized_pnl=realized_pnl,
+                )
+            elif remaining_current > 0:
+                position = PaperPosition(
+                    symbol=symbol,
+                    direction=current.direction,
+                    quantity=remaining_current,
+                    average_price=current.average_price,
+                    realized_pnl=realized_pnl,
+                )
+            else:
+                position = PaperPosition(
+                    symbol=symbol,
+                    direction=current.direction,
+                    quantity=0.0,
+                    average_price=0.0,
+                    realized_pnl=realized_pnl,
                 )
 
         self._positions[symbol] = position
@@ -195,5 +232,13 @@ class PaperTradingRuntime:
             return 0.0
         if price <= 0:
             raise ValueError("mark price must be positive")
-        unrealized = (price - position.average_price) * position.quantity
+        if position.direction is StrategyDirection.LONG:
+            unrealized = (
+                price - position.average_price
+            ) * position.quantity
+        else:
+            unrealized = (
+                position.average_price - price
+            ) * position.quantity
+
         return position.realized_pnl + unrealized
