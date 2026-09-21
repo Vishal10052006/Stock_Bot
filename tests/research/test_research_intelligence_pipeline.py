@@ -20,8 +20,7 @@ def make_doc(
         source_id="nse-corporate-filings",
         external_id=document_id,
         title="  RELIANCE   earnings  ",
-        content=f"  {content}
-",
+        content=f"  {content}\\n",
         published_at=available,
         observed_at=available,
         processed_at=available,
