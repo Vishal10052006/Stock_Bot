@@ -5,7 +5,20 @@ import pandas as pd
 from backtesting.engine import HistoricalBacktestEngine
 from paper.runtime import PaperTradingConfig, PaperTradingRuntime
 
-from tests.backtesting.test_engine import _row
+def _row(timestamp: str, *, close: float) -> dict:
+    return {
+        "timestamp": timestamp,
+        "symbol": "ITC",
+        "close": close,
+        "regime": "TREND_UP",
+        "regime_probability": 0.90,
+        "vwap_distance_pct": 1.0,
+        "rvol_20": 1.5,
+        "higher_high": True,
+        "higher_low": True,
+        "lower_low": False,
+        "lower_high": False,
+    }
 
 
 def test_backtest_applies_entry_and_exit_costs() -> None:
