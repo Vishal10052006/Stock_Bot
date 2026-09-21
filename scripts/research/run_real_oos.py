@@ -144,7 +144,7 @@ def main() -> None:
             "folds": len(result.folds),
             "decision": result.decision,
             "pooled_test_evaluation": (
-                result.pooled_test_evaluation.__dict__
+                asdict(result.pooled_test_evaluation)
                 if result.pooled_test_evaluation is not None
                 else None
             ),
@@ -154,7 +154,7 @@ def main() -> None:
                     "train_count": fold.train_count,
                     "validation_count": fold.validation_count,
                     "test_count": fold.test_count,
-                    "evaluation": fold.evaluation.__dict__,
+                    "evaluation": asdict(fold.evaluation),
                 }
                 for fold in result.folds
             ],
