@@ -38,3 +38,27 @@ frozen BaselineStrategy. It does not generate P&L claims.
 
 External LLM/vector services remain explicit adapters. No credentials,
 synthetic evidence or hidden provider is embedded in the repository.
+
+
+## Completion workflow
+
+1. Download real NSE announcement CSV snapshots for the market periods being
+   evaluated. NSE exposes 1D/1W/1M/3M/6M/1Y and Custom ranges with CSV download
+   on its Corporate Filings Announcement page.
+2. Materialize overlapping CSV files with
+   scripts/research/materialize_nse_corpus.py. The resulting manifest records
+   every raw-file SHA-256 and a deterministic corpus fingerprint.
+3. Pair the corpus with raw completed OHLCV candles. Do not use a filtered
+   training dataset as a substitute when exact future target candles are
+   required.
+4. Build point-in-time ResearchMarketObservation records. A research document
+   is eligible only when its available_at is no later than the decision candle
+   close, and a target candle must exist at the exact requested future horizon.
+5. Run research/evaluation/oos.py on the frozen observations. No threshold or
+   model parameter is learned from the test folds.
+6. Export the ResearchAnalysisContext for the downstream Analysis Bot.
+7. Run the structural production audit and record the corpus fingerprint, OOS
+   fold count, rejection counts and source coverage.
+
+The final audit may pass structural readiness while the research usefulness
+decision remains UNDECIDED. Those are deliberately separate claims.
