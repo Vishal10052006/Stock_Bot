@@ -111,3 +111,38 @@ def test_larger_reversal_opens_residual_opposite_position() -> None:
     assert position.quantity == 5.0
     assert position.average_price == 110.0
     assert position.realized_pnl == 100.0
+
+
+def test_larger_reversal_from_short_opens_residual_long_position() -> None:
+    runtime = PaperTradingRuntime(
+        config=PaperTradingConfig(
+            slippage_bps=0.0,
+            fee_bps=0.0,
+        )
+    )
+
+    runtime.submit(
+        _authorization(
+            StrategyDirection.SHORT,
+            "2026-01-01 09:15:00+05:30",
+        ),
+        price=100.0,
+        quantity=10.0,
+    )
+
+    runtime.submit(
+        _authorization(
+            StrategyDirection.LONG,
+            "2026-01-01 09:20:00+05:30",
+        ),
+        price=90.0,
+        quantity=15.0,
+    )
+
+    position = runtime.position("ITC")
+
+    assert position is not None
+    assert position.direction is StrategyDirection.LONG
+    assert position.quantity == 5.0
+    assert position.average_price == 90.0
+    assert position.realized_pnl == 100.0
