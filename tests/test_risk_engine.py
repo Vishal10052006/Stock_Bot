@@ -95,6 +95,22 @@ def test_position_size_is_risk_first() -> None:
     assert result.approved_quantity <= 250
 
 
+def test_daily_loss_uses_daily_starting_equity() -> None:
+    engine = RiskEngine(policy=RISK_POLICY_V1)
+    result = engine.evaluate(
+        RiskEvaluationInput(
+            candidate=_candidate(),
+            portfolio=_portfolio(
+                daily_starting_equity=80_000.0,
+                realized_pnl_today=-1_200.0,
+            ),
+            market=_market(),
+        )
+    )
+    assert result.status is RiskDecisionStatus.REJECTED
+    assert RiskReasonCode.DAILY_LOSS_LIMIT in result.reason_codes
+
+
 def test_daily_loss_limit_is_hard_rejection() -> None:
     engine = RiskEngine(policy=RISK_POLICY_V1)
     result = engine.evaluate(
