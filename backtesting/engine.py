@@ -334,14 +334,18 @@ class HistoricalBacktestEngine:
         row: pd.Series,
         timestamp: pd.Timestamp,
     ) -> MarketRiskContext:
-        session_open = timestamp.normalize() + pd.Timedelta(hours=9, minutes=15)
-        session_close = timestamp.normalize() + pd.Timedelta(hours=15, minutes=30)
+        # Trading specification is defined in Asia/Kolkata (IST). Historical
+        # rows are normalized to UTC by _prepare_rows, so session boundaries
+        # must be constructed in the market timezone rather than UTC.
+        market_timestamp = timestamp.tz_convert("Asia/Kolkata")
+        session_open = market_timestamp.normalize() + pd.Timedelta(hours=9, minutes=15)
+        session_close = market_timestamp.normalize() + pd.Timedelta(hours=15, minutes=30)
         volume = row.get("volume")
         return MarketRiskContext(
             timestamp=timestamp,
-            session_open=session_open,
-            session_close=session_close,
-            is_market_open=session_open <= timestamp <= session_close,
+            session_open=session_open.tz_convert("UTC"),
+            session_close=session_close.tz_convert("UTC"),
+            is_market_open=session_open <= market_timestamp <= session_close,
             volatility_regime=str(row.get("volatility_regime", "NORMAL")),
             volatility_value=(
                 float(row["atr_14"]) if "atr_14" in row.index else None
