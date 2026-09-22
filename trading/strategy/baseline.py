@@ -35,6 +35,7 @@ from market.regime.models import MarketRegime
 
 from .models import (
     BaselineStrategyConfig,
+    NoTradeReason,
     StrategyDecision,
     StrategyDirection,
 )
@@ -110,8 +111,12 @@ def _decision(
     direction: StrategyDirection,
     rationale: str,
     config: BaselineStrategyConfig,
+    primary_reason: NoTradeReason | None = None,
 ) -> StrategyDecision:
     """Construct an auditable strategy decision."""
+
+    if direction is StrategyDirection.NO_TRADE and primary_reason is None:
+        primary_reason = NoTradeReason.STRATEGY_CONDITION_FAILED
 
     return StrategyDecision(
         timestamp=pd.Timestamp(row["timestamp"]),
@@ -119,6 +124,7 @@ def _decision(
         direction=direction,
         strategy_version=config.strategy_version,
         rationale=rationale,
+        primary_reason=primary_reason,
     )
 
 
@@ -163,6 +169,7 @@ def evaluate_row(
             StrategyDirection.NO_TRADE,
             "Regime probability below baseline threshold.",
             config,
+            NoTradeReason.REGIME_CONFIDENCE_TOO_LOW,
         )
 
     # ---------------------------------------------------------------
