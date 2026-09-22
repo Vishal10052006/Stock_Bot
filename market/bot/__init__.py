@@ -1,11 +1,7 @@
-"""Production Market Bot.
-
-Market Bot describes causal market-wide state. It does not make trade,
-strategy, risk, sizing, or execution decisions.
-"""
-
+"""Production Market Bot public API."""
 from .contracts import MarketContext, MarketContextMetadata, MarketState
 from .orchestrator import MarketBot, MarketBotConfig
+from .readiness import ReadinessReport, assess_readiness
 
 __all__ = [
     "MarketBot",
@@ -13,4 +9,6 @@ __all__ = [
     "MarketContext",
     "MarketContextMetadata",
     "MarketState",
+    "ReadinessReport",
+    "assess_readiness",
 ]
