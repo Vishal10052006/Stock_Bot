@@ -91,7 +91,6 @@ class PortfolioRiskState:
     timestamp: pd.Timestamp
     starting_equity: float
     equity: float
-    daily_starting_equity: float | None = None
     available_cash: float
     reserved_capital: float = 0.0
     realized_pnl_today: float = 0.0
@@ -108,6 +107,7 @@ class PortfolioRiskState:
     symbol_risk: dict[str, float] = field(default_factory=dict)
     sector_risk: dict[str, float] = field(default_factory=dict)
     leverage: float = 0.0
+    daily_starting_equity: float | None = None
 
     def __post_init__(self) -> None:
         if pd.Timestamp(self.timestamp).tzinfo is None:
