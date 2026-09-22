@@ -8,6 +8,7 @@ from intelligence.analysis.contracts import (
     AnalysisContractError,
 )
 from intelligence.analysis.engine import AnalysisEngine, analyze_latest_row
+from intelligence.analysis.audit import AnalysisAuditCheck, AnalysisAuditReport, audit_analysis_context, audit_analysis_contexts
 from intelligence.analysis.fundamentals import (
     FUNDAMENTAL_VERSION,
     FundamentalContractError,
@@ -28,6 +29,10 @@ __all__ = [
     "AnalysisContractError",
     "AnalysisEngine",
     "analyze_latest_row",
+    "AnalysisAuditCheck",
+    "AnalysisAuditReport",
+    "audit_analysis_context",
+    "audit_analysis_contexts",
     "FUNDAMENTAL_VERSION",
     "FundamentalContractError",
     "FundamentalSnapshot",
