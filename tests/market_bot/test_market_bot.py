@@ -122,6 +122,18 @@ def test_market_bot_builds_context_without_modifying_analysis():
     assert "1D" in context.multi_timeframe
 
 
+def test_market_context_rejects_future_analysis_timestamp_leakage():
+    benchmark = _benchmark(100)
+    context = MarketBot(MarketBotConfig(benchmark="NIFTY")).build(benchmark_data=benchmark)
+    with pytest.raises(ValueError, match="cannot be from the future"):
+        build_analysis_input(
+            timestamp=pd.Timestamp("2025-04-01", tz="UTC"),
+            symbol="AAA",
+            features={"rsi": 55.0},
+            market_context=context,
+        )
+
+
 def test_market_context_can_enter_existing_analysis_contract():
     benchmark = _benchmark(100)
     bot = MarketBot(MarketBotConfig(benchmark="NIFTY"))
