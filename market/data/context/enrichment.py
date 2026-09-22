@@ -46,6 +46,39 @@ def _validate_price_context(
         raise TypeError(f"{name}.close must be numeric")
 
 
+def _validate_context_frame(
+    data: pd.DataFrame,
+    *,
+    name: str,
+    key_column: str | None,
+    required_columns: tuple[str, ...],
+) -> None:
+    """Validate a derived market/sector context frame.
+
+    Context frames contain already-derived return/volatility features,
+    so they must not be validated as raw OHLC price frames.
+    """
+    if not isinstance(data, pd.DataFrame):
+        raise TypeError(f"{name} must be a pandas DataFrame")
+    if data.empty:
+        raise ValueError(f"{name} must not be empty")
+
+    required = {"timestamp", *required_columns}
+    if key_column is not None:
+        required.add(key_column)
+
+    missing = required.difference(data.columns)
+    if missing:
+        raise ValueError(f"{name} missing columns: {sorted(missing)}")
+
+    if not isinstance(data["timestamp"].dtype, pd.DatetimeTZDtype):
+        raise ValueError(f"{name}.timestamp must be timezone-aware")
+
+    for column in required_columns:
+        if not pd.api.types.is_numeric_dtype(data[column]):
+            raise TypeError(f"{name}.{column} must be numeric")
+
+
 def _localize_mapping_date(value: object, timezone: object) -> pd.Timestamp:
     """Represent an exchange-local mapping date in the observation timezone."""
     return pd.Timestamp(value).tz_localize(timezone)
@@ -107,17 +140,31 @@ def enrich_market_sector_context(
         name="observations",
         key_column="symbol",
     )
-    _validate_price_context(
-        market_context,
-        name="market_context",
-        key_column=None,
-    )
-
     market_columns = (
         "return_1",
         "return_3",
         "return_12",
         "volatility_20",
+    )
+
+    # The public market-context contract uses canonical market_* names.
+    # Normalize them once at the enrichment boundary to the internal
+    # names consumed by align_context().
+    market_context = market_context.copy()
+    market_context = market_context.rename(
+        columns={
+            "market_return_1": "return_1",
+            "market_return_3": "return_3",
+            "market_return_12": "return_12",
+            "market_volatility_20": "volatility_20",
+        }
+    )
+
+    _validate_context_frame(
+        market_context,
+        name="market_context",
+        key_column=None,
+        required_columns=market_columns,
     )
     missing_market = set(market_columns).difference(market_context.columns)
     if missing_market:
@@ -153,10 +200,11 @@ def enrich_market_sector_context(
         result[column] = np.nan
 
     if sector_context is not None:
-        _validate_price_context(
+        _validate_context_frame(
             sector_context,
             name="sector_context",
             key_column="sector_index_symbol",
+            required_columns=market_columns,
         )
         missing_sector = set(market_columns).difference(sector_context.columns)
         if missing_sector:

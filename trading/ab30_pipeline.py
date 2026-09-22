@@ -78,6 +78,16 @@ def build_market_analysis(
             "AB-30 requires one symbol per pipeline invocation"
         )
 
+    # Phase 6 regime detection requires point-in-time market context.
+    # Fail closed before feature construction rather than allowing a
+    # context-free feature frame to reach regime detection.
+    if market_context is None:
+        raise MarketAnalysisPipelineError(
+            "AB-30 requires market context for Phase 6 regime detection; "
+            "missing=['market_return_3', 'market_return_12', "
+            "'market_volatility_20']"
+        )
+
     indicators = IndicatorEngine().calculate(working)
     features = build_features(
         indicators,
