@@ -12,7 +12,10 @@ import pandas as pd
 
 from intelligence.analysis.contracts import AnalysisContext, AnalysisInput
 from intelligence.analysis.engine import AnalysisEngine
-from intelligence.analysis.fundamentals.alignment import align_fundamental_snapshot
+from intelligence.analysis.fundamentals.alignment import (
+    align_fundamental_snapshot,
+    align_valuation_snapshot,
+)
 from intelligence.analysis.fundamentals.provider import FundamentalProvider
 from market.features.validation import validate_feature_dataset
 
@@ -107,6 +110,11 @@ def build_analysis_context(
             decision_timestamp=timestamp,
         )
 
+    aligned_valuation = align_valuation_snapshot(
+        valuation_context,
+        decision_timestamp=timestamp,
+    )
+
     engine = analysis_engine or AnalysisEngine()
     return engine.analyze(
         AnalysisInput(
@@ -118,7 +126,7 @@ def build_analysis_context(
             sector_context=sector_context,
             research_context=research_context,
             fundamental_context=fundamental_snapshot,
-            valuation_context=valuation_context,
+            valuation_context=aligned_valuation,
             data_version=data_version,
             feature_version=feature_version,
         )
