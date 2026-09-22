@@ -37,6 +37,7 @@ def test_backtest_applies_entry_and_exit_costs() -> None:
 
     result = HistoricalBacktestEngine(
         runtime=runtime,
+        config=__import__('backtesting.engine', fromlist=['BacktestConfig']).BacktestConfig(target_reward_risk=100.0),
     ).run(
         pd.DataFrame(
             [
