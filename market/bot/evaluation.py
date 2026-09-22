@@ -1,9 +1,38 @@
-"""MB-17 evaluation and MB-23 production gate."""
+"""Deterministic Market Bot evaluation utilities."""
+from __future__ import annotations
 from dataclasses import dataclass
-@dataclass(frozen=True,slots=True)
-class EvaluationReport:
-    sample_count:int; available_rate:float; causal_checks_passed:bool; leakage_checks_passed:bool; integration_checks_passed:bool; production_ready:bool; notes:tuple[str,...]
-def evaluate(states,*,causal_checks_passed=True,leakage_checks_passed=True,integration_checks_passed=True):
-    s=list(states); n=len(s); rate=sum(x.availability!="UNAVAILABLE" for x in s)/n if n else 0
-    ready=bool(n and rate>=.95 and causal_checks_passed and leakage_checks_passed and integration_checks_passed)
-    return EvaluationReport(n,rate,causal_checks_passed,leakage_checks_passed,integration_checks_passed,ready,() if ready else ("production gate remains closed until evidence passes",))
+import numpy as np
+import pandas as pd
+
+@dataclass(frozen=True, slots=True)
+class RegimeEvaluation:
+    observations:int
+    usable_observations:int
+    transition_count:int
+    transition_rate:float
+    regime_persistence:float
+    completeness:float
+
+def evaluate_regimes(regime_frame:pd.DataFrame)->RegimeEvaluation:
+    required={"timestamp","regime"}
+    missing=required.difference(regime_frame.columns)
+    if missing: raise ValueError(f"missing: {sorted(missing)}")
+    frame=regime_frame.sort_values("timestamp").copy()
+    usable=frame["regime"].notna()
+    n=int(usable.sum())
+    if n==0: return RegimeEvaluation(len(frame),0,0,0.0,0.0,0.0)
+    seq=frame.loc[usable,"regime"]
+    transition_count=int(seq.ne(seq.shift(1)).sum()-1)
+    transition_count=max(0,transition_count)
+    rate=transition_count/max(n-1,1)
+    return RegimeEvaluation(len(frame),n,transition_count,rate,1.0-rate,n/len(frame) if len(frame) else 0.0)
+
+def leakage_check(features:pd.DataFrame,timestamp:str="timestamp")->None:
+    if timestamp not in features.columns: raise ValueError("timestamp column required")
+    ts=pd.to_datetime(features[timestamp],utc=True)
+    if not ts.is_monotonic_increasing: raise ValueError("timestamps must be ordered")
+    if ts.duplicated().any(): raise ValueError("duplicate timestamps detected")
+    if len(features)!=len(ts): raise ValueError("feature index mismatch")
+
+def deterministic_replay(first:pd.DataFrame,second:pd.DataFrame)->bool:
+    return first.reset_index(drop=True).equals(second.reset_index(drop=True))

@@ -1,6 +1,20 @@
-"""MB-21 fail-closed semantics."""
+"""Explicit Market Bot failure states; no silent fabrication."""
+from __future__ import annotations
 from dataclasses import dataclass
-@dataclass(frozen=True,slots=True)
-class FailurePolicy:
-    missing_data_state:str="UNAVAILABLE"; fail_closed:bool=True; allow_partial:bool=True
-def unavailable_reason(error): return {"status":"UNAVAILABLE","reason":type(error).__name__+":"+str(error),"trade_authority":False}
+from typing import Any
+
+@dataclass(frozen=True, slots=True)
+class MarketBotFailure:
+    code: str
+    message: str
+    recoverable: bool
+    details: dict[str, Any]
+
+class MarketBotUnavailable(RuntimeError):
+    """Raised when required market state cannot be produced safely."""
+
+class StaleMarketDataError(MarketBotUnavailable):
+    """Raised when required market observations are stale."""
+
+class InsufficientMarketDataError(MarketBotUnavailable):
+    """Raised when there is not enough causal history."""
