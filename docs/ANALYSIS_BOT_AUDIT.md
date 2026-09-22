@@ -25,3 +25,18 @@ A code-only audit can pass the structural criteria. It cannot certify
 profitability, future returns, or the quality of an externally acquired
 fundamental dataset. Those require separate empirical validation with
 point-in-time data.
+
+
+## End-to-end authority audit
+
+The final integration audit also verifies the canonical downstream chain:
+
+FeatureDataset/Regime → AnalysisContext → PredictionContext → StrategyDecision → RiskDecision.
+
+The checks must preserve these boundaries:
+- Analysis emits analytical context/candidates only.
+- Prediction performs inference using the existing Phase 9 feature schema.
+- Strategy remains the authority for LONG/SHORT/NO_TRADE.
+- Risk remains the authority for pre-trade approval/rejection.
+- No upstream analytical or model output may directly create an order.
+- Market and sector context namespaces remain distinct at the integration seam.
