@@ -31,4 +31,9 @@ def test_confusion_matrix_is_json_serializable() -> None:
     ]
 
     report_metrics = _metrics(y_true, probabilities)
+    assert report_metrics["confusion_matrix"] == [
+        [1, 0, 0],
+        [0, 1, 0],
+        [0, 0, 2],
+    ]
     json.dumps(report_metrics)
