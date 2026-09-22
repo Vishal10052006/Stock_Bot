@@ -18,6 +18,16 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def _compile_phase9_scripts() -> None:
+    """Fail closed if the real-data runners contain syntax errors."""
+    import py_compile
+
+    for path in (
+        ROOT / "scripts" / "build_phase9_real_dataset.py",
+        ROOT / "scripts" / "run_phase9_experiment.py",
+    ):
+        py_compile.compile(str(path), doraise=True)
+
 def main() -> int:
     """Run the Phase 9-focused test surface."""
     command = [
