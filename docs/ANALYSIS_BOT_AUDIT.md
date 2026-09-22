@@ -40,3 +40,21 @@ The checks must preserve these boundaries:
 - Risk remains the authority for pre-trade approval/rejection.
 - No upstream analytical or model output may directly create an order.
 - Market and sector context namespaces remain distinct at the integration seam.
+
+
+## Final integration audit
+
+The Analysis boundary is considered structurally complete when the following
+interfaces are verified together:
+
+1. ResearchContext is not newer than the Analysis decision timestamp.
+2. Fundamental available_at is not newer than the decision timestamp.
+3. Valuation as_of is not newer than the decision timestamp.
+4. Prediction preserves Analysis timestamp, symbol, feature version and analysis version.
+5. Strategy preserves Analysis timestamp and symbol.
+6. Risk evaluates the Strategy direction and preserves timestamp/symbol identity.
+7. Analysis candidates contain no BUY/SELL/ORDER authority.
+8. AnalysisContext owns its mapping inputs so later caller mutation cannot rewrite a completed analysis result.
+
+These are integration/contract checks. They do not certify prediction accuracy,
+strategy profitability, or future trading returns.
