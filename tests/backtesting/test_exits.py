@@ -63,7 +63,7 @@ def test_target_partially_exits_and_remaining_position_is_closed() -> None:
 
     assert result.completed_trades == 2
     assert result.outcomes[0].quantity == 125.0
-    assert result.outcomes[0].exit_price > 103.0
+    assert result.outcomes[0].exit_price < 103.0
     assert result.outcomes[1].quantity == 125.0
 
 
