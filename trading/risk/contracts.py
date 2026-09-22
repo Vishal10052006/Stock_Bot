@@ -91,6 +91,7 @@ class PortfolioRiskState:
     timestamp: pd.Timestamp
     starting_equity: float
     equity: float
+    daily_starting_equity: float | None = None
     available_cash: float
     reserved_capital: float = 0.0
     realized_pnl_today: float = 0.0
@@ -113,6 +114,8 @@ class PortfolioRiskState:
             raise ValueError("portfolio timestamp must be timezone-aware")
         if self.starting_equity <= 0 or self.equity <= 0:
             raise ValueError("equity values must be positive")
+        if self.daily_starting_equity is not None and self.daily_starting_equity <= 0:
+            raise ValueError("daily_starting_equity must be positive when supplied")
         for name, value in (
             ("available_cash", self.available_cash),
             ("reserved_capital", self.reserved_capital),
