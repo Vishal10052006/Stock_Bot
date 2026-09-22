@@ -125,7 +125,7 @@ def evaluate_predictions(
             y_array,
             predictions,
             labels=labels,
-        ).tolist(),
+        ),
     }
 
 
