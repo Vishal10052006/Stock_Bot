@@ -72,3 +72,31 @@ def test_stratified_report_is_out_of_sample_slice_only() -> None:
     assert set(report["regime"]) == {"TREND", "RANGE"}
     assert set(report["symbol"]) == {"AAA", "BBB"}
     assert set(report["date"]) == {"2026-09-11", "2026-09-12"}
+
+
+def test_stratified_report_includes_sample_counts() -> None:
+    y = pd.Series(
+        [
+            "LONG_SUCCESS",
+            "SHORT_SUCCESS",
+            "NO_EDGE",
+            "NO_EDGE",
+        ]
+    )
+    metadata = pd.DataFrame(
+        {
+            "regime": ["TREND", "TREND", "RANGE", "RANGE"],
+            "symbol": ["AAA", "AAA", "BBB", "BBB"],
+            "date": [
+                "2026-09-11",
+                "2026-09-11",
+                "2026-09-12",
+                "2026-09-12",
+            ],
+        }
+    )
+
+    report = _stratified_report(y, _probabilities(), metadata)
+
+    assert report["regime"]["TREND"]["sample_count"] == 2
+    assert report["regime"]["RANGE"]["sample_count"] == 2
