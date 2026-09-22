@@ -158,3 +158,29 @@ def test_market_context_rejects_timestamp_mismatch():
     other = pd.Timestamp("2025-01-02", tz="UTC").to_pydatetime()
     with pytest.raises(ValueError):
         MarketContext(timestamp=other, benchmark="NIFTY", state=state)
+
+
+def test_breadth_warmup_is_unavailable_not_mixed():
+    data = _constituents(3)
+    result = BreadthEngine().calculate(data)
+    assert result.iloc[0]["breadth_state"] == "UNAVAILABLE"
+
+
+def test_market_bot_readiness_is_not_trade_authorization():
+    from market.bot.readiness import assess_readiness
+    context = MarketBot(MarketBotConfig(benchmark="NIFTY", data_version="test")).build(
+        benchmark_data=_benchmark(100)
+    )
+    report = assess_readiness(context)
+    assert report.no_trade_authority is True
+    assert report.ready_for_review is True
+
+
+def test_regime_research_uses_walk_forward_ordering():
+    from market.bot.regime_research import RegimeResearchProtocol
+    data = _benchmark(40)
+    data["timestamp"] = pd.to_datetime(data["timestamp"], utc=True)
+    protocol = RegimeResearchProtocol(train_size=20, test_size=10, step=10)
+    folds = protocol.folds(data)
+    assert folds
+    assert all(f.train_end < f.test_start for f in folds)
