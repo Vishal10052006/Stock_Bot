@@ -60,3 +60,18 @@ pass the same backtest -> OOS -> walk-forward -> paper validation pathway.
 
 The repository trading specification keeps live execution locked. This Strategy
 Engine has no broker authority.
+
+
+## Integration status
+
+The authoritative StrategyEngine is now the strategy boundary used by the paper
+decision loop and historical backtest engine. Both adapters preserve compatibility
+with callers that still supply the frozen BaselineStrategyConfig.
+
+The Strategy -> TradeCandidate boundary is explicit through
+trading.strategy.candidate_adapter. It requires matching timestamp and symbol,
+rejects NO_TRADE, and delegates causal entry/stop construction to the existing
+trading.signals implementation.
+
+The Risk gate remains downstream and consumes StrategyDecision; Strategy never
+authorizes execution.
