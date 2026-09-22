@@ -18,6 +18,12 @@ def _row(timestamp: str, *, close: float) -> dict:
         "higher_low": True,
         "lower_low": False,
         "lower_high": False,
+        "high": close,
+        "low": close,
+        "atr_14": 2.0,
+        "support_20": close - 2.0,
+        "resistance_20": close + 2.0,
+        "volume": 10_000_000.0,
     }
 
 
