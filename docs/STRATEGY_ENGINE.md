@@ -75,3 +75,21 @@ trading.signals implementation.
 
 The Risk gate remains downstream and consumes StrategyDecision; Strategy never
 authorizes execution.
+
+
+### Candidate-aware Risk integration
+
+Actionable Strategy decisions are now materialized into the existing causal
+`TradeCandidate` boundary and routed through the deterministic
+`RiskEngine` before ExecutionAuthorization in both:
+
+- `PaperDecisionLoop`
+- `HistoricalBacktestEngine`
+
+Risk-first position sizing uses the frozen ₹100,000 initial paper capital and
+the configured 0.5% per-trade risk budget. Hard controls include daily loss,
+trade-count, open-position, gross-exposure, liquidity, duplicate-symbol and
+kill-switch rejection.
+
+The legacy risk gate remains available as a compatibility boundary, but the
+paper/backtest paths no longer use it as their primary risk authority.
