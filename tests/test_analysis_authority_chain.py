@@ -15,7 +15,8 @@ from trading.strategy.prediction_adapter import strategy_from_prediction
 
 
 def _feature_row() -> pd.DataFrame:
-    return pd.DataFrame(
+    """Build a valid Phase 5 FeatureDataset v1 row from Phase 4-style inputs."""
+    phase4 = pd.DataFrame(
         {
             "timestamp": [pd.Timestamp("2026-09-20 10:25:00+05:30")],
             "symbol": ["RELIANCE"],
@@ -48,17 +49,21 @@ def _feature_row() -> pd.DataFrame:
             "lower_low": [False],
             "higher_low": [True],
             "lower_high": [False],
-            "market_return_1": [0.01],
-            "market_return_3": [0.02],
-            "market_return_12": [0.04],
-            "market_volatility_20": [0.012],
-            "sector_return_1": [0.03],
-            "sector_return_3": [0.05],
-            "sector_return_12": [0.08],
-            "sector_volatility_20": [0.018],
         }
     )
 
+    from market.features.builder import build_features
+
+    feature_dataset = build_features(phase4)
+    feature_dataset.loc[:, "market_return_1"] = 0.01
+    feature_dataset.loc[:, "market_return_3"] = 0.02
+    feature_dataset.loc[:, "market_return_12"] = 0.04
+    feature_dataset.loc[:, "market_volatility_20"] = 0.012
+    feature_dataset.loc[:, "sector_return_1"] = 0.03
+    feature_dataset.loc[:, "sector_return_3"] = 0.05
+    feature_dataset.loc[:, "sector_return_12"] = 0.08
+    feature_dataset.loc[:, "sector_volatility_20"] = 0.018
+    return feature_dataset
 
 def _training_frame(rows: int = 12) -> tuple[pd.DataFrame, pd.Series]:
     data: dict[str, list[object]] = {}
