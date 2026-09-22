@@ -30,11 +30,12 @@ from trading.risk.gate import (
     RiskDecision,
     evaluate_strategy_risk,
 )
-from trading.strategy.baseline import evaluate_row
+from trading.strategy.engine import StrategyEngine
 from trading.strategy.models import (
-    BaselineStrategyConfig,
+    StrategyConfig,
     StrategyDecision,
     StrategyDirection,
+    StrategyInput,
 )
 
 
@@ -108,13 +109,13 @@ class HistoricalBacktestEngine:
         self,
         *,
         config: BacktestConfig | None = None,
-        strategy_config: BaselineStrategyConfig | None = None,
+        strategy_config: StrategyConfig | None = None,
         runtime: PaperTradingRuntime | None = None,
         lifecycle: PaperTradeLifecycle | None = None,
     ) -> None:
         self.config = config or BacktestConfig()
-        self.strategy_config = (
-            strategy_config or BaselineStrategyConfig()
+        self.strategy_engine = StrategyEngine(
+            strategy_config or StrategyConfig()
         )
         self.runtime = runtime or PaperTradingRuntime()
         self.lifecycle = lifecycle or PaperTradeLifecycle()
@@ -150,9 +151,9 @@ class HistoricalBacktestEngine:
                 price=price,
             )
 
-            strategy = evaluate_row(
-                row,
-                config=self.strategy_config,
+            strategy_input = self._strategy_input_from_row(row)
+            strategy, _trace = self.strategy_engine.decide(
+                strategy_input
             )
 
             risk = evaluate_strategy_risk(
@@ -194,6 +195,46 @@ class HistoricalBacktestEngine:
         return BacktestResult(
             steps=tuple(steps),
             outcomes=self.lifecycle.outcomes,
+        )
+
+    @staticmethod
+    def _strategy_input_from_row(row: pd.Series) -> StrategyInput:
+        """Build the centralized StrategyInput from one causal row."""
+        required = {
+            "timestamp",
+            "symbol",
+            "regime",
+            "regime_probability",
+            "vwap_distance_pct",
+            "rvol_20",
+            "higher_high",
+            "higher_low",
+            "lower_low",
+            "lower_high",
+        }
+        missing = required.difference(row.index)
+        if missing:
+            raise ValueError(
+                "backtest strategy row is missing required columns: "
+                f"{sorted(missing)}"
+            )
+
+        feature_names = (
+            "vwap_distance_pct",
+            "rvol_20",
+            "higher_high",
+            "higher_low",
+            "lower_low",
+            "lower_high",
+        )
+        features = {name: row[name] for name in feature_names}
+
+        return StrategyInput(
+            timestamp=pd.Timestamp(row["timestamp"]),
+            symbol=str(row["symbol"]),
+            decision_features=features,
+            regime=str(row["regime"]),
+            regime_probability=float(row["regime_probability"]),
         )
 
     def _handle_authorized_decision(
