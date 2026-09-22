@@ -72,6 +72,7 @@ def test_zero_cost_backtest_matches_market_move() -> None:
 
     result = HistoricalBacktestEngine(
         runtime=runtime,
+        config=BacktestConfig(target_reward_risk=100.0),
     ).run(
         pd.DataFrame(
             [
