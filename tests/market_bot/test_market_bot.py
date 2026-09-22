@@ -166,6 +166,34 @@ def test_breadth_warmup_is_unavailable_not_mixed():
     assert result.iloc[0]["breadth_state"] == "UNAVAILABLE"
 
 
+def test_market_bot_allows_breadth_without_volume_and_marks_liquidity_unavailable():
+    benchmark = _benchmark(100)
+    constituents = _constituents(100).drop(columns=["volume"])
+    context = MarketBot(MarketBotConfig(benchmark="NIFTY")).build(
+        benchmark_data=benchmark,
+        constituent_data=constituents,
+    )
+    assert context.state.breadth_state in {"POSITIVE", "NEGATIVE", "MIXED"}
+    assert context.state.liquidity_state is None
+    assert context.liquidity == {}
+
+
+def test_market_context_store_normalizes_benchmark_key():
+    from market.bot.storage import InMemoryMarketContextStore
+    benchmark = _benchmark(100)
+    context = MarketBot(MarketBotConfig(benchmark="NIFTY")).build(benchmark_data=benchmark)
+    store = InMemoryMarketContextStore()
+    store.put(context)
+    assert store.get("nifty", context.timestamp) == context
+
+
+def test_market_bot_rejects_empty_benchmark():
+    with pytest.raises(Exception, match="benchmark data is empty"):
+        MarketBot(MarketBotConfig(benchmark="NIFTY")).build(
+            benchmark_data=pd.DataFrame(columns=["timestamp", "close"])
+        )
+
+
 def test_market_bot_readiness_is_not_trade_authorization():
     from market.bot.readiness import assess_readiness
     context = MarketBot(MarketBotConfig(benchmark="NIFTY", data_version="test")).build(
@@ -174,6 +202,15 @@ def test_market_bot_readiness_is_not_trade_authorization():
     report = assess_readiness(context)
     assert report.no_trade_authority is True
     assert report.ready_for_review is True
+
+
+def test_regime_research_normalizes_naive_timestamps():
+    from market.bot.regime_research import RegimeResearchProtocol
+    data = _benchmark(40).copy()
+    data["timestamp"] = data["timestamp"].dt.tz_localize(None)
+    protocol = RegimeResearchProtocol(train_size=20, test_size=10, step=10)
+    folds = protocol.folds(data)
+    assert folds[0].train_start.tzinfo is not None
 
 
 def test_regime_research_uses_walk_forward_ordering():
