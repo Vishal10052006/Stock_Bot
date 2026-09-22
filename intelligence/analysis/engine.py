@@ -77,6 +77,7 @@ class AnalysisEngine:
                     "research_context": analysis_input.research_context is not None,
                     "fundamental_context": analysis_input.fundamental_context is not None,
                     "valuation_context": analysis_input.valuation_context is not None,
+                    "fundamental_version": "fundamentals-v1.0",
                 },
             ),
         )
