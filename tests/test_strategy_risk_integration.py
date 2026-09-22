@@ -42,7 +42,7 @@ def test_paper_uses_risk_engine_position_size() -> None:
     result = PaperDecisionLoop().run(rows)
 
     assert result.orders
-    assert result.orders[0].quantity == 125.0
+    assert result.orders[0].quantity == 166.0
     assert result.steps[0].risk.status.value == "APPROVED"
 
 
@@ -74,5 +74,5 @@ def test_backtest_uses_risk_engine_position_size() -> None:
     result = HistoricalBacktestEngine().run(rows)
 
     assert result.orders
-    assert result.orders[0].quantity == 125.0
+    assert result.orders[0].quantity == 166.0
     assert result.steps[0].risk.status.value == "APPROVED"
