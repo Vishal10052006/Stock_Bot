@@ -27,8 +27,16 @@ class RegimeResearchProtocol:
         self.train_size=train_size; self.test_size=test_size; self.step=step
 
     def folds(self,data:pd.DataFrame,timestamp:str="timestamp")->tuple[WalkForwardFold,...]:
-        frame=data.sort_values(timestamp).reset_index(drop=True)
-        ts=pd.to_datetime(frame[timestamp],utc=True)
+        if timestamp not in data.columns:
+            raise ValueError(f"missing timestamp column: {timestamp}")
+        frame=data.copy()
+        frame[timestamp]=pd.to_datetime(frame[timestamp],utc=True)
+        if frame[timestamp].isna().any():
+            raise ValueError("timestamp contains invalid values")
+        frame=frame.sort_values(timestamp,kind="stable").reset_index(drop=True)
+        if frame[timestamp].duplicated().any():
+            raise ValueError("timestamps must be unique")
+        ts=frame[timestamp]
         out=[]
         start=self.train_size
         while start+self.test_size<=len(frame):
@@ -37,7 +45,11 @@ class RegimeResearchProtocol:
         return tuple(out)
 
     def run(self,data:pd.DataFrame,features:list[str],estimator_factory:Callable[[],Any],model_name:str)->RegimeResearchResult:
-        frame=data.sort_values("timestamp").reset_index(drop=True)
+        frame=data.copy()
+        frame["timestamp"]=pd.to_datetime(frame["timestamp"],utc=True)
+        if frame["timestamp"].isna().any():
+            raise ValueError("timestamp contains invalid values")
+        frame=frame.sort_values("timestamp",kind="stable").reset_index(drop=True)
         folds=self.folds(frame)
         metrics=[]
         for fold in folds:
