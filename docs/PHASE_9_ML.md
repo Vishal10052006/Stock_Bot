@@ -103,14 +103,44 @@ Classification quality is measured with:
 These metrics describe predictive quality. They do not establish trading
 profitability.
 
-## Remaining Phase 9 work
+## Phase 9 completion contract
 
-1. Run the complete repository test suite after the new changes.
-2. Run a real historical dataset through the complete trainer.
-3. Record reproducible validation metrics.
-4. Compare Logistic Regression and Random Forest on the same temporal split.
-5. Add model artifact/version persistence and the Phase 9 SignalModel v1.0
-   prediction contract.
-6. Keep the external test partition untouched until later validation phases.
+Phase 9 is considered implementation-complete only when P9-00 through P9-17
+are present and tested:
 
-Phase 9 does not authorize live trading.
+- P9-00 research specification and failure criteria
+- P9-01 prediction input/output contract
+- P9-02 training-dataset validation
+- P9-03 label audit
+- P9-04 temporal split and purge
+- P9-05 train-only preprocessing
+- P9-06 majority/class-prior/BaselineStrategy benchmark definitions
+- P9-07 Logistic Regression v1
+- P9-08 probability evaluation
+- P9-09 classification evaluation
+- P9-10 regime/symbol/date stratified evaluation
+- P9-11 effective-sample-size reporting
+- P9-12 calibration
+- P9-13 inference adapter / SignalModel boundary
+- P9-14 model registry metadata contract
+- P9-15 prediction monitoring schema
+- P9-16 phase validation gate
+- P9-17 experiment record/reporting contract
+
+Important: implementation-complete does not mean empirically successful.
+Real-data results may still be inconclusive or reject the hypothesis.
+
+The external test partition remains untouched by all Phase 9 model-selection
+and calibration work. Phase 9 does not authorize live trading.
+
+### Non-responsibilities
+
+Prediction code must not:
+- make BUY/SELL/TRADE decisions;
+- size positions;
+- create stops/targets;
+- authorize risk;
+- execute orders;
+- bypass the Strategy or Risk Engine.
+
+The output is probability information only.
