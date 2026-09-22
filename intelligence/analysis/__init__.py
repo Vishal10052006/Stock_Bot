@@ -24,6 +24,7 @@ from intelligence.analysis.fundamentals import (
     InMemoryFundamentalProvider,
     FundamentalAlignmentError,
     align_fundamental_snapshot,
+    align_valuation_snapshot,
     analyze_fundamentals,
 )
 
@@ -48,5 +49,6 @@ __all__ = [
     "InMemoryFundamentalProvider",
     "FundamentalAlignmentError",
     "align_fundamental_snapshot",
+    "align_valuation_snapshot",
     "analyze_fundamentals",
 ]
