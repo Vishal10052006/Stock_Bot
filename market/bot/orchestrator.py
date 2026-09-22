@@ -1,14 +1,14 @@
 """MB-13 Market Bot orchestration with explicit benchmark isolation."""
 import pandas as pd
 from .engines import MarketTrendEngine,MarketRangeEngine,MarketVolatilityEngine,MarketBreadthEngine,SectorIntelligenceEngine,SectorRotationEngine,CorrelationDependencyEngine,LiquidityFlowEngine,MarketStrengthEngine
-from .transitions import fuse_market_state
+from .transitions import fuse_market_state,detect_regime_transitions
 from .validation import validate_market_input,validate_state
 from .provenance import build_provenance
 
 class MarketBotOrchestrator:
     version="market-bot-v1"
 
-    def run(self,data,*,benchmark,as_of=None,data_version="unknown",feature_version="market-bot-v1"):
+    def run(self,data,*,benchmark,as_of=None,prior_regime=None,data_version="unknown",feature_version="market-bot-v1"):
         validate_market_input(data)
         f=data.copy()
         f["timestamp"]=pd.to_datetime(f.timestamp,utc=True)
