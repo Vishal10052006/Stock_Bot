@@ -1,6 +1,7 @@
 """Quantitative Strategy Engine public API."""
 
 from .baseline import evaluate, evaluate_row
+from .candidate_adapter import build_candidate_from_strategy
 from .engine import StrategyEngine, StrategyTrace
 from .models import (
     BaselineStrategyConfig,
@@ -19,7 +20,8 @@ from .validation import (
 
 __all__ = [
     "BaselineStrategyConfig",
-    "NoTradeReason",
+    "build_candidate_from_strategy",
+      "NoTradeReason",
     "StrategyConfig",
     "StrategyDecision",
     "StrategyDirection",
