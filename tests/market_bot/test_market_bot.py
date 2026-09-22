@@ -166,6 +166,19 @@ def test_breadth_warmup_is_unavailable_not_mixed():
     assert result.iloc[0]["breadth_state"] == "UNAVAILABLE"
 
 
+def test_market_bot_allows_missing_benchmark_constituent():
+    benchmark = _benchmark(100)
+    constituents = _constituents(100)
+    constituents = constituents.loc[constituents["symbol"] != "NIFTY"].copy()
+    context = MarketBot(MarketBotConfig(benchmark="NIFTY")).build(
+        benchmark_data=benchmark,
+        constituent_data=constituents,
+    )
+    assert context.state.breadth_state in {"POSITIVE", "NEGATIVE", "MIXED"}
+    assert context.state.correlation_state is None
+    assert context.correlation == {}
+
+
 def test_market_bot_allows_breadth_without_volume_and_marks_liquidity_unavailable():
     benchmark = _benchmark(100)
     constituents = _constituents(100).drop(columns=["volume"])
