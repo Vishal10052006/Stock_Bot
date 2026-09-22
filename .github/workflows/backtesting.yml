@@ -1,0 +1,26 @@
+name: Backtesting Validation
+
+on:
+  push:
+    branches:
+      - phase-12/backtesting-v1
+  pull_request:
+
+jobs:
+  backtesting:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install backtesting dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pandas numpy pytest
+
+      - name: Run backtesting and risk tests
+        run: |
+          python -m pytest -q             tests/backtesting             tests/test_risk_engine.py             tests/test_risk_gate.py
