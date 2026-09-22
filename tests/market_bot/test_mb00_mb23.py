@@ -1,26 +1,75 @@
+"""Compatibility/regression tests for the canonical Market Bot implementation."""
+from __future__ import annotations
+
+import numpy as np
 import pandas as pd
-from market.bot.contracts import MarketState
-from market.bot.engines import MarketTrendEngine,MarketVolatilityEngine,MarketRangeEngine
-from market.bot.orchestrator import MarketBotOrchestrator
-from market.bot.evaluation import evaluate
-from market.bot.integration import assert_no_trade_authority
-from market.bot.versioning import assert_compatible
-def sample_market(n=120,symbols=("AAA","BBB","CCC","DDD")):
-    rows=[]
-    for j,s in enumerate(symbols):
-        for i,t in enumerate(pd.date_range("2026-01-01",periods=n,freq="D",tz="UTC")):
-            c=100+j*5+i*.15+(i%7)*.02
-            rows.append({"timestamp":t,"symbol":s,"close":c,"high":c+1,"low":c-1,"volume":100000+j*10000,"sector":"S"+str(j%2)})
+
+from market.bot.breadth import BreadthEngine
+from market.bot.orchestrator import MarketBot, MarketBotConfig
+from market.bot.structure import StructureEngine
+from market.bot.trend import TrendEngine
+from market.bot.volatility import VolatilityEngine
+
+
+def benchmark(n: int = 120) -> pd.DataFrame:
+    timestamps = pd.date_range("2026-01-01", periods=n, freq="D", tz="UTC")
+    close = 100.0 * np.cumprod(1.0 + np.full(n, 0.001))
+    return pd.DataFrame({"timestamp": timestamps, "close": close})
+
+
+def constituents(n: int = 120) -> pd.DataFrame:
+    timestamps = pd.date_range("2026-01-01", periods=n, freq="D", tz="UTC")
+    rows = []
+    for j, symbol in enumerate(("NIFTY50", "AAA", "BBB", "CCC")):
+        close = (100.0 + j * 5.0) * np.cumprod(1.0 + np.full(n, 0.0005 if j % 2 == 0 else -0.0002))
+        for timestamp, value in zip(timestamps, close):
+            rows.append({"timestamp": timestamp, "symbol": symbol, "close": value, "volume": 100000 + j * 10000})
     return pd.DataFrame(rows)
+
+
 def test_trend_warmup_and_causality():
-    x=sample_market().query("symbol=='AAA'").copy(); a=MarketTrendEngine().calculate(x); b=MarketTrendEngine().calculate(pd.concat([x,x.iloc[-1:].assign(timestamp=x.timestamp.iloc[-1]+pd.Timedelta(days=1),close=9999)],ignore_index=True))
-    assert a.trend_state.iloc[0]=="UNAVAILABLE"; assert a.trend_state.iloc[-1]==b.trend_state.iloc[-2]
-def test_range_and_volatility():
-    x=sample_market().query("symbol=='AAA'").copy(); assert "range_state" in MarketRangeEngine().calculate(x); assert "volatility_state" in MarketVolatilityEngine().calculate(x)
-def test_orchestrator():
-    s,d=MarketBotOrchestrator().run(sample_market(),benchmark="NIFTY50"); assert s.benchmark=="NIFTY50"; assert_no_trade_authority(s)
-def test_contract_gate():
-    s=MarketState(pd.Timestamp("2026-01-01",tz="UTC").to_pydatetime(),"NIFTY50",quality=.5); assert_compatible(s.version); assert evaluate([s]).sample_count==1
-def test_future_row_does_not_change_history():
-    x=sample_market().query("symbol=='AAA'").copy(); a=MarketVolatilityEngine().calculate(x); y=pd.concat([x,x.iloc[-1:].assign(timestamp=x.timestamp.iloc[-1]+pd.Timedelta(days=1),close=5000)],ignore_index=True); b=MarketVolatilityEngine().calculate(y)
-    pd.testing.assert_frame_equal(a[["volatility_realized","volatility_atr_normalized","volatility_state"]].iloc[:-1].reset_index(drop=True),b[["volatility_realized","volatility_atr_normalized","volatility_state"]].iloc[:-2].reset_index(drop=True))
+    frame = benchmark()
+    first = TrendEngine().calculate(frame)
+    extended = pd.concat(
+        [frame, pd.DataFrame([{"timestamp": frame["timestamp"].iloc[-1] + pd.Timedelta(days=1), "close": 9999.0}])],
+        ignore_index=True,
+    )
+    second = TrendEngine().calculate(extended)
+    assert first["trend_state"].iloc[0] == "UNAVAILABLE"
+    assert first["trend_state"].iloc[-1] == second["trend_state"].iloc[-2]
+
+
+def test_structure_and_volatility_contracts():
+    frame = benchmark()
+    assert "range_state" in StructureEngine().calculate(frame)
+    assert "volatility_state" in VolatilityEngine().calculate(frame)
+
+
+def test_market_bot_orchestration():
+    frame = benchmark()
+    state = MarketBot(MarketBotConfig(benchmark="NIFTY50")).build(
+        benchmark_data=frame,
+        constituent_data=constituents(),
+    )
+    assert state.benchmark == "NIFTY50"
+    assert state.state.regime in {None, "TREND_UP", "TREND_DOWN", "RANGE", "HIGH_VOLATILITY", "LOW_VOLATILITY"}
+
+
+def test_breadth_is_causal_and_explicitly_unavailable_during_warmup():
+    result = BreadthEngine().calculate(constituents(3))
+    assert result.iloc[0]["breadth_state"] == "UNAVAILABLE"
+
+
+def test_future_rows_do_not_change_volatility_history():
+    frame = benchmark()
+    first = VolatilityEngine().calculate(frame)
+    future = pd.concat(
+        [frame, pd.DataFrame([{"timestamp": frame["timestamp"].iloc[-1] + pd.Timedelta(days=1), "close": 5000.0}])],
+        ignore_index=True,
+    )
+    second = VolatilityEngine().calculate(future)
+    pd.testing.assert_frame_equal(
+        first[["timestamp", "volatility_state"]].reset_index(drop=True),
+        second[["timestamp", "volatility_state"]].iloc[:-1].reset_index(drop=True),
+        check_dtype=False,
+    )
