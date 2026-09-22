@@ -28,4 +28,7 @@ __all__ = [
     "FundamentalAlignmentError",
     "align_fundamental_snapshot",
     "analyze_fundamentals",
+    "analyze_valuation",
+    "FundamentalValidationReport",
+    "validate_fundamental_snapshots",
 ]
