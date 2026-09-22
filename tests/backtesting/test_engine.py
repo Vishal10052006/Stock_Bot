@@ -252,3 +252,39 @@ def test_lifecycle_public_open_state_is_exposed() -> None:
     assert lifecycle.open_symbols == ()
     assert lifecycle.is_open("ITC") is False
     assert lifecycle.open_order("ITC") is None
+
+
+def test_daily_trade_limit_resets_at_new_session() -> None:
+    """Daily trade count must reset when the historical session changes."""
+
+    rows = pd.DataFrame(
+        [
+            _row("2026-01-01 09:00:00+05:30"),
+            _row("2026-01-01 10:00:00+05:30"),
+            _row("2026-01-01 11:00:00+05:30"),
+            _row("2026-01-01 12:00:00+05:30"),
+            _row("2026-01-01 13:00:00+05:30"),
+            _row("2026-01-01 14:00:00+05:30"),
+            _row("2026-01-02 09:00:00+05:30"),
+            _row("2026-01-02 09:05:00+05:30"),
+        ]
+    )
+
+    result = HistoricalBacktestEngine().run(rows)
+
+    first_day_entries = [
+        step
+        for step in result.steps
+        if step.timestamp.date() == pd.Timestamp("2026-01-01").date()
+        and step.order is not None
+    ]
+
+    next_day_first = next(
+        step
+        for step in result.steps
+        if step.timestamp == pd.Timestamp("2026-01-02 09:00:00+05:30")
+    )
+
+    assert len(first_day_entries) == 5
+    assert next_day_first.risk.status.value == "APPROVED"
+    assert next_day_first.order is not None
