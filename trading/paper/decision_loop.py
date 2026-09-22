@@ -17,8 +17,8 @@ from execution.trading_execution import (
 )
 from paper.runtime import PaperOrder, PaperTradingRuntime
 from trading.risk.gate import RiskDecision, evaluate_strategy_risk
-from trading.strategy.baseline import evaluate_row
-from trading.strategy.models import BaselineStrategyConfig, StrategyDecision
+from trading.strategy.engine import StrategyEngine
+from trading.strategy.models import StrategyConfig, StrategyDecision, StrategyInput
 
 
 @dataclass(frozen=True, slots=True)
@@ -50,11 +50,11 @@ class PaperDecisionLoop:
         self,
         *,
         runtime: PaperTradingRuntime | None = None,
-        strategy_config: BaselineStrategyConfig | None = None,
+        strategy_config: StrategyConfig | None = None,
         risk_enabled: bool = True,
     ) -> None:
         self.runtime = runtime or PaperTradingRuntime()
-        self.strategy_config = strategy_config or BaselineStrategyConfig()
+        self.strategy_engine = StrategyEngine(strategy_config or StrategyConfig())
         self.risk_enabled = risk_enabled
 
     def run(
@@ -91,7 +91,8 @@ class PaperDecisionLoop:
         steps: list[PaperDecisionStep] = []
         for _, row in working.iterrows():
             price = float(row[price_column])
-            strategy = evaluate_row(row, config=self.strategy_config)
+            strategy_input = self._strategy_input_from_row(row)
+            strategy, _trace = self.strategy_engine.decide(strategy_input)
             risk = evaluate_strategy_risk(
                 strategy,
                 risk_enabled=self.risk_enabled,
@@ -116,3 +117,44 @@ class PaperDecisionLoop:
             )
 
         return PaperDecisionRun(steps=tuple(steps))
+
+
+    @staticmethod
+    def _strategy_input_from_row(row: pd.Series) -> StrategyInput:
+        """Build the centralized StrategyInput from one causal row."""
+        required = {
+            "timestamp",
+            "symbol",
+            "regime",
+            "regime_probability",
+            "vwap_distance_pct",
+            "rvol_20",
+            "higher_high",
+            "higher_low",
+            "lower_low",
+            "lower_high",
+        }
+        missing = required.difference(row.index)
+        if missing:
+            raise ValueError(
+                "paper strategy row is missing required columns: "
+                f"{sorted(missing)}"
+            )
+
+        feature_names = (
+            "vwap_distance_pct",
+            "rvol_20",
+            "higher_high",
+            "higher_low",
+            "lower_low",
+            "lower_high",
+        )
+        features = {name: row[name] for name in feature_names}
+
+        return StrategyInput(
+            timestamp=pd.Timestamp(row["timestamp"]),
+            symbol=str(row["symbol"]),
+            decision_features=features,
+            regime=str(row["regime"]),
+            regime_probability=float(row["regime_probability"]),
+        )
