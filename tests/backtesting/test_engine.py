@@ -254,3 +254,43 @@ def test_backtest_uses_full_risk_engine_for_actionable_signal() -> None:
     assert result.steps[0].risk.risk_policy_version == "risk_v1.0"
     assert result.steps[1].risk.risk_policy_version == "risk_v1.0"
     assert result.orders[0].quantity == 250.0
+
+
+def test_intraday_trade_is_closed_at_last_bar_before_next_session() -> None:
+    """Open positions must not carry overnight into the next NSE session."""
+
+    rows = pd.DataFrame(
+        [
+            _row("2026-01-01 09:15:00+05:30", close=100.0),
+            _row("2026-01-01 15:25:00+05:30", close=101.0),
+            _row("2026-01-02 09:15:00+05:30", close=99.0),
+        ]
+    )
+
+    result = HistoricalBacktestEngine().run(rows)
+
+    assert result.completed_trades == 1
+    assert result.outcomes[0].exit_time == pd.Timestamp(
+        "2026-01-01 15:25:00+05:30"
+    )
+    assert result.outcomes[0].exit_time.tz_convert("Asia/Kolkata").date() != pd.Timestamp(
+        "2026-01-02 09:15:00+05:30"
+    ).tz_convert("Asia/Kolkata").date()
+
+
+def test_last_session_bar_cannot_open_new_position() -> None:
+    """The final available bar of a session is exit-only, never an entry bar."""
+
+    rows = pd.DataFrame(
+        [
+            _row("2026-01-01 09:15:00+05:30", close=100.0),
+            _row("2026-01-01 15:25:00+05:30", close=101.0),
+        ]
+    )
+
+    result = HistoricalBacktestEngine().run(rows)
+
+    assert len(result.orders) == 1
+    assert result.orders[0].timestamp == pd.Timestamp(
+        "2026-01-01 09:15:00+05:30"
+    )
