@@ -8,7 +8,7 @@ Phase 6 regime, market-context, PIT sector, or Research Bot infrastructure.
 
 ## Architecture
 
-ResearchContext -> AnalysisEngine -> AnalysisContext -> downstream Market/Prediction layers.
+ResearchContext + Market/Technical/Structure/Sector/Relative/Fundamental/Valuation Context -> AnalysisEngine -> AnalysisContext -> downstream Market/Prediction layers.
 
 The Analysis Bot interprets existing causal feature/context data. It does not
 create broker orders or replace Strategy/Risk/Execution responsibilities.
@@ -38,6 +38,23 @@ create broker orders or replace Strategy/Risk/Execution responsibilities.
 - AB-20: data/feature/indicator/analysis/research version tuple.
 - AB-21: explicit AnalysisContext boundary for Market/Prediction consumers.
 - AB-22: dashboard-ready metrics/context payloads.
+
+## Fundamental analysis implementation
+
+The fundamental layer is implemented as a provider-neutral, point-in-time subsystem:
+
+- FUND-01: immutable `FundamentalSnapshot` contract.
+- FUND-02: `FundamentalProvider` protocol plus deterministic in-memory and normalized CSV providers.
+- FUND-03: causal alignment using `available_at <= decision_timestamp`.
+- FUND-04: deterministic fundamental analyzer for profitability, margins, growth, leverage, liquidity and cash flow.
+- FUND-05: derived fundamental metrics with explicit missing-data preservation.
+- FUND-06: separate `ValuationSnapshot` for P/E, P/B, EV/EBITDA and FCF yield.
+- FUND-07: AnalysisContext integration without trade authority.
+- FUND-08: provenance records the fundamental schema version.
+- FUND-09/FUND-10: contract, causality and future-data boundary tests.
+- FUND-14/FUND-15: documented provider-neutral schema and dashboard-safe fundamental payload.
+
+Human-required work is limited to acquiring/normalizing trustworthy historical financial data with correct publication/availability timestamps. The Analysis Bot does not embed vendor credentials or network acquisition logic.
 
 ## Existing components intentionally reused
 
