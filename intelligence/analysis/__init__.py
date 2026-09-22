@@ -8,6 +8,17 @@ from intelligence.analysis.contracts import (
     AnalysisContractError,
 )
 from intelligence.analysis.engine import AnalysisEngine, analyze_latest_row
+from intelligence.analysis.fundamentals import (
+    FUNDAMENTAL_VERSION,
+    FundamentalContractError,
+    FundamentalSnapshot,
+    ValuationSnapshot,
+    FundamentalProvider,
+    InMemoryFundamentalProvider,
+    FundamentalAlignmentError,
+    align_fundamental_snapshot,
+    analyze_fundamentals,
+)
 
 __all__ = [
     "ANALYSIS_VERSION",
@@ -17,4 +28,13 @@ __all__ = [
     "AnalysisContractError",
     "AnalysisEngine",
     "analyze_latest_row",
+    "FUNDAMENTAL_VERSION",
+    "FundamentalContractError",
+    "FundamentalSnapshot",
+    "ValuationSnapshot",
+    "FundamentalProvider",
+    "InMemoryFundamentalProvider",
+    "FundamentalAlignmentError",
+    "align_fundamental_snapshot",
+    "analyze_fundamentals",
 ]
