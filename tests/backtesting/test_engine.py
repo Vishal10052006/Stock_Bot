@@ -5,6 +5,8 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
+from trading.risk.contracts import RiskDecision
+
 from backtesting.engine import (
     BacktestConfig,
     HistoricalBacktestEngine,
@@ -222,3 +224,19 @@ def test_missing_required_strategy_column_is_rejected() -> None:
         match="missing required columns",
     ):
         HistoricalBacktestEngine().run(rows)
+
+
+def test_backtest_uses_full_risk_engine_for_actionable_signal() -> None:
+    rows = pd.DataFrame(
+        [
+            _row("2026-01-01 09:15:00+05:30", close=100.0),
+            _row("2026-01-01 09:20:00+05:30", close=101.0),
+        ]
+    )
+
+    result = HistoricalBacktestEngine().run(rows)
+
+    assert isinstance(result.steps[0].risk, RiskDecision)
+    assert result.steps[0].risk.risk_policy_version == "risk_v1.0"
+    assert result.steps[1].risk.risk_policy_version == "risk_v1.0"
+    assert result.orders[0].quantity == 250.0
