@@ -196,9 +196,7 @@ class HistoricalBacktestEngine:
                 trades_today = 0
 
             daily_realized = realized_total - day_start_realized
-            open_positions = len(
-                getattr(self.lifecycle, "_open", {})
-            )
+            open_positions = len(self.lifecycle.open_symbols)
             symbol_already_open = (
                 self._open_trade(symbol) is not None
             )
@@ -333,10 +331,9 @@ class HistoricalBacktestEngine:
         unrealized = 0.0
         gross_exposure = 0.0
 
-        open_records = getattr(self.lifecycle, "_open", {})
-        for open_symbol, record in open_records.items():
-            order = record["order"]
-            if not isinstance(order, PaperOrder):
+        for open_symbol in self.lifecycle.open_symbols:
+            order = self.lifecycle.open_order(open_symbol)
+            if order is None:
                 continue
 
             mark = last_prices.get(open_symbol)
@@ -493,23 +490,7 @@ class HistoricalBacktestEngine:
     ) -> PaperOrder | None:
         """Return the current lifecycle order for a symbol."""
 
-        open_records = getattr(
-            self.lifecycle,
-            "_open",
-            {},
-        )
-
-        record = open_records.get(symbol)
-
-        if record is None:
-            return None
-
-        order = record.get("order")
-
-        if isinstance(order, PaperOrder):
-            return order
-
-        return None
+        return self.lifecycle.open_order(symbol)
 
     def _prepare_rows(
         self,
