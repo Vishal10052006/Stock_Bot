@@ -93,3 +93,19 @@ kill-switch rejection.
 
 The legacy risk gate remains available as a compatibility boundary, but the
 paper/backtest paths no longer use it as their primary risk authority.
+
+
+### Causal validation status
+
+S19/S20 compatibility and causal checks now include:
+
+- public lifecycle state access instead of private backtest storage;
+- future-row isolation for earlier strategy/risk decisions;
+- chronological backtest processing;
+- decision-time TradeCandidate stop construction;
+- latest-known causal marks for open-position risk accounting;
+- session-boundary reset of the daily trade counter.
+
+These tests establish implementation-level causal invariants. They are not empirical
+proof of out-of-sample trading performance; OOS and walk-forward evidence remains a
+separate experimental validation stage.
