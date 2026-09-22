@@ -9,6 +9,9 @@ import pandas as pd
 
 from market.regime.detector import detect_market_regime
 
+from .failure import InsufficientMarketDataError
+from .validation_pipeline import validate_market_inputs
+
 from .breadth import BreadthEngine
 from .contracts import MarketContext, MarketContextMetadata, MarketState
 from .correlation import CorrelationEngine
@@ -66,6 +69,7 @@ class MarketBot:
         """Build a causal context using only data at or before the final benchmark timestamp."""
         benchmark = self._canonical_benchmark(benchmark_data)
         timestamp = benchmark["timestamp"].iloc[-1]
+        validate_market_inputs(benchmark, constituent_data)
         trend = self.trend_engine.calculate(benchmark)
         structure = self.structure_engine.calculate(benchmark)
         volatility = self.volatility_engine.calculate(benchmark)
@@ -78,8 +82,9 @@ class MarketBot:
         if constituent_data is not None:
             constituents = self._causal_constituents(constituent_data, timestamp)
             breadth = self.breadth_engine.calculate(constituents)
-            liquidity = self.liquidity_engine.calculate(constituents)
             correlation = self.correlation_engine.calculate(constituents, self.config.benchmark)
+            if "volume" in constituents.columns:
+                liquidity = self.liquidity_engine.calculate(constituents)
             if sector_membership is not None:
                 membership = self._causal_membership(sector_membership, timestamp)
                 sectors = self.sector_engine.calculate(constituents, membership)
@@ -168,16 +173,25 @@ class MarketBot:
         required={"timestamp","close"}
         missing=required.difference(data.columns)
         if missing: raise ValueError(f"benchmark missing: {sorted(missing)}")
+        if data.empty: raise InsufficientMarketDataError("benchmark data is empty")
         frame=data.copy()
         frame["timestamp"]=pd.to_datetime(frame["timestamp"],utc=True)
         frame=frame.sort_values("timestamp",kind="stable")
         if frame["timestamp"].duplicated().any(): raise ValueError("benchmark timestamps must be unique")
+        if not np.isfinite(pd.to_numeric(frame["close"], errors="coerce")).all():
+            raise ValueError("benchmark close contains non-finite values")
+        if (pd.to_numeric(frame["close"], errors="coerce") <= 0).any():
+            raise ValueError("benchmark close must be positive")
         return frame.reset_index(drop=True)
 
     def _causal_constituents(self,data:pd.DataFrame,cutoff:pd.Timestamp)->pd.DataFrame:
         frame=data.copy()
         frame["timestamp"]=pd.to_datetime(frame["timestamp"],utc=True)
+        required={"timestamp","symbol","close"}
+        missing=required.difference(frame.columns)
+        if missing: raise ValueError(f"constituents missing: {sorted(missing)}")
         frame=frame.loc[frame["timestamp"]<=cutoff].copy()
+        if frame.empty: return frame
         return frame.sort_values(["symbol","timestamp"],kind="stable")
 
     def _causal_membership(self,data:pd.DataFrame,cutoff:pd.Timestamp)->pd.DataFrame:
