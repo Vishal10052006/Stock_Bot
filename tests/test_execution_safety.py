@@ -91,3 +91,44 @@ def test_execution_engine_can_be_constructed_without_legacy_managers():
 
     assert engine is not None
     assert hasattr(engine, "registry")
+
+
+# AB-28 trading risk-boundary tests.
+import pandas as pd
+
+from execution.trading_execution import (
+    ExecutionAuthorizationStatus,
+    authorize_risk_decision,
+)
+from trading.risk.gate import RiskDecisionStatus, evaluate_strategy_risk
+from trading.strategy.models import StrategyDecision, StrategyDirection
+
+
+def _strategy(direction: StrategyDirection) -> StrategyDecision:
+    return StrategyDecision(
+        timestamp=pd.Timestamp("2026-09-20 10:25:00+05:30"),
+        symbol="RELIANCE",
+        direction=direction,
+        strategy_version="v1.0",
+        rationale="test",
+    )
+
+
+def test_ab28_approved_risk_decision_authorizes_execution() -> None:
+    risk = evaluate_strategy_risk(_strategy(StrategyDirection.LONG))
+    authorization = authorize_risk_decision(risk)
+    assert risk.status is RiskDecisionStatus.APPROVED
+    assert authorization.status is ExecutionAuthorizationStatus.AUTHORIZED
+
+
+def test_ab28_rejected_risk_decision_blocks_execution() -> None:
+    risk = evaluate_strategy_risk(_strategy(StrategyDirection.NO_TRADE))
+    authorization = authorize_risk_decision(risk)
+    assert risk.status is RiskDecisionStatus.REJECTED
+    assert authorization.status is ExecutionAuthorizationStatus.BLOCKED
+
+
+def test_ab28_disabled_global_gate_cannot_reach_authorized_execution() -> None:
+    risk = evaluate_strategy_risk(_strategy(StrategyDirection.SHORT), risk_enabled=False)
+    authorization = authorize_risk_decision(risk)
+    assert authorization.status is ExecutionAuthorizationStatus.BLOCKED
