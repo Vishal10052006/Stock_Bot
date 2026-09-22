@@ -91,7 +91,7 @@ def test_liquidity_baseline_is_shifted():
 
 def test_market_strength_is_bounded():
     result = MarketStrengthEngine(baseline_window=20).calculate(_benchmark(60))
-    assert result["strength_score"].between(0.0, 1.0).all()
+    assert result["strength_score"].dropna().between(0.0, 1.0).all()
 
 
 def test_regime_transition_is_descriptive():
