@@ -14,7 +14,6 @@ from intelligence.analysis.fundamentals.contracts import (
     ValuationSnapshot,
 )
 from intelligence.analysis.fundamentals.provider import InMemoryFundamentalProvider
-from intelligence.analysis.integration import build_analysis_context
 from intelligence.analysis.fundamentals.valuation import analyze_valuation
 
 
@@ -150,16 +149,6 @@ def test_integration_aligns_only_information_available_at_decision_time() -> Non
             _snapshot("2026-09-20 11:00:00+05:30", net_income=999.0),
         ]
     )
-    feature_dataset = pd.DataFrame(
-        {
-            "timestamp": [pd.Timestamp(TS)],
-            "symbol": ["RELIANCE"],
-            "close": [100.0],
-        }
-    )
-    # Use the already validated real FeatureDataset contract by supplying the
-    # minimum fields expected by the existing feature validator through the
-    # direct engine boundary; this test isolates PIT fundamental alignment.
     context = AnalysisEngine().analyze(
         AnalysisInput(
             timestamp=pd.Timestamp(TS),
