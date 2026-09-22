@@ -573,7 +573,29 @@ class HistoricalBacktestEngine:
         if record is None:
             return None
         order = record.get("order")
-        return order if isinstance(order, PaperOrder) else None
+        if not isinstance(order, PaperOrder):
+            return None
+
+        quantity = float(record.get("quantity", order.quantity))
+        if quantity == order.quantity:
+            return order
+
+        # Lifecycle keeps the original immutable entry order while the
+        # adapter exposes the remaining quantity for exit calculations.
+        return PaperOrder(
+            timestamp=order.timestamp,
+            symbol=order.symbol,
+            direction=order.direction,
+            requested_price=order.requested_price,
+            fill_price=order.fill_price,
+            quantity=quantity,
+            status=order.status,
+            fees=float(record.get("entry_fees", order.fees)),
+            slippage_cost=float(
+                record.get("entry_slippage_cost", order.slippage_cost)
+            ),
+            reason=order.reason,
+        )
 
     def _prepare_rows(self, rows: pd.DataFrame) -> pd.DataFrame:
         if not isinstance(rows, pd.DataFrame):
