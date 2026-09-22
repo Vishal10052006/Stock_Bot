@@ -156,6 +156,7 @@ class HistoricalBacktestEngine:
         day_start_equity = self.config.initial_equity
         day_start_realized = 0.0
         trades_today = 0
+        last_prices: dict[str, float] = {}
 
         # The final historical timestamp cannot support a new entry,
         # because there is no later observation available to evaluate
@@ -166,6 +167,7 @@ class HistoricalBacktestEngine:
             timestamp = pd.Timestamp(row["timestamp"])
             symbol = str(row["symbol"]).upper()
             price = float(row[self.config.price_column])
+            last_prices[symbol] = price
 
             # Expire an existing position before processing a new
             # decision at the current timestamp.
@@ -177,8 +179,7 @@ class HistoricalBacktestEngine:
 
             realized_total, unrealized_pnl, gross_exposure = (
                 self._risk_account_state(
-                    symbol=symbol,
-                    price=price,
+                    last_prices=last_prices,
                 )
             )
             equity = (
@@ -322,8 +323,7 @@ class HistoricalBacktestEngine:
     def _risk_account_state(
         self,
         *,
-        symbol: str,
-        price: float,
+        last_prices: dict[str, float],
     ) -> tuple[float, float, float]:
         """Return realized P&L, unrealized P&L and gross exposure."""
         realized_total = sum(
@@ -339,7 +339,11 @@ class HistoricalBacktestEngine:
             if not isinstance(order, PaperOrder):
                 continue
 
-            mark = price if open_symbol == symbol else order.fill_price
+            mark = last_prices.get(open_symbol)
+            if mark is None:
+                raise ValueError(
+                    f"missing causal mark price for open position {open_symbol}"
+                )
 
             if order.direction is StrategyDirection.LONG:
                 unrealized += (
