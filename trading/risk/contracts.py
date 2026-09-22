@@ -293,8 +293,18 @@ class RiskDecision:
         )
         if any(not isfinite(float(value)) for value in values):
             raise ValueError("RiskDecision numeric values must be finite")
-        if any(float(value) < 0 for value in values):
-            raise ValueError("RiskDecision numeric values must be non-negative")
+
+        non_negative = (
+            self.approved_quantity,
+            self.approved_notional,
+            self.planned_risk,
+            self.risk_per_unit,
+            self.gross_exposure_before,
+            self.gross_exposure_after,
+            self.risk_utilization,
+        )
+        if any(float(value) < 0 for value in non_negative):
+            raise ValueError("RiskDecision non-negative fields cannot be negative")
         if not self.reason_codes:
             raise ValueError("every RiskDecision needs a reason code")
         if self.status is RiskDecisionStatus.REJECTED and (
