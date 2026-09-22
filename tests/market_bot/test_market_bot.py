@@ -219,6 +219,27 @@ def test_market_bot_rejects_empty_benchmark():
         )
 
 
+def test_market_bot_readiness_requires_explicit_causal_provenance():
+    from market.bot.readiness import assess_readiness
+    from market.bot.contracts import MarketContextMetadata
+    benchmark = _benchmark(100)
+    base = MarketBot(MarketBotConfig(benchmark="NIFTY", data_version="test")).build(benchmark_data=benchmark)
+    invalid = MarketContext(
+        timestamp=base.timestamp,
+        benchmark=base.benchmark,
+        state=base.state,
+        metadata=MarketContextMetadata(
+            market_version=base.metadata.market_version,
+            data_version=base.metadata.data_version,
+            feature_version=base.metadata.feature_version,
+            provenance={},
+        ),
+    )
+    report = assess_readiness(invalid)
+    assert report.causal_boundary_declared is False
+    assert report.ready_for_review is False
+
+
 def test_market_bot_readiness_is_not_trade_authorization():
     from market.bot.readiness import assess_readiness
     context = MarketBot(MarketBotConfig(benchmark="NIFTY", data_version="test")).build(
