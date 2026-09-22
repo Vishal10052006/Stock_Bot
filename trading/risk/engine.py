@@ -159,7 +159,7 @@ class RiskEngine:
             )
 
         notional = quantity * entry
-        liquidity = check_liquidity(request.market, notional, self.policy)
+        liquidity = check_liquidity(request.market, quantity, self.policy)
         if not liquidity.passed:
             return self._decision(
                 request, RiskDecisionStatus.REJECTED,
