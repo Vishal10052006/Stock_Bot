@@ -367,3 +367,55 @@ def test_market_context_store_never_returns_future_context():
         max_age=timedelta(days=1),
     )
     assert result is None
+
+
+
+def test_downstream_strategy_adapter_requires_fresh_causal_context():
+    from datetime import timedelta
+    from market.bot.downstream import market_context_for_strategy
+    from market.bot.failure import StaleMarketDataError
+
+    benchmark = _benchmark(100)
+    context = MarketBot(MarketBotConfig(benchmark="NIFTY")).build(
+        benchmark_data=benchmark
+    )
+
+    mapped = market_context_for_strategy(
+        context,
+        decision_timestamp=context.timestamp,
+        max_age=timedelta(minutes=1),
+    )
+    assert mapped["benchmark"] == "NIFTY"
+    assert mapped["state"]["availability"] in {"AVAILABLE", "PARTIAL", "UNAVAILABLE"}
+
+    with pytest.raises(StaleMarketDataError, match="stale"):
+        market_context_for_strategy(
+            context,
+            decision_timestamp=context.timestamp + timedelta(minutes=2),
+            max_age=timedelta(minutes=1),
+        )
+
+
+def test_downstream_risk_adapter_rejects_future_context():
+    from datetime import timedelta
+    from market.bot.downstream import market_context_for_risk
+    from market.bot.failure import StaleMarketDataError
+
+    benchmark = _benchmark(100)
+    context = MarketBot(MarketBotConfig(benchmark="NIFTY")).build(
+        benchmark_data=benchmark
+    )
+
+    with pytest.raises(StaleMarketDataError, match="future"):
+        market_context_for_risk(
+            context,
+            decision_timestamp=context.timestamp - timedelta(seconds=1),
+            max_age=timedelta(minutes=1),
+        )
+
+
+def test_market_context_store_protocol_exposes_causal_latest_lookup():
+    from market.bot.storage import InMemoryMarketContextStore, MarketContextStore
+
+    store = InMemoryMarketContextStore()
+    assert isinstance(store, MarketContextStore)
