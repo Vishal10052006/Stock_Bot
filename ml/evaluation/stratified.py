@@ -44,6 +44,7 @@ def evaluate_by_column(
         y_slice = y_true.loc[mask.to_numpy()]
         p_slice = probabilities.loc[mask.to_numpy()].reset_index(drop=True)
         metrics = evaluate_predictions(y_slice.reset_index(drop=True), p_slice)
+        metrics["sample_count"] = int(mask.sum())
         metrics["brier_score"] = multiclass_brier_score(y_slice.reset_index(drop=True), p_slice)
         metrics["expected_calibration_error"] = expected_calibration_error(
             y_slice.reset_index(drop=True),
