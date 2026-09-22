@@ -56,6 +56,7 @@ def calculate_metrics(
             expectancy=0.0,
             maximum_drawdown=0.0,
             sharpe_ratio=0.0,
+            sortino_ratio=0.0,
             exposure_minutes=0.0,
             turnover=0.0,
         )
@@ -152,6 +153,7 @@ def calculate_metrics(
         expectancy=expectancy,
         maximum_drawdown=maximum_drawdown,
         sharpe_ratio=sharpe_ratio,
+        sortino_ratio=sortino_ratio,
         exposure_minutes=float(exposure_minutes),
         turnover=float(turnover),
     )
