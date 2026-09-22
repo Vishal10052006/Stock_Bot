@@ -285,18 +285,24 @@ class HistoricalBacktestEngine:
         return entry - distance
 
     def _portfolio_state(self, timestamp: pd.Timestamp) -> PortfolioRiskState:
+        """Construct point-in-time portfolio state from active lifecycle trades."""
         gross = 0.0
         net = 0.0
         symbol_exposure: dict[str, float] = {}
+        open_records = getattr(self.lifecycle, "_open", {})
 
-        for symbol, position in self.runtime._positions.items():
-            if position.quantity <= 0:
+        for symbol, record in open_records.items():
+            order = record.get("order")
+            if not isinstance(order, PaperOrder):
                 continue
-            notional = position.quantity * position.average_price
+            quantity = float(record.get("quantity", order.quantity))
+            if quantity <= 0:
+                continue
+            notional = quantity * order.fill_price
             gross += notional
             net += (
                 notional
-                if position.direction is StrategyDirection.LONG
+                if order.direction is StrategyDirection.LONG
                 else -notional
             )
             symbol_exposure[symbol] = notional
@@ -309,11 +315,7 @@ class HistoricalBacktestEngine:
             starting_equity=self.config.starting_equity,
             equity=equity,
             available_cash=max(0.0, self.config.starting_equity - gross),
-            open_positions=sum(
-                1
-                for position in self.runtime._positions.values()
-                if position.quantity > 0
-            ),
+            open_positions=len(symbol_exposure),
             entries_today=sum(
                 1
                 for order in self.broker.journal
