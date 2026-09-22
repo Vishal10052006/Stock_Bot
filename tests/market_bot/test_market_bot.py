@@ -7,7 +7,7 @@ import pytest
 
 from market.bot.contracts import MarketContext, MarketState
 from market.bot.evaluation import deterministic_replay, evaluate_regimes
-from market.bot.integration import build_analysis_input
+from market.bot.integration import build_analysis_input, build_phase5_market_context
 from market.bot.orchestrator import MarketBot, MarketBotConfig
 from market.bot.breadth import BreadthEngine
 from market.bot.correlation import CorrelationEngine
@@ -289,3 +289,25 @@ def test_regime_research_uses_walk_forward_ordering():
     folds = protocol.folds(data)
     assert folds
     assert all(f.train_end < f.test_start for f in folds)
+
+
+def test_market_context_adapts_to_frozen_phase5_schema():
+    benchmark = _benchmark(40)
+    market_context = MarketBot(
+        MarketBotConfig(benchmark="NIFTY")
+    ).build(benchmark_data=benchmark)
+    context = build_phase5_market_context(
+        benchmark,
+        market_context=market_context,
+    )
+    assert list(context.columns) == [
+        "timestamp",
+        "market_return_1",
+        "market_return_3",
+        "market_return_12",
+        "market_volatility_20",
+    ]
+    assert context["timestamp"].iloc[-1] == benchmark["timestamp"].iloc[-1]
+    assert context["market_return_3"].iloc[-1] == pytest.approx(
+        benchmark["close"].pct_change(3).iloc[-1]
+    )
