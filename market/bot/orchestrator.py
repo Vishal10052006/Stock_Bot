@@ -82,7 +82,9 @@ class MarketBot:
         if constituent_data is not None:
             constituents = self._causal_constituents(constituent_data, timestamp)
             breadth = self.breadth_engine.calculate(constituents)
-            correlation = self.correlation_engine.calculate(constituents, self.config.benchmark)
+            symbols = set(constituents["symbol"].astype(str).str.strip().str.upper()) if "symbol" in constituents.columns else set()
+            if self.config.benchmark.strip().upper() in symbols:
+                correlation = self.correlation_engine.calculate(constituents, self.config.benchmark)
             if "volume" in constituents.columns:
                 liquidity = self.liquidity_engine.calculate(constituents)
             if sector_membership is not None:
