@@ -2,12 +2,13 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta
-from typing import Protocol
+from typing import Protocol, runtime_checkable
 
 from .contracts import MarketContext
 from .failure import StaleMarketDataError
 
 
+@runtime_checkable
 class MarketContextStore(Protocol):
     def put(self, context: MarketContext) -> None: ...
     def get(self, benchmark: str, timestamp: datetime) -> MarketContext | None: ...
