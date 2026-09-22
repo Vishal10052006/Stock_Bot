@@ -24,7 +24,7 @@ Causality:
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import pandas as pd
 
@@ -80,6 +80,11 @@ class Phase9DatasetResult:
     excluded_rows: int
     exclusion_reasons: tuple[tuple[str, int], ...]
     labels: tuple[DecisionLabelingOutcome, ...]
+
+    # Decision-time-only context retained separately from the frozen ML
+    # feature matrix so Phase 9 can benchmark the frozen Phase 8 strategy
+    # without adding strategy features to TrainingDataset v1.
+    strategy_context: pd.DataFrame = field(default_factory=pd.DataFrame)
 
     @property
     def label_distribution(self) -> pd.Series:
@@ -434,6 +439,44 @@ def build_phase9_dataset(
         outcomes=outcomes,
     )
 
+    # Preserve only decision-time inputs required to reproduce the frozen
+    # Phase 8 BaselineStrategy benchmark. This stays outside
+    # TrainingDataset so the ML feature contract remains unchanged.
+    strategy_context = (
+        candidate_rows.merge(
+            outcome_keys,
+            on=["timestamp", "symbol"],
+            how="inner",
+            validate="one_to_one",
+        )
+        .loc[
+            :,
+            [
+                "timestamp",
+                "symbol",
+                "regime",
+                "regime_probability",
+                "vwap_distance_pct",
+                "rvol_20",
+                "higher_high",
+                "higher_low",
+                "lower_low",
+                "lower_high",
+            ],
+        ]
+        .sort_values(
+            ["symbol", "timestamp"],
+            kind="stable",
+        )
+        .reset_index(drop=True)
+    )
+
+    if len(strategy_context) != len(training_dataset.data):
+        raise AssertionError(
+            "Phase 9 strategy context must align one-to-one with "
+            "the final TrainingDataset."
+        )
+
     eligible_rows = len(outcomes)
 
     if eligible_rows + excluded != feature_rows:
@@ -451,4 +494,5 @@ def build_phase9_dataset(
         excluded_rows=excluded,
         exclusion_reasons=exclusion_reasons,
         labels=tuple(outcomes),
+        strategy_context=strategy_context,
     )
