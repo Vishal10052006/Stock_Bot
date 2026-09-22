@@ -11,7 +11,14 @@ class MarketContextStore(Protocol):
 class InMemoryMarketContextStore:
     def __init__(self) -> None:
         self._items: dict[tuple[str,str],MarketContext] = {}
+    @staticmethod
+    def _key(benchmark: str, timestamp: datetime) -> tuple[str, str]:
+        if timestamp.tzinfo is None:
+            raise ValueError("timestamp must be timezone-aware")
+        return benchmark.strip().upper(), timestamp.isoformat()
+
     def put(self, context: MarketContext) -> None:
-        self._items[(context.benchmark,context.timestamp.isoformat())]=context
+        self._items[self._key(context.benchmark, context.timestamp)] = context
+
     def get(self, benchmark: str, timestamp: datetime) -> MarketContext | None:
-        return self._items.get((benchmark.strip().upper(),timestamp.isoformat()))
+        return self._items.get(self._key(benchmark, timestamp))
