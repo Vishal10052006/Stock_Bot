@@ -62,6 +62,7 @@ class AnalysisInput:
     market_context: Mapping[str, Any] | None = None
     sector_context: Mapping[str, Any] | None = None
     research_context: Any | None = None
+    fundamental_context: Any | None = None
     data_version: str = "unknown"
     feature_version: str = FEATURE_CONTEXT_VERSION
 
@@ -107,6 +108,7 @@ class AnalysisContext:
     feature_version: str = FEATURE_CONTEXT_VERSION
     data_version: str = "unknown"
     provenance: Mapping[str, Any] = field(default_factory=dict)
+    fundamental_context: Mapping[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         timestamp = _require_aware_timestamp(self.timestamp, "timestamp")
@@ -139,6 +141,7 @@ class AnalysisContext:
                 "sector": self.sector_context,
                 "relative_performance": self.relative_performance,
                 "research": self.research_context,
+                "fundamentals": self.fundamental_context,
                 "quality": self.quality,
                 "versions": {
                     "analysis": self.analysis_version,
