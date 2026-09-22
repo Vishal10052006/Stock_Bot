@@ -8,6 +8,7 @@ import pytest
 from trading.strategy import (
     StrategyDirection,
     StrategyEngine,
+    StrategyInput,
     build_candidate_from_strategy,
 )
 
@@ -53,9 +54,7 @@ def make_long_decision():
     }
 
     decision, _trace = StrategyEngine().decide(
-        __import__("trading.strategy", fromlist=["StrategyInput"]).StrategyInput(
-            **decision_input
-        )
+        StrategyInput(**decision_input)
     )
     return decision
 
@@ -79,7 +78,7 @@ def test_no_trade_cannot_materialize_candidate() -> None:
     row["regime"] = "RANGE"
 
     decision, _trace = StrategyEngine().decide(
-        __import__("trading.strategy", fromlist=["StrategyInput"]).StrategyInput(
+        StrategyInput(
             timestamp=row["timestamp"],
             symbol=row["symbol"],
             decision_features={
