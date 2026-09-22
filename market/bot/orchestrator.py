@@ -52,14 +52,11 @@ class MarketBotOrchestrator:
             "liquidity_state":latest(liq,"liquidity_state"),
             "strength_state":latest(strength,"strength_state"),
         }
-        if prior_regime is not None:
-            parts["transition_state"]="STABLE" if str(prior_regime).strip().upper()==str(prior_regime).strip().upper() else "SHIFT"
-        else:
-            parts["transition_state"]="INITIAL"
         quality=sum(v not in (None,"UNAVAILABLE") for v in parts.values())/len(parts)
         regime_row=regimes.loc[pd.to_datetime(regimes.timestamp,utc=True)<=ts].iloc[-1] if not regimes.empty and (pd.to_datetime(regimes.timestamp,utc=True)<=ts).any() else None
         frozen_regime=None if regime_row is None or pd.isna(regime_row.regime) else str(regime_row.regime)
         frozen_probability=None if regime_row is None or pd.isna(regime_row.regime_probability) else float(regime_row.regime_probability)
+        parts["transition_state"]="INITIAL" if prior_regime is None else ("SHIFT" if frozen_regime is not None and str(prior_regime).strip().upper()!=frozen_regime.upper() else "STABLE")
         state=fuse_market_state(parts,timestamp=ts.to_pydatetime(),benchmark=benchmark,quality=quality,version=self.version,regime_override=frozen_regime,regime_probability_override=frozen_probability)
         validate_state(state)
         prov=build_provenance(bot_version=self.version,data_version=data_version,feature_version=feature_version,benchmark=benchmark,as_of=ts.to_pydatetime(),sources=("market_data","deterministic_engines"))
