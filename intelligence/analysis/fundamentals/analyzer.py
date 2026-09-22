@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from math import isfinite
+from collections.abc import Mapping
 from typing import Any
 
 from intelligence.analysis.fundamentals.contracts import FundamentalSnapshot
@@ -36,6 +37,23 @@ def analyze_fundamentals(
             "derived": {},
             "source": None,
             "available_at": None,
+        }
+
+    if isinstance(snapshot, Mapping):
+        return {
+            "available": bool(snapshot.get("available", True)),
+            "state": "INSUFFICIENT_DATA",
+            "coverage": 0.0,
+            "metrics": dict(snapshot.get("metrics", {})),
+            "derived": {},
+            "source": snapshot.get("source"),
+            "source_version": snapshot.get("source_version"),
+            "period_end": snapshot.get("period_end"),
+            "published_at": snapshot.get("published_at"),
+            "available_at": snapshot.get("available_at"),
+            "statement_type": snapshot.get("statement_type"),
+            "consolidated": snapshot.get("consolidated"),
+            "provenance": dict(snapshot.get("provenance", {})),
         }
 
     m = dict(snapshot.metrics)
