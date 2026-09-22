@@ -6,7 +6,14 @@ from dataclasses import dataclass
 import pandas as pd
 
 from .baseline import evaluate_row
-from .models import (\n    BaselineStrategyConfig,\n    NoTradeReason,\n    StrategyConfig,\n    StrategyDecision,\n    StrategyDirection,\n    StrategyInput,\n)
+from .models import (
+    BaselineStrategyConfig,
+    NoTradeReason,
+    StrategyConfig,
+    StrategyDecision,
+    StrategyDirection,
+    StrategyInput,
+)
 from .policy import prediction_allows_direction, prediction_evidence
 
 
