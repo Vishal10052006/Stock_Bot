@@ -6,7 +6,7 @@ from dataclasses import dataclass
 import pandas as pd
 
 from .baseline import evaluate_row
-from .models import NoTradeReason, StrategyConfig, StrategyDecision, StrategyDirection, StrategyInput
+from .models import (\n    BaselineStrategyConfig,\n    NoTradeReason,\n    StrategyConfig,\n    StrategyDecision,\n    StrategyDirection,\n    StrategyInput,\n)
 from .policy import prediction_allows_direction, prediction_evidence
 
 
@@ -23,6 +23,21 @@ class StrategyEngine:
 
     def __init__(self, config: StrategyConfig | None = None) -> None:
         self.config = config or StrategyConfig()
+
+    @staticmethod
+    def coerce_config(
+        config: StrategyConfig | BaselineStrategyConfig | None,
+    ) -> StrategyConfig:
+        """Normalize legacy baseline config to the authoritative engine config."""
+        if config is None:
+            return StrategyConfig()
+        if isinstance(config, StrategyConfig):
+            return config
+        if isinstance(config, BaselineStrategyConfig):
+            return StrategyConfig(baseline=config)
+        raise TypeError(
+            "strategy config must be StrategyConfig, BaselineStrategyConfig, or None"
+        )
 
     def decide(self, strategy_input: StrategyInput) -> tuple[StrategyDecision, StrategyTrace]:
         """Produce one deterministic TRADE/NO_TRADE decision."""
