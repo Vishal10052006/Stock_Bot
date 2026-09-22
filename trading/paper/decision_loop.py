@@ -17,8 +17,13 @@ from execution.trading_execution import (
 )
 from paper.runtime import PaperOrder, PaperTradingRuntime
 from trading.risk.gate import RiskDecision, evaluate_strategy_risk
-from trading.strategy.baseline import evaluate_row
-from trading.strategy.models import BaselineStrategyConfig, StrategyDecision
+from trading.strategy.engine import StrategyEngine
+from trading.strategy.models import (
+    BaselineStrategyConfig,
+    StrategyConfig,
+    StrategyDecision,
+    StrategyInput,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -54,8 +59,49 @@ class PaperDecisionLoop:
         risk_enabled: bool = True,
     ) -> None:
         self.runtime = runtime or PaperTradingRuntime()
-        self.strategy_config = strategy_config or BaselineStrategyConfig()
+        self.strategy_engine = StrategyEngine(
+            StrategyEngine.coerce_config(strategy_config)
+        )
         self.risk_enabled = risk_enabled
+
+    @staticmethod
+    def _strategy_input_from_row(row: pd.Series) -> StrategyInput:
+        """Build a causal StrategyInput from one decision-time row."""
+        required = (
+            "timestamp",
+            "symbol",
+            "regime",
+            "regime_probability",
+            "vwap_distance_pct",
+            "rvol_20",
+            "higher_high",
+            "higher_low",
+            "lower_low",
+            "lower_high",
+        )
+        missing = [column for column in required if column not in row.index]
+        if missing:
+            raise ValueError(
+                "paper decision row is missing required columns: "
+                f"{sorted(missing)}"
+            )
+        return StrategyInput(
+            timestamp=pd.Timestamp(row["timestamp"]),
+            symbol=str(row["symbol"]),
+            decision_features={
+                column: row[column]
+                for column in (
+                    "vwap_distance_pct",
+                    "rvol_20",
+                    "higher_high",
+                    "higher_low",
+                    "lower_low",
+                    "lower_high",
+                )
+            },
+            regime=str(row["regime"]),
+            regime_probability=float(row["regime_probability"]),
+        )
 
     def run(
         self,
@@ -91,7 +137,8 @@ class PaperDecisionLoop:
         steps: list[PaperDecisionStep] = []
         for _, row in working.iterrows():
             price = float(row[price_column])
-            strategy = evaluate_row(row, config=self.strategy_config)
+            strategy_input = self._strategy_input_from_row(row)
+            strategy, _trace = self.strategy_engine.decide(strategy_input)
             risk = evaluate_strategy_risk(
                 strategy,
                 risk_enabled=self.risk_enabled,
