@@ -28,7 +28,12 @@ def build_analysis_input(
     data_version: str | None = None,
     feature_version: str | None = None,
 ) -> AnalysisInput:
-    """Construct AnalysisInput without changing Analysis Bot code."""
+    """Construct AnalysisInput without allowing future market context leakage."""
+    analysis_timestamp = pd.Timestamp(timestamp)
+    if analysis_timestamp.tzinfo is None:
+        raise ValueError("timestamp must be timezone-aware")
+    if market_context.timestamp > analysis_timestamp.to_pydatetime():
+        raise ValueError("market context cannot be from the future of analysis timestamp")
     return AnalysisInput(
         timestamp=timestamp,
         symbol=symbol,
