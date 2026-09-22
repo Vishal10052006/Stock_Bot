@@ -46,3 +46,4 @@ def test_metrics_capture_wins_and_losses() -> None:
     assert metrics.win_rate == 0.5
     assert metrics.profit_factor == 2.0
     assert metrics.maximum_drawdown == 5.0
+    assert metrics.sortino_ratio > 0.0
