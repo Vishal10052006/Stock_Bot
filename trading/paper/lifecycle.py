@@ -78,6 +78,9 @@ class PaperTradeLifecycle:
 
         self._open[symbol] = {
             "order": order,
+            "quantity": order.quantity,
+            "entry_fees": order.fees,
+            "entry_slippage_cost": order.slippage_cost,
             "mae": 0.0,
             "mfe": 0.0,
         }
@@ -97,6 +100,7 @@ class PaperTradeLifecycle:
         record = self._open[symbol]
         order = record["order"]
         assert isinstance(order, PaperOrder)
+        quantity = float(record["quantity"])
         if timestamp < order.timestamp:
             raise ValueError("mark timestamp must not precede entry")
 
@@ -105,8 +109,79 @@ class PaperTradeLifecycle:
             if order.direction is StrategyDirection.LONG
             else order.fill_price - price
         )
-        record["mae"] = min(float(record["mae"]), signed_move * order.quantity)
-        record["mfe"] = max(float(record["mfe"]), signed_move * order.quantity)
+        record["mae"] = min(float(record["mae"]), signed_move * quantity)
+        record["mfe"] = max(float(record["mfe"]), signed_move * quantity)
+
+    def close_partial(
+        self,
+        symbol: str,
+        *,
+        timestamp: pd.Timestamp,
+        price: float,
+        quantity: float,
+        exit_fees: float = 0.0,
+        exit_slippage_cost: float = 0.0,
+    ) -> TradeOutcome:
+        """Close part or all of an open trade without losing lifecycle state."""
+        symbol = symbol.upper()
+        if symbol not in self._open:
+            raise KeyError(f"no open trade for {symbol}")
+        if price <= 0 or quantity <= 0:
+            raise ValueError("price and quantity must be positive")
+        if exit_fees < 0 or exit_slippage_cost < 0:
+            raise ValueError("exit costs must be non-negative")
+
+        timestamp = pd.Timestamp(timestamp)
+        if timestamp.tzinfo is None:
+            raise ValueError("exit timestamp must be timezone-aware")
+
+        record = self._open[symbol]
+        order = record["order"]
+        assert isinstance(order, PaperOrder)
+        current_quantity = float(record["quantity"])
+        if quantity > current_quantity + 1e-12:
+            raise ValueError("partial close quantity exceeds open quantity")
+        if timestamp < order.timestamp:
+            raise ValueError("exit timestamp must not precede entry")
+
+        signed_unit_pnl = (
+            price - order.fill_price
+            if order.direction is StrategyDirection.LONG
+            else order.fill_price - price
+        )
+        gross_pnl = signed_unit_pnl * quantity
+        entry_fee_share = float(record["entry_fees"]) * quantity / order.quantity
+        entry_slippage_share = float(record["entry_slippage_cost"]) * quantity / order.quantity
+
+        outcome = TradeOutcome(
+            symbol=symbol,
+            direction=order.direction,
+            entry_time=order.timestamp,
+            exit_time=timestamp,
+            entry_price=order.fill_price,
+            exit_price=price,
+            quantity=quantity,
+            gross_pnl=gross_pnl,
+            fees=entry_fee_share + exit_fees,
+            slippage_cost=entry_slippage_share + exit_slippage_cost,
+            net_pnl=gross_pnl - entry_fee_share - exit_fees,
+            holding_minutes=(timestamp - order.timestamp).total_seconds() / 60.0,
+            mae=float(record["mae"]),
+            mfe=float(record["mfe"]),
+        )
+        self._outcomes.append(outcome)
+
+        remaining = current_quantity - quantity
+        if remaining <= 1e-12:
+            self._open.pop(symbol)
+        else:
+            record["quantity"] = remaining
+            record["entry_fees"] = float(record["entry_fees"]) - entry_fee_share
+            record["entry_slippage_cost"] = float(record["entry_slippage_cost"]) - entry_slippage_share
+            record["mae"] = 0.0
+            record["mfe"] = 0.0
+
+        return outcome
 
     def close(
         self,
@@ -132,39 +207,15 @@ class PaperTradeLifecycle:
         if timestamp.tzinfo is None:
             raise ValueError("exit timestamp must be timezone-aware")
 
-        record = self._open.pop(symbol)
+        record = self._open[symbol]
         order = record["order"]
         assert isinstance(order, PaperOrder)
-        if timestamp < order.timestamp:
-            raise ValueError("exit timestamp must not precede entry")
 
-        signed_unit_pnl = (
-            price - order.fill_price
-            if order.direction is StrategyDirection.LONG
-            else order.fill_price - price
+        return self.close_partial(
+            symbol,
+            timestamp=timestamp,
+            price=price,
+            quantity=float(record["quantity"]),
+            exit_fees=exit_fees,
+            exit_slippage_cost=exit_slippage_cost,
         )
-        gross_pnl = signed_unit_pnl * order.quantity
-        fees = order.fees + exit_fees
-        net_pnl = gross_pnl - fees
-
-        outcome = TradeOutcome(
-            symbol=symbol,
-            direction=order.direction,
-            entry_time=order.timestamp,
-            exit_time=timestamp,
-            entry_price=order.fill_price,
-            exit_price=price,
-            quantity=order.quantity,
-            gross_pnl=gross_pnl,
-            fees=fees,
-            slippage_cost=(
-                order.slippage_cost
-                + exit_slippage_cost
-            ),
-            net_pnl=net_pnl,
-            holding_minutes=(timestamp - order.timestamp).total_seconds() / 60.0,
-            mae=float(record["mae"]),
-            mfe=float(record["mfe"]),
-        )
-        self._outcomes.append(outcome)
-        return outcome
