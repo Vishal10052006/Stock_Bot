@@ -77,3 +77,25 @@ Human-required work is limited to acquiring/normalizing trustworthy historical f
 4. Analysis candidates are not trade signals.
 5. Analysis cannot bypass Strategy, Risk, or Execution.
 6. Existing PIT sector membership and backward timestamp alignment remain authoritative.
+
+
+## Final integration status
+
+The Analysis Bot boundary now includes explicit downstream audit coverage for:
+
+- ResearchContext causal timestamp versus Analysis decision time.
+- Fundamental available_at versus Analysis decision time.
+- Valuation as_of versus Analysis decision time.
+- Analysis → Prediction timestamp, symbol, feature-version and analysis-version propagation.
+- Analysis → Strategy timestamp and symbol propagation.
+- Strategy → Risk direction identity.
+- AnalysisContext ownership of mapping inputs to prevent post-build caller mutation.
+
+The structural audit is downstream-neutral: it verifies contracts and causality,
+not model accuracy, profitability, or future returns.
+
+## Freeze status
+
+Analysis Bot implementation and downstream authority boundaries are structurally
+complete on this branch. Further work belongs to real-data validation or the
+next model in the system rather than additional Analysis features.
