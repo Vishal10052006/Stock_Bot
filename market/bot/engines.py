@@ -63,4 +63,7 @@ class MarketStrengthEngine:
         f=_frame(data); comps=[]
         if "trend_strength" in f: comps.append(pd.to_numeric(f.trend_strength,errors="coerce"))
         if "close" in f: comps.append(pd.to_numeric(f.close,errors="coerce").pct_change().rolling(20).mean())
-        z=pd.concat(comps,axis=1).mean(axis=1,skipna=True) if comps else pd.Series(np.nan,index=f.index); f["strength_score"]=z.rank(pct=True); f["strength_state"]="UNAVAILABLE"; f.loc[f.strength_score>=.67,"strength_state"]="STRONG"; f.loc[f.strength_score<=.33,"strength_state"]="WEAK"; f.loc[f.strength_score.between(.33,.67),"strength_state"]="NEUTRAL"; return f
+        z=pd.concat(comps,axis=1).mean(axis=1,skipna=True) if comps else pd.Series(np.nan,index=f.index)
+        # Expanding/rolling percentile is causal; a full-sample rank would leak future observations.
+        f["strength_score"]=z.rolling(60,min_periods=20).apply(lambda a: float((a<=a[-1]).mean()),raw=True)
+        f["strength_state"]="UNAVAILABLE"; f.loc[f.strength_score>=.67,"strength_state"]="STRONG"; f.loc[f.strength_score<=.33,"strength_state"]="WEAK"; f.loc[f.strength_score.between(.33,.67),"strength_state"]="NEUTRAL"; return f
