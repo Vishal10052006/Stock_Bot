@@ -224,6 +224,15 @@ def test_market_bot_rejects_invalid_benchmark_timestamp_and_price():
         MarketBot(MarketBotConfig(benchmark="NIFTY")).build(benchmark_data=bad_price)
 
 
+def test_market_input_validation_rejects_duplicate_constituent_observation():
+    from market.bot.validation_pipeline import validate_market_inputs
+    benchmark = _benchmark(5)
+    constituents = _constituents(5)
+    duplicate = pd.concat([constituents, constituents.iloc[[0]]], ignore_index=True)
+    with pytest.raises(ValueError, match="duplicate timestamp/symbol"):
+        validate_market_inputs(benchmark, duplicate)
+
+
 def test_market_bot_rejects_empty_benchmark():
     with pytest.raises(Exception, match="benchmark data is empty"):
         MarketBot(MarketBotConfig(benchmark="NIFTY")).build(
