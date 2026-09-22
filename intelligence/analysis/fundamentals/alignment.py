@@ -5,7 +5,7 @@ from collections.abc import Iterable
 
 import pandas as pd
 
-from intelligence.analysis.fundamentals.contracts import FundamentalSnapshot
+from intelligence.analysis.fundamentals.contracts import FundamentalSnapshot, ValuationSnapshot
 
 
 class FundamentalAlignmentError(ValueError):
@@ -41,18 +41,16 @@ def align_fundamental_snapshot(
 
 
 def align_valuation_snapshot(
-    snapshot: object | None,
+    snapshot: ValuationSnapshot | None,
     *,
     decision_timestamp: pd.Timestamp,
-) -> object | None:
+) -> ValuationSnapshot | None:
     """Return a valuation observation only when it is available at decision time.
 
     Valuation facts are not statement facts, so they use their own as_of
     timestamp. A future valuation snapshot is treated as unavailable rather
     than being forward-filled.
     """
-    from intelligence.analysis.fundamentals.contracts import ValuationSnapshot
-
     decision = pd.Timestamp(decision_timestamp)
     if decision.tzinfo is None:
         raise FundamentalAlignmentError("decision_timestamp must be timezone-aware")
