@@ -4,6 +4,7 @@ from intelligence.analysis.fundamentals.analyzer import analyze_fundamentals
 from intelligence.analysis.fundamentals.alignment import (
     FundamentalAlignmentError,
     align_fundamental_snapshot,
+    align_valuation_snapshot,
 )
 from intelligence.analysis.fundamentals.contracts import (
     FUNDAMENTAL_VERSION,
@@ -27,6 +28,7 @@ __all__ = [
     "CsvFundamentalProvider",
     "FundamentalAlignmentError",
     "align_fundamental_snapshot",
+    "align_valuation_snapshot",
     "analyze_fundamentals",
     "analyze_valuation",
     "FundamentalValidationReport",
