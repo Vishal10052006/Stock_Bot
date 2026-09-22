@@ -6,7 +6,10 @@ import pytest
 
 from intelligence.analysis.contracts import AnalysisInput
 from intelligence.analysis.engine import AnalysisEngine
-from intelligence.analysis.fundamentals.alignment import align_fundamental_snapshot
+from intelligence.analysis.fundamentals.alignment import (
+    align_fundamental_snapshot,
+    align_valuation_snapshot,
+)
 from intelligence.analysis.fundamentals.analyzer import analyze_fundamentals
 from intelligence.analysis.fundamentals.contracts import (
     FundamentalContractError,
@@ -162,3 +165,25 @@ def test_integration_aligns_only_information_available_at_decision_time() -> Non
         )
     )
     assert context.fundamental_context["metrics"]["net_income"] == 120.0
+
+
+def test_valuation_alignment_never_uses_future_snapshot() -> None:
+    past = ValuationSnapshot(
+        symbol="RELIANCE",
+        as_of=pd.Timestamp("2026-09-20 10:00:00+05:30"),
+        price=100.0,
+    )
+    future = ValuationSnapshot(
+        symbol="RELIANCE",
+        as_of=pd.Timestamp("2026-09-20 10:30:00+05:30"),
+        price=999.0,
+    )
+
+    assert align_valuation_snapshot(
+        past,
+        decision_timestamp=pd.Timestamp(TS),
+    ) == past
+    assert align_valuation_snapshot(
+        future,
+        decision_timestamp=pd.Timestamp(TS),
+    ) is None
