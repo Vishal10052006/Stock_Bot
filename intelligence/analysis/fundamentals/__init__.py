@@ -11,6 +11,7 @@ from intelligence.analysis.fundamentals.contracts import (
     FundamentalSnapshot,
     ValuationSnapshot,
 )
+from intelligence.analysis.fundamentals.csv_provider import CsvFundamentalProvider
 from intelligence.analysis.fundamentals.provider import (
     FundamentalProvider,
     InMemoryFundamentalProvider,
@@ -23,6 +24,7 @@ __all__ = [
     "ValuationSnapshot",
     "FundamentalProvider",
     "InMemoryFundamentalProvider",
+    "CsvFundamentalProvider",
     "FundamentalAlignmentError",
     "align_fundamental_snapshot",
     "analyze_fundamentals",
