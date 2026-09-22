@@ -3,6 +3,7 @@ name: market-bot-tests
 on:
   push:
     branches:
+      - main
       - feat/market-bot-production-v2
   pull_request:
     branches:
@@ -22,5 +23,8 @@ jobs:
           python -m pip install numpy pandas pytest scipy scikit-learn requests pydantic fastapi sqlalchemy alembic python-dotenv yfinance ta joblib pyarrow
       - name: Market Bot tests
         run: python -m pytest tests/market_bot/test_market_bot.py -q
+      - name: Phase 9 contract validation
+        run: python scripts/validate_phase9_contract.py
+
       - name: Full regression
         run: python -m pytest -q
