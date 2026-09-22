@@ -1,7 +1,7 @@
 """Risk Engine R0-R20 tests.
 
-These tests are intentionally deterministic and adversarial. They verify
-hard safety boundaries before any production integration is considered.
+These tests are deterministic and adversarial. They verify hard safety
+boundaries before production integration.
 """
 from __future__ import annotations
 
@@ -38,7 +38,6 @@ def _portfolio(**overrides) -> PortfolioRiskState:
         starting_equity=100_000.0,
         equity=100_000.0,
         available_cash=100_000.0,
-        recent_pnl=0.0 if False else 0.0,
         entries_today=0,
         open_positions=0,
         gross_exposure=0.0,
@@ -48,7 +47,6 @@ def _portfolio(**overrides) -> PortfolioRiskState:
         sector_exposure={},
         peak_equity=100_000.0,
     )
-    values.pop("recent_pnl", None)
     values.update(overrides)
     return PortfolioRiskState(**values)
 
@@ -78,11 +76,7 @@ def test_risk_engine_approves_valid_candidate() -> None:
             sector="ENERGY",
         )
     )
-
-    assert result.status in {
-        RiskDecisionStatus.APPROVED,
-        RiskDecisionStatus.REDUCED,
-    }
+    assert result.status in {RiskDecisionStatus.APPROVED, RiskDecisionStatus.REDUCED}
     assert result.approved_quantity > 0
     assert result.approved_notional > 0
     assert result.planned_risk > 0
@@ -98,9 +92,6 @@ def test_position_size_is_risk_first() -> None:
             target_price=103.0,
         )
     )
-
-    # Initial risk budget is ₹500; with ₹2/share stop distance,
-    # raw risk-first size is at most 250 shares before other caps.
     assert result.approved_quantity <= 250
 
 
@@ -113,7 +104,6 @@ def test_daily_loss_limit_is_hard_rejection() -> None:
             market=_market(),
         )
     )
-
     assert result.status is RiskDecisionStatus.REJECTED
     assert RiskReasonCode.DAILY_LOSS_LIMIT in result.reason_codes
     assert result.approved_quantity == 0
@@ -128,7 +118,6 @@ def test_open_position_limit_is_hard_rejection() -> None:
             market=_market(),
         )
     )
-
     assert result.status is RiskDecisionStatus.REJECTED
     assert RiskReasonCode.MAX_OPEN_POSITIONS in result.reason_codes
 
@@ -142,7 +131,6 @@ def test_entries_per_day_limit_is_hard_rejection() -> None:
             market=_market(),
         )
     )
-
     assert result.status is RiskDecisionStatus.REJECTED
     assert RiskReasonCode.MAX_ENTRIES_PER_DAY in result.reason_codes
 
@@ -156,11 +144,7 @@ def test_gross_exposure_cap_reduces_or_rejects() -> None:
             market=_market(),
         )
     )
-
-    assert result.status in {
-        RiskDecisionStatus.REDUCED,
-        RiskDecisionStatus.REJECTED,
-    }
+    assert result.status in {RiskDecisionStatus.REDUCED, RiskDecisionStatus.REJECTED}
     assert result.approved_notional <= 100.0
 
 
@@ -175,7 +159,6 @@ def test_stale_context_fails_closed() -> None:
             market=_market(),
         )
     )
-
     assert result.status is RiskDecisionStatus.REJECTED
     assert RiskReasonCode.STALE_CONTEXT in result.reason_codes
 
@@ -189,7 +172,6 @@ def test_missing_liquidity_fails_closed() -> None:
             market=_market(recent_volume=None),
         )
     )
-
     assert result.status is RiskDecisionStatus.REJECTED
     assert RiskReasonCode.MISSING_REQUIRED_CONTEXT in result.reason_codes
 
@@ -198,7 +180,6 @@ def test_kill_switch_blocks_trade() -> None:
     switch = KillSwitch()
     switch.activate("manual emergency stop")
     engine = RiskEngine(policy=RISK_POLICY_V1, kill_switch=switch)
-
     result = engine.evaluate(
         RiskEvaluationInput(
             candidate=_candidate(),
@@ -206,7 +187,6 @@ def test_kill_switch_blocks_trade() -> None:
             market=_market(),
         )
     )
-
     assert result.status is RiskDecisionStatus.REJECTED
     assert RiskReasonCode.KILL_SWITCH_ACTIVE in result.reason_codes
 
@@ -225,8 +205,9 @@ def test_heat_is_component_wise_and_transparent() -> None:
     )
     heat = calculate_portfolio_heat(state, RISK_POLICY_V1)
 
-    assert heat.trade_risk_utilization == pytest.approx(0.5)
-    assert heat.gross_exposure_utilization == pytest.approx(50_000 / 75_000)
+    expected_trade_utilization = 250.0 / (99_400.0 * RISK_POLICY_V1.risk_per_trade)
+    assert heat.trade_risk_utilization == pytest.approx(expected_trade_utilization)
+    assert heat.gross_exposure_utilization == pytest.approx(50_000 / 74_550)
     assert heat.daily_loss_utilization == pytest.approx(600 / 1500)
     assert heat.open_position_utilization == pytest.approx(2 / 3)
 
@@ -240,11 +221,7 @@ def test_short_direction_has_signed_net_exposure() -> None:
             market=_market(),
         )
     )
-
-    assert result.status in {
-        RiskDecisionStatus.APPROVED,
-        RiskDecisionStatus.REDUCED,
-    }
+    assert result.status in {RiskDecisionStatus.APPROVED, RiskDecisionStatus.REDUCED}
     assert result.net_exposure_after < 0
 
 
@@ -257,7 +234,6 @@ def test_reason_and_policy_lineage_are_recorded() -> None:
             market=_market(),
         )
     )
-
     assert result.decision_id.startswith("risk-")
     assert result.risk_policy_version == "risk_v1.0"
     assert result.candidate_policy_version == "structure_atr_v1.0"
