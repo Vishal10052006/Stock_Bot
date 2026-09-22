@@ -30,12 +30,14 @@ from trading.risk.gate import (
     RiskDecision,
     evaluate_strategy_risk,
 )
-from trading.strategy.baseline import evaluate_row
 from trading.strategy.models import (
     BaselineStrategyConfig,
+    StrategyConfig,
     StrategyDecision,
     StrategyDirection,
+    StrategyInput,
 )
+from trading.strategy.engine import StrategyEngine
 
 
 @dataclass(frozen=True, slots=True)
@@ -113,8 +115,8 @@ class HistoricalBacktestEngine:
         lifecycle: PaperTradeLifecycle | None = None,
     ) -> None:
         self.config = config or BacktestConfig()
-        self.strategy_config = (
-            strategy_config or BaselineStrategyConfig()
+        self.strategy_engine = StrategyEngine(
+            StrategyEngine.coerce_config(strategy_config)
         )
         self.runtime = runtime or PaperTradingRuntime()
         self.lifecycle = lifecycle or PaperTradeLifecycle()
@@ -150,10 +152,12 @@ class HistoricalBacktestEngine:
                 price=price,
             )
 
-            strategy = evaluate_row(
+            strategy_input = self._strategy_input_from_row(
                 row,
-                config=self.strategy_config,
+                timestamp=timestamp,
+                symbol=symbol,
             )
+            strategy, _trace = self.strategy_engine.decide(strategy_input)
 
             risk = evaluate_strategy_risk(
                 strategy,
@@ -194,6 +198,33 @@ class HistoricalBacktestEngine:
         return BacktestResult(
             steps=tuple(steps),
             outcomes=self.lifecycle.outcomes,
+        )
+
+    @staticmethod
+    def _strategy_input_from_row(
+        row: pd.Series,
+        *,
+        timestamp: pd.Timestamp,
+        symbol: str,
+    ) -> StrategyInput:
+        """Build a causal StrategyInput from one historical decision row."""
+        decision_features = {
+            column: row[column]
+            for column in (
+                "vwap_distance_pct",
+                "rvol_20",
+                "higher_high",
+                "higher_low",
+                "lower_low",
+                "lower_high",
+            )
+        }
+        return StrategyInput(
+            timestamp=timestamp,
+            symbol=symbol,
+            decision_features=decision_features,
+            regime=str(row["regime"]),
+            regime_probability=float(row["regime_probability"]),
         )
 
     def _handle_authorized_decision(
