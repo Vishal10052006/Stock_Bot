@@ -419,3 +419,32 @@ def test_market_context_store_protocol_exposes_causal_latest_lookup():
 
     store = InMemoryMarketContextStore()
     assert isinstance(store, MarketContextStore)
+
+
+
+def test_downstream_adapters_fail_closed_on_unavailable_context():
+    from datetime import timedelta
+    from market.bot.contracts import MarketContext, MarketState
+    from market.bot.downstream import market_context_for_risk, market_context_for_strategy
+    from market.bot.failure import MarketBotUnavailable
+
+    timestamp = pd.Timestamp("2025-01-01", tz="UTC").to_pydatetime()
+    state = MarketState(
+        timestamp=timestamp,
+        benchmark="NIFTY",
+        availability="UNAVAILABLE",
+        quality=0.0,
+    )
+    context = MarketContext(
+        timestamp=timestamp,
+        benchmark="NIFTY",
+        state=state,
+    )
+
+    for adapter in (market_context_for_strategy, market_context_for_risk):
+        with pytest.raises(MarketBotUnavailable, match="unavailable"):
+            adapter(
+                context,
+                decision_timestamp=timestamp,
+                max_age=timedelta(minutes=1),
+            )
