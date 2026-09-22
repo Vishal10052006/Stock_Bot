@@ -32,6 +32,7 @@ from trading.risk.gate import (
 )
 from trading.strategy.engine import StrategyEngine
 from trading.strategy.models import (
+    BaselineStrategyConfig,
     StrategyConfig,
     StrategyDecision,
     StrategyDirection,
@@ -109,13 +110,13 @@ class HistoricalBacktestEngine:
         self,
         *,
         config: BacktestConfig | None = None,
-        strategy_config: StrategyConfig | None = None,
+        strategy_config: StrategyConfig | BaselineStrategyConfig | None = None,
         runtime: PaperTradingRuntime | None = None,
         lifecycle: PaperTradeLifecycle | None = None,
     ) -> None:
         self.config = config or BacktestConfig()
         self.strategy_engine = StrategyEngine(
-            strategy_config or StrategyConfig()
+            self._coerce_strategy_config(strategy_config)
         )
         self.runtime = runtime or PaperTradingRuntime()
         self.lifecycle = lifecycle or PaperTradeLifecycle()
