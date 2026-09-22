@@ -386,7 +386,7 @@ def test_downstream_strategy_adapter_requires_fresh_causal_context():
         max_age=timedelta(minutes=1),
     )
     assert mapped["benchmark"] == "NIFTY"
-    assert mapped["state"]["availability"] in {"AVAILABLE", "PARTIAL", "UNAVAILABLE"}
+    assert mapped["availability"] in {"AVAILABLE", "PARTIAL", "UNAVAILABLE"}
 
     with pytest.raises(StaleMarketDataError, match="stale"):
         market_context_for_strategy(
