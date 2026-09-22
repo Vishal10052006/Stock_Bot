@@ -80,6 +80,28 @@ class AnalysisInput:
             raise AnalysisContractError("feature_version must not be empty")
         object.__setattr__(self, "timestamp", timestamp)
         object.__setattr__(self, "symbol", symbol)
+        # Freeze the boundary by copying mutable mappings into owned dicts.
+        for field_name in (
+            "technical_context",
+            "structure_context",
+            "volume_context",
+            "volatility_context",
+            "market_context",
+            "sector_context",
+            "relative_performance",
+            "research_context",
+            "feature_vector",
+            "quality",
+            "provenance",
+            "fundamental_context",
+            "valuation_context",
+        ):
+            object.__setattr__(
+                self,
+                field_name,
+                _sanitize_mapping(getattr(self, field_name)),
+            )
+        object.__setattr__(self, "candidates", tuple(self.candidates))
         object.__setattr__(self, "features", _sanitize_mapping(self.features))
         object.__setattr__(self, "regime", _sanitize_mapping(self.regime))
         object.__setattr__(self, "market_context", _sanitize_mapping(self.market_context))
