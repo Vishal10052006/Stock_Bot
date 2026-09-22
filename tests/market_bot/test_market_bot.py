@@ -212,6 +212,18 @@ def test_market_context_store_normalizes_benchmark_key():
     assert store.get("nifty", context.timestamp) == context
 
 
+def test_market_bot_rejects_invalid_benchmark_timestamp_and_price():
+    bad_timestamp = _benchmark(5)
+    bad_timestamp.loc[0, "timestamp"] = "not-a-timestamp"
+    with pytest.raises(ValueError, match="invalid values"):
+        MarketBot(MarketBotConfig(benchmark="NIFTY")).build(benchmark_data=bad_timestamp)
+
+    bad_price = _benchmark(5)
+    bad_price.loc[0, "close"] = 0.0
+    with pytest.raises(ValueError, match="must be positive"):
+        MarketBot(MarketBotConfig(benchmark="NIFTY")).build(benchmark_data=bad_price)
+
+
 def test_market_bot_rejects_empty_benchmark():
     with pytest.raises(Exception, match="benchmark data is empty"):
         MarketBot(MarketBotConfig(benchmark="NIFTY")).build(
