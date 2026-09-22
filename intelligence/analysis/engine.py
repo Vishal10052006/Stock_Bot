@@ -14,6 +14,8 @@ from intelligence.analysis.sector import analyze_sector_context
 from intelligence.analysis.structure import analyze_structure
 from intelligence.analysis.technical import analyze_technical
 from intelligence.analysis.volatility import analyze_volatility
+from intelligence.analysis.fundamentals.analyzer import analyze_fundamentals
+from intelligence.analysis.fundamentals.valuation import analyze_valuation
 from intelligence.analysis.volume import analyze_volume
 
 
@@ -33,6 +35,8 @@ class AnalysisEngine:
         sector = analyze_sector_context(analysis_input.sector_context or features)
         relative = analyze_relative_performance(features)
         research = research_summary(analysis_input.research_context)
+        fundamentals = analyze_fundamentals(analysis_input.fundamental_context)
+        valuation = analyze_valuation(analysis_input.valuation_context)
         candidates = generate_candidates(technical, structure, volume, relative)
         direction = technical["direction"]
         if direction == "UNKNOWN" and structure.get("trend") in {"BULLISH", "BEARISH"}:
@@ -54,6 +58,8 @@ class AnalysisEngine:
             sector_context=sector,
             relative_performance=relative,
             research_context=research,
+            fundamental_context=fundamentals,
+            valuation_context=valuation,
             feature_vector=dict(features),
             analytical_direction=direction,
             analytical_state=state,
@@ -69,6 +75,8 @@ class AnalysisEngine:
                     "market_context": bool(analysis_input.market_context),
                     "sector_context": bool(analysis_input.sector_context),
                     "research_context": analysis_input.research_context is not None,
+                    "fundamental_context": analysis_input.fundamental_context is not None,
+                    "valuation_context": analysis_input.valuation_context is not None,
                 },
             ),
         )
