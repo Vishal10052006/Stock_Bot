@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from backtesting.engine import HistoricalBacktestEngine
+from backtesting.engine import BacktestConfig, HistoricalBacktestEngine
 from paper.runtime import PaperTradingConfig, PaperTradingRuntime
 
 def _row(timestamp: str, *, close: float) -> dict:
@@ -37,7 +37,7 @@ def test_backtest_applies_entry_and_exit_costs() -> None:
 
     result = HistoricalBacktestEngine(
         runtime=runtime,
-        config=__import__('backtesting.engine', fromlist=['BacktestConfig']).BacktestConfig(target_reward_risk=100.0),
+        config=BacktestConfig(target_reward_risk=100.0),
     ).run(
         pd.DataFrame(
             [
