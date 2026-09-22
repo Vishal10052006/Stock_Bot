@@ -90,6 +90,8 @@ def analyze_latest_row(
     market_context: dict[str, Any] | None = None,
     sector_context: dict[str, Any] | None = None,
     research_context: Any | None = None,
+    fundamental_context: Any | None = None,
+    valuation_context: Any | None = None,
     data_version: str = "unknown",
     feature_version: str = "v1.0",
 ) -> AnalysisContext:
@@ -114,6 +116,8 @@ def analyze_latest_row(
             market_context=market_context,
             sector_context=sector_context,
             research_context=research_context,
+            fundamental_context=fundamental_context,
+            valuation_context=valuation_context,
             data_version=data_version,
             feature_version=feature_version,
         )
