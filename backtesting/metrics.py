@@ -28,6 +28,7 @@ class BacktestMetrics:
     expectancy: float
     maximum_drawdown: float
     sharpe_ratio: float
+    sortino_ratio: float
     exposure_minutes: float
     turnover: float
 
@@ -116,6 +117,14 @@ def calculate_metrics(
         )
     else:
         sharpe_ratio = 0.0
+
+    downside = np.minimum(pnls, 0.0)
+    downside_deviation = float(np.sqrt(np.mean(np.square(downside))))
+    sortino_ratio = (
+        float(pnls.mean() / downside_deviation * math.sqrt(len(pnls)))
+        if downside_deviation > 0
+        else 0.0
+    )
 
     exposure_minutes = sum(
         trade.holding_minutes
