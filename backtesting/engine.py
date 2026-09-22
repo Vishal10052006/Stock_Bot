@@ -17,6 +17,7 @@ from datetime import timedelta
 
 import pandas as pd
 
+from backtesting.broker_simulator import BrokerSimulator
 from backtesting.costs import CostConfig, TransactionCostModel
 from backtesting.fills import FillConfig, FillModel
 from execution.trading_execution import (
@@ -112,13 +113,17 @@ class HistoricalBacktestEngine:
         config: BacktestConfig | None = None,
         strategy_config: BaselineStrategyConfig | None = None,
         runtime: PaperTradingRuntime | None = None,
+        broker: BrokerSimulator | None = None,
         lifecycle: PaperTradeLifecycle | None = None,
     ) -> None:
         self.config = config or BacktestConfig()
         self.strategy_engine = StrategyEngine(
             StrategyEngine.coerce_config(strategy_config)
         )
-        self.runtime = runtime or PaperTradingRuntime()
+        if broker is not None and runtime is not None:
+            raise ValueError("provide either broker or runtime, not both")
+        self.broker = broker or BrokerSimulator(runtime=runtime)
+        self.runtime = self.broker.runtime
         self.lifecycle = lifecycle or PaperTradeLifecycle()
 
     def run(self, rows: pd.DataFrame) -> BacktestResult:
@@ -251,7 +256,7 @@ class HistoricalBacktestEngine:
                 price=price,
             )
 
-        order = self.runtime.submit(
+        order = self.broker.submit(
             authorization,
             price=price,
             quantity=self.config.quantity,
@@ -333,7 +338,7 @@ class HistoricalBacktestEngine:
         )
 
         fill = FillModel(
-            FillConfig(slippage_bps=self.runtime.config.slippage_bps)
+            FillConfig(slippage_bps=self.broker.runtime.config.slippage_bps)
         ).fill(
             price=price,
             quantity=order.quantity,
@@ -341,7 +346,7 @@ class HistoricalBacktestEngine:
         )
 
         exit_fees = TransactionCostModel(
-            CostConfig(brokerage_bps=self.runtime.config.fee_bps)
+            CostConfig(brokerage_bps=self.broker.runtime.config.fee_bps)
         ).calculate(
             price=fill.fill_price,
             quantity=order.quantity,
