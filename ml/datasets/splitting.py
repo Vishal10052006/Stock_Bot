@@ -186,6 +186,10 @@ def temporal_split(
     validation_end = nominal_validation_end - purge
     test_start = nominal_validation_end + purge
 
+    # The purge applies on both sides of each temporal boundary.
+    # Fail closed when the requested split/purge geometry leaves no
+    # chronologically valid observations in one of the partitions.
+
     train_mask = (
         data["timestamp"] <= train_end
     )
