@@ -21,7 +21,7 @@ from .validation import (
 __all__ = [
     "BaselineStrategyConfig",
     "build_candidate_from_strategy",
-      "NoTradeReason",
+    "NoTradeReason",
     "StrategyConfig",
     "StrategyDecision",
     "StrategyDirection",
