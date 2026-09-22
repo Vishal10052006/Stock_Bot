@@ -18,7 +18,7 @@ from execution.trading_execution import (
 from paper.runtime import PaperOrder, PaperTradingRuntime
 from trading.risk.gate import RiskDecision, evaluate_strategy_risk
 from trading.strategy.engine import StrategyEngine
-from trading.strategy.models import StrategyConfig, StrategyDecision, StrategyInput
+from trading.strategy.models import BaselineStrategyConfig, StrategyConfig, StrategyDecision, StrategyInput
 
 
 @dataclass(frozen=True, slots=True)
@@ -50,11 +50,11 @@ class PaperDecisionLoop:
         self,
         *,
         runtime: PaperTradingRuntime | None = None,
-        strategy_config: StrategyConfig | None = None,
+        strategy_config: StrategyConfig | BaselineStrategyConfig | None = None,
         risk_enabled: bool = True,
     ) -> None:
         self.runtime = runtime or PaperTradingRuntime()
-        self.strategy_engine = StrategyEngine(strategy_config or StrategyConfig())
+        self.strategy_engine = StrategyEngine(self._coerce_strategy_config(strategy_config))
         self.risk_enabled = risk_enabled
 
     def run(
