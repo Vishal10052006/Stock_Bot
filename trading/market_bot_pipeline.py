@@ -38,6 +38,17 @@ def build_market_analysis_from_market_bot(
     this composition boundary; the frozen Analysis Bot implementation is
     not modified.
     """
+    candle_timestamps = pd.to_datetime(candles["timestamp"], utc=True, errors="coerce")
+    if candle_timestamps.isna().any():
+        raise ValueError("candles contain invalid timestamps")
+    if candle_timestamps.empty:
+        raise ValueError("candles must not be empty")
+    candle_endpoint = candle_timestamps.max()
+    if pd.Timestamp(market_context.timestamp) > candle_endpoint:
+        raise ValueError(
+            "MarketContext cannot be from the future of the analysis candle endpoint"
+        )
+
     phase5_market_context = build_phase5_market_context(
         benchmark_history,
         market_context=market_context,
