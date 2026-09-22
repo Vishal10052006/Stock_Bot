@@ -25,14 +25,17 @@ class PaperOrderStatus(str, Enum):
 
 @dataclass(frozen=True, slots=True)
 class PaperTradingConfig:
-    """Deterministic paper execution costs."""
+    """Deterministic paper execution costs and initial account capital."""
 
     slippage_bps: float = 5.0
     fee_bps: float = 2.0
+    initial_equity: float = 100_000.0
 
     def __post_init__(self) -> None:
         if self.slippage_bps < 0 or self.fee_bps < 0:
             raise ValueError("slippage_bps and fee_bps must be non-negative")
+        if self.initial_equity <= 0:
+            raise ValueError("initial_equity must be positive")
 
 
 @dataclass(frozen=True, slots=True)
@@ -89,11 +92,75 @@ class PaperTradingRuntime:
         self.config = config or PaperTradingConfig()
         self._positions: dict[str, PaperPosition] = {}
         self._journal: list[PaperOrder] = []
+        self._realized_pnl: float = 0.0
 
     @property
     def journal(self) -> tuple[PaperOrder, ...]:
         """Return immutable trade journal snapshot."""
         return tuple(self._journal)
+
+    @property
+    def positions(self) -> tuple[PaperPosition, ...]:
+        """Return currently open paper positions."""
+        return tuple(
+            position
+            for position in self._positions.values()
+            if position.quantity > 0
+        )
+
+    @property
+    def realized_pnl(self) -> float:
+        """Return cumulative realized P&L including execution fees."""
+        return self._realized_pnl
+
+    def account_snapshot(
+        self,
+        prices: dict[str, float],
+    ) -> tuple[float, float, float, float]:
+        """Return equity, realized P&L, unrealized P&L and gross exposure.
+
+        Prices must be the latest validated decision-time prices known to
+        the caller. No future market value is inferred.
+        """
+        unrealized = 0.0
+        gross_exposure = 0.0
+
+        for position in self.positions:
+            symbol = position.symbol.upper()
+            if symbol not in prices:
+                raise ValueError(
+                    f"missing mark price for open position {symbol}"
+                )
+
+            price = float(prices[symbol])
+            if price <= 0:
+                raise ValueError(
+                    f"mark price for {symbol} must be positive"
+                )
+
+            if position.direction is StrategyDirection.LONG:
+                unrealized += (
+                    price - position.average_price
+                ) * position.quantity
+            else:
+                unrealized += (
+                    position.average_price - price
+                ) * position.quantity
+
+            gross_exposure += price * position.quantity
+
+        equity = (
+            self.config.initial_equity
+            + self._realized_pnl
+            + unrealized
+        )
+
+        return (
+            equity,
+            self._realized_pnl,
+            unrealized,
+            gross_exposure,
+        )
 
     def position(self, symbol: str) -> PaperPosition | None:
         """Return current position for a symbol."""
@@ -140,6 +207,9 @@ class PaperTradingRuntime:
         fees = notional * self.config.fee_bps / 10_000.0
         slippage_cost = abs(fill_price - price) * quantity
 
+        # Entry fees immediately reduce account equity.
+        self._realized_pnl -= fees
+
         current = self._positions.get(symbol)
         order_direction = authorization.direction
 
@@ -179,6 +249,7 @@ class PaperTradingRuntime:
             remaining_order = quantity - close_quantity
 
             # Fees are charged once for the complete submitted order.
+            self._realized_pnl += realized
             realized_pnl = current.realized_pnl + realized - fees
 
             if remaining_order > 0:
