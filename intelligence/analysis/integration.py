@@ -12,6 +12,8 @@ import pandas as pd
 
 from intelligence.analysis.contracts import AnalysisContext, AnalysisInput
 from intelligence.analysis.engine import AnalysisEngine
+from intelligence.analysis.fundamentals.alignment import align_fundamental_snapshot
+from intelligence.analysis.fundamentals.provider import FundamentalProvider
 from market.features.validation import validate_feature_dataset
 
 
@@ -24,6 +26,8 @@ def build_analysis_context(
     *,
     regime_dataset: pd.DataFrame | None = None,
     research_context: Any | None = None,
+    fundamental_provider: FundamentalProvider | None = None,
+    valuation_context: Any | None = None,
     data_version: str = "unknown",
     feature_version: str = "v1.0",
     analysis_engine: AnalysisEngine | None = None,
@@ -88,6 +92,14 @@ def build_analysis_context(
         )
     }
 
+    fundamental_snapshot = None
+    if fundamental_provider is not None:
+        fundamental_snapshot = align_fundamental_snapshot(
+            fundamental_provider.snapshots(symbol),
+            symbol=symbol,
+            decision_timestamp=timestamp,
+        )
+
     engine = analysis_engine or AnalysisEngine()
     return engine.analyze(
         AnalysisInput(
@@ -98,6 +110,8 @@ def build_analysis_context(
             market_context=context_map,
             sector_context=context_map,
             research_context=research_context,
+            fundamental_context=fundamental_snapshot,
+            valuation_context=valuation_context,
             data_version=data_version,
             feature_version=feature_version,
         )
