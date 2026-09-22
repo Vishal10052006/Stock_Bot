@@ -26,10 +26,9 @@ from execution.trading_execution import (
 )
 from paper.runtime import PaperOrder, PaperTradingRuntime
 from trading.paper.lifecycle import PaperTradeLifecycle, TradeOutcome
-from trading.risk.gate import (
-    RiskDecision,
-    evaluate_strategy_risk,
-)
+from trading.risk.engine import RiskEngine
+from trading.risk.gate import RiskDecision, RiskDecisionStatus
+from trading.risk.pipeline import evaluate_strategy_candidate_risk
 from trading.strategy.engine import StrategyEngine
 from trading.strategy.models import (
     BaselineStrategyConfig,
@@ -47,6 +46,7 @@ class BacktestConfig:
     price_column: str = "close"
     quantity: float = 1.0
     max_holding_minutes: float = 60.0
+    initial_equity: float = 100_000.0
     risk_enabled: bool = True
 
     def __post_init__(self) -> None:
@@ -58,6 +58,9 @@ class BacktestConfig:
 
         if self.max_holding_minutes <= 0:
             raise ValueError("max_holding_minutes must be positive")
+
+        if self.initial_equity <= 0:
+            raise ValueError("initial_equity must be positive")
 
 
 @dataclass(frozen=True, slots=True)
@@ -118,6 +121,7 @@ class HistoricalBacktestEngine:
         self.strategy_engine = StrategyEngine(
             self._coerce_strategy_config(strategy_config)
         )
+        self.risk_engine = RiskEngine()
         self.runtime = runtime or PaperTradingRuntime()
         self.lifecycle = lifecycle or PaperTradeLifecycle()
 
@@ -148,6 +152,10 @@ class HistoricalBacktestEngine:
             )
 
         steps: list[BacktestStep] = []
+        session_date: object | None = None
+        day_start_equity = self.config.initial_equity
+        day_start_realized = 0.0
+        trades_today = 0
 
         # The final historical timestamp cannot support a new entry,
         # because there is no later observation available to evaluate
@@ -167,16 +175,59 @@ class HistoricalBacktestEngine:
                 price=price,
             )
 
+            realized_total, unrealized_pnl, gross_exposure = (
+                self._risk_account_state(
+                    symbol=symbol,
+                    price=price,
+                )
+            )
+            equity = (
+                self.config.initial_equity
+                + realized_total
+                + unrealized_pnl
+            )
+
+            current_date = timestamp.date()
+            if session_date != current_date:
+                session_date = current_date
+                day_start_equity = equity
+                day_start_realized = realized_total
+                trades_today = 0
+
+            daily_realized = realized_total - day_start_realized
+            open_positions = len(
+                getattr(self.lifecycle, "_open", {})
+            )
+            symbol_already_open = (
+                self._open_trade(symbol) is not None
+            )
+
             strategy_input = self._strategy_input_from_row(row)
             strategy, _trace = self.strategy_engine.decide(
                 strategy_input
             )
 
-            risk = evaluate_strategy_risk(
+            liquidity_available = bool(
+                row["liquidity_available"]
+            ) if "liquidity_available" in row.index else True
+
+            assessment = evaluate_strategy_candidate_risk(
                 strategy,
+                row,
+                self.risk_engine,
+                available_equity=equity,
+                day_start_equity=day_start_equity,
+                realized_pnl=daily_realized,
+                unrealized_pnl=unrealized_pnl,
+                open_positions=open_positions,
+                trades_today=trades_today,
+                gross_exposure=gross_exposure,
+                symbol_already_open=symbol_already_open,
+                liquidity_available=liquidity_available,
                 risk_enabled=self.config.risk_enabled,
             )
 
+            risk = assessment.decision
             authorization = authorize_risk_decision(risk)
 
             order: PaperOrder | None = None
@@ -188,10 +239,25 @@ class HistoricalBacktestEngine:
                 and authorization.status
                 is ExecutionAuthorizationStatus.AUTHORIZED
             ):
-                order = self._handle_authorized_decision(
-                    authorization=authorization,
-                    price=price,
-                )
+                position_size = assessment.position_size
+                if position_size is None:
+                    risk = RiskDecision(
+                        timestamp=timestamp,
+                        symbol=symbol,
+                        status=RiskDecisionStatus.REJECTED,
+                        strategy_direction=strategy.direction,
+                        reason="Risk assessment did not produce a position size.",
+                        risk_version="RISK-v1.0",
+                    )
+                    authorization = authorize_risk_decision(risk)
+                else:
+                    order = self._handle_authorized_decision(
+                        authorization=authorization,
+                        price=price,
+                        quantity=position_size,
+                    )
+                    if order is not None and order.status.value == "FILLED":
+                        trades_today += 1
 
             steps.append(
                 BacktestStep(
@@ -253,11 +319,47 @@ class HistoricalBacktestEngine:
             regime_probability=float(row["regime_probability"]),
         )
 
+    def _risk_account_state(
+        self,
+        *,
+        symbol: str,
+        price: float,
+    ) -> tuple[float, float, float]:
+        """Return realized P&L, unrealized P&L and gross exposure."""
+        realized_total = sum(
+            outcome.net_pnl
+            for outcome in self.lifecycle.outcomes
+        )
+        unrealized = 0.0
+        gross_exposure = 0.0
+
+        open_records = getattr(self.lifecycle, "_open", {})
+        for open_symbol, record in open_records.items():
+            order = record["order"]
+            if not isinstance(order, PaperOrder):
+                continue
+
+            mark = price if open_symbol == symbol else order.fill_price
+
+            if order.direction is StrategyDirection.LONG:
+                unrealized += (
+                    mark - order.fill_price
+                ) * order.quantity
+            else:
+                unrealized += (
+                    order.fill_price - mark
+                ) * order.quantity
+
+            gross_exposure += mark * order.quantity
+
+        return realized_total, unrealized, gross_exposure
+
     def _handle_authorized_decision(
         self,
         *,
         authorization: ExecutionAuthorization,
         price: float,
+        quantity: float,
     ) -> PaperOrder | None:
         """Handle an approved decision while preserving one trade per symbol."""
 
@@ -280,7 +382,7 @@ class HistoricalBacktestEngine:
         order = self.runtime.submit(
             authorization,
             price=price,
-            quantity=self.config.quantity,
+            quantity=quantity,
         )
 
         if order.status.value == "FILLED":
