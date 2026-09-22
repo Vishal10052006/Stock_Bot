@@ -121,6 +121,21 @@ class HistoricalBacktestEngine:
         self.runtime = runtime or PaperTradingRuntime()
         self.lifecycle = lifecycle or PaperTradeLifecycle()
 
+    @staticmethod
+    def _coerce_strategy_config(
+        config: StrategyConfig | BaselineStrategyConfig | None,
+    ) -> StrategyConfig:
+        """Normalize legacy baseline configuration callers."""
+        if config is None:
+            return StrategyConfig()
+        if isinstance(config, StrategyConfig):
+            return config
+        if isinstance(config, BaselineStrategyConfig):
+            return StrategyConfig(baseline=config)
+        raise TypeError(
+            "strategy_config must be StrategyConfig, BaselineStrategyConfig, or None"
+        )
+
     def run(self, rows: pd.DataFrame) -> BacktestResult:
         """Run a deterministic chronological historical replay."""
 
