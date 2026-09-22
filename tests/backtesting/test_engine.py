@@ -39,6 +39,12 @@ def _row(
         "higher_low": higher_low,
         "lower_low": lower_low,
         "lower_high": lower_high,
+        "high": close,
+        "low": close,
+        "atr_14": 2.0,
+        "support_20": close - 2.0,
+        "resistance_20": close + 2.0,
+        "volume": 10_000_000.0,
     }
 
 
