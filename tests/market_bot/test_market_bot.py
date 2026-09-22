@@ -311,3 +311,59 @@ def test_market_context_adapts_to_frozen_phase5_schema():
     assert context["market_return_3"].iloc[-1] == pytest.approx(
         benchmark["close"].pct_change(3).iloc[-1]
     )
+
+
+
+def test_market_context_store_selects_latest_causal_fresh_context():
+    from datetime import timedelta
+    from market.bot.storage import InMemoryMarketContextStore
+
+    benchmark = _benchmark(100)
+    bot = MarketBot(MarketBotConfig(benchmark="NIFTY"))
+    first = bot.build(benchmark_data=benchmark.iloc[:90])
+    latest = bot.build(benchmark_data=benchmark)
+    store = InMemoryMarketContextStore()
+    store.put(first)
+    store.put(latest)
+
+    result = store.get_latest_at_or_before(
+        "nifty",
+        latest.timestamp,
+        max_age=timedelta(days=1),
+    )
+    assert result == latest
+
+
+def test_market_context_store_rejects_stale_context():
+    from datetime import timedelta
+    from market.bot.failure import StaleMarketDataError
+    from market.bot.storage import InMemoryMarketContextStore
+
+    benchmark = _benchmark(100)
+    context = MarketBot(MarketBotConfig(benchmark="NIFTY")).build(benchmark_data=benchmark.iloc[:80])
+    store = InMemoryMarketContextStore()
+    store.put(context)
+
+    with pytest.raises(StaleMarketDataError, match="stale"):
+        store.get_latest_at_or_before(
+            "NIFTY",
+            benchmark["timestamp"].iloc[-1].to_pydatetime(),
+            max_age=timedelta(days=1),
+        )
+
+
+def test_market_context_store_never_returns_future_context():
+    from datetime import timedelta
+    from market.bot.storage import InMemoryMarketContextStore
+
+    benchmark = _benchmark(100)
+    context = MarketBot(MarketBotConfig(benchmark="NIFTY")).build(benchmark_data=benchmark)
+    store = InMemoryMarketContextStore()
+    store.put(context)
+
+    result = store.get_latest_at_or_before(
+        "NIFTY",
+        benchmark["timestamp"].iloc[-1].to_pydatetime() - timedelta(minutes=1),
+        max_age=timedelta(days=1),
+    )
+    assert result is None
