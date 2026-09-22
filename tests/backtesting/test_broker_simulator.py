@@ -22,10 +22,10 @@ def _authorization() -> ExecutionAuthorization:
         symbol="ITC",
         direction=StrategyDirection.LONG,
         status=ExecutionAuthorizationStatus.AUTHORIZED,
-        quantity=1.0,
-        notional=100.0,
         reason="test",
         risk_version="v1.0",
+        approved_quantity=1.0,
+        approved_notional=100.0,
     )
 
 
