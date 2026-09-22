@@ -213,7 +213,8 @@ def test_market_context_store_normalizes_benchmark_key():
 
 
 def test_market_bot_rejects_invalid_benchmark_timestamp_and_price():
-    bad_timestamp = _benchmark(5)
+    # Use object dtype so the test fixture can represent malformed external input.
+    bad_timestamp = _benchmark(5).astype({"timestamp": "object"})
     bad_timestamp.loc[0, "timestamp"] = "not-a-timestamp"
     with pytest.raises(ValueError, match="invalid values"):
         MarketBot(MarketBotConfig(benchmark="NIFTY")).build(benchmark_data=bad_timestamp)
