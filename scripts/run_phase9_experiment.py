@@ -50,6 +50,80 @@ STRATEGY_CLASS_MAP = {
 }
 
 
+def _feature_coverage_report(data: pd.DataFrame) -> dict[str, object]:
+    """Record frozen-feature availability without altering the dataset."""
+    total_rows = len(data)
+    fully_observed = []
+    partially_observed = []
+    completely_missing = []
+
+    for feature in FEATURE_COLUMNS:
+        coverage = (
+            float(data[feature].notna().mean())
+            if total_rows
+            else 0.0
+        )
+
+        if coverage == 1.0:
+            fully_observed.append(feature)
+        elif coverage == 0.0:
+            completely_missing.append(feature)
+        else:
+            partially_observed.append(
+                {
+                    "feature": feature,
+                    "coverage": coverage,
+                    "coverage_pct": coverage * 100.0,
+                    "missing_rows": int(data[feature].isna().sum()),
+                }
+            )
+
+    return {
+        "total_features": len(FEATURE_COLUMNS),
+        "fully_observed_features": len(fully_observed),
+        "partially_observed_features": partially_observed,
+        "completely_missing_features": completely_missing,
+        "fully_observed_feature_names": fully_observed,
+        "complete_missing_feature_count": len(completely_missing),
+    }
+
+
+def _phase9_data_source_limitations() -> dict[str, object]:
+    """Document known historical sector-context source limitations."""
+    return {
+        "sector_context": {
+            "features": [
+                "sector_return_1",
+                "sector_return_3",
+                "sector_return_12",
+                "sector_volatility_20",
+                "stock_vs_sector_return_1",
+            ],
+            "observed_coverage_pct": 0.0,
+            "source": "Yahoo Finance",
+            "timeframe_minutes": 5,
+            "limitation": (
+                "Yahoo Finance rolling intraday retention prevents "
+                "retrieval of 5-minute sector-index history for the "
+                "historical Phase 9 experiment dates."
+            ),
+            "handling": (
+                "Sector context remains missing; no sector membership or "
+                "historical values are fabricated."
+            ),
+        },
+        "retest_distance_pct": {
+            "semantic_missingness": True,
+            "coverage_pct": 11.25,
+            "interpretation": (
+                "Distance is populated only when retest_up or retest_down "
+                "is true; rows with neither retest state have no retest "
+                "distance by construction."
+            ),
+        },
+    }
+
+
 def _metrics(y_true: pd.Series, probabilities: pd.DataFrame) -> dict[str, object]:
     """Return the common Phase 9 metric set for a probability baseline."""
     result = evaluate_predictions(y_true, probabilities)
@@ -279,6 +353,8 @@ def main() -> int:
             "validation": split.validation.y.value_counts().to_dict(),
             "test": split.test.y.value_counts().to_dict(),
         },
+        "feature_coverage": _feature_coverage_report(dataset.data),
+        "data_source_limitations": _phase9_data_source_limitations(),
         "majority_class": majority,
         "benchmarks": {
             "majority_class": majority_result,
