@@ -177,18 +177,23 @@ class MarketBot:
         if missing: raise ValueError(f"benchmark missing: {sorted(missing)}")
         if data.empty: raise InsufficientMarketDataError("benchmark data is empty")
         frame=data.copy()
-        frame["timestamp"]=pd.to_datetime(frame["timestamp"],utc=True)
+        frame["timestamp"]=pd.to_datetime(frame["timestamp"],utc=True,errors="coerce")
+        if frame["timestamp"].isna().any():
+            raise ValueError("benchmark timestamp contains invalid values")
+        frame["close"]=pd.to_numeric(frame["close"],errors="coerce")
+        if not np.isfinite(frame["close"]).all():
+            raise ValueError("benchmark close contains non-finite values")
+        if (frame["close"] <= 0).any():
+            raise ValueError("benchmark close must be positive")
         frame=frame.sort_values("timestamp",kind="stable")
         if frame["timestamp"].duplicated().any(): raise ValueError("benchmark timestamps must be unique")
-        if not np.isfinite(pd.to_numeric(frame["close"], errors="coerce")).all():
-            raise ValueError("benchmark close contains non-finite values")
-        if (pd.to_numeric(frame["close"], errors="coerce") <= 0).any():
-            raise ValueError("benchmark close must be positive")
         return frame.reset_index(drop=True)
 
     def _causal_constituents(self,data:pd.DataFrame,cutoff:pd.Timestamp)->pd.DataFrame:
         frame=data.copy()
-        frame["timestamp"]=pd.to_datetime(frame["timestamp"],utc=True)
+        frame["timestamp"]=pd.to_datetime(frame["timestamp"],utc=True,errors="coerce")
+        if frame["timestamp"].isna().any():
+            raise ValueError("constituent timestamp contains invalid values")
         required={"timestamp","symbol","close"}
         missing=required.difference(frame.columns)
         if missing: raise ValueError(f"constituents missing: {sorted(missing)}")
