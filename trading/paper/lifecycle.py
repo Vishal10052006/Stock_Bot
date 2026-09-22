@@ -65,6 +65,24 @@ class PaperTradeLifecycle:
         """Return completed outcomes in chronological close order."""
         return tuple(self._outcomes)
 
+    @property
+    def open_symbols(self) -> tuple[str, ...]:
+        """Return symbols with currently open lifecycle trades."""
+        return tuple(self._open)
+
+    def is_open(self, symbol: str) -> bool:
+        """Return whether a lifecycle trade is currently open for ``symbol``."""
+        return symbol.upper() in self._open
+
+    def open_order(self, symbol: str) -> PaperOrder | None:
+        """Return the filled entry order for an open symbol, if present."""
+        record = self._open.get(symbol.upper())
+        if record is None:
+            return None
+
+        order = record.get("order")
+        return order if isinstance(order, PaperOrder) else None
+
     def open(self, order: PaperOrder) -> None:
         """Open a lifecycle record from a filled paper order."""
         if not isinstance(order, PaperOrder):
