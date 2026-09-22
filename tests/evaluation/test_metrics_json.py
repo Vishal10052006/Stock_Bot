@@ -7,6 +7,7 @@ import json
 import pandas as pd
 
 from ml.evaluation.metrics import evaluate_predictions
+from scripts.run_phase9_experiment import _metrics
 
 
 def test_confusion_matrix_is_json_serializable() -> None:
@@ -23,10 +24,11 @@ def test_confusion_matrix_is_json_serializable() -> None:
 
     result = evaluate_predictions(y_true, probabilities)
 
-    assert result["confusion_matrix"] == [
+    assert result["confusion_matrix"].tolist() == [
         [1, 0, 0],
         [0, 1, 0],
         [0, 0, 2],
     ]
 
-    json.dumps(result)
+    report_metrics = _metrics(y_true, probabilities)
+    json.dumps(report_metrics)
