@@ -76,19 +76,19 @@ def check_spread(market: MarketRiskContext, policy: RiskPolicy) -> LimitResult:
 
 def check_liquidity(
     market: MarketRiskContext,
-    proposed_notional: float,
+    proposed_quantity: float,
     policy: RiskPolicy,
 ) -> LimitResult:
-    """Limit proposed notional relative to recent market volume."""
+    """Limit proposed share quantity relative to recent share volume."""
     if market.recent_volume is None:
         if policy.allow_missing_liquidity:
             return LimitResult(True)
         return LimitResult(False, RiskReasonCode.MISSING_REQUIRED_CONTEXT, "liquidity volume is required")
     if market.recent_volume <= 0:
         return LimitResult(False, RiskReasonCode.LIQUIDITY_TOO_LOW, "recent volume is not positive")
-    participation = proposed_notional / market.recent_volume
+    participation = proposed_quantity / market.recent_volume
     return (
-        LimitResult(False, RiskReasonCode.LIQUIDITY_TOO_LOW, "proposed notional exceeds volume participation limit")
+        LimitResult(False, RiskReasonCode.LIQUIDITY_TOO_LOW, "proposed quantity exceeds volume participation limit")
         if participation > policy.max_liquidity_participation
         else LimitResult(True)
     )
