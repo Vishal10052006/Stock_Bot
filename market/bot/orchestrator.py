@@ -2,6 +2,7 @@
 import pandas as pd
 from .engines import MarketTrendEngine,MarketRangeEngine,MarketVolatilityEngine,MarketBreadthEngine,SectorIntelligenceEngine,SectorRotationEngine,CorrelationDependencyEngine,LiquidityFlowEngine,MarketStrengthEngine
 from .transitions import fuse_market_state,detect_regime_transitions
+from .regime import detect_benchmark_regime
 from .validation import validate_market_input,validate_state
 from .provenance import build_provenance
 
@@ -21,12 +22,13 @@ class MarketBotOrchestrator:
             benchmark_frame=f.copy()
         if benchmark_frame.empty:
             trend=rng=vol=pd.DataFrame(columns=f.columns.tolist()+["trend_state","trend_strength","range_state","volatility_state"])
-            strength=pd.DataFrame()
+            strength=pd.DataFrame(); regimes=pd.DataFrame()
         else:
             trend=MarketTrendEngine().calculate(benchmark_frame)
             rng=MarketRangeEngine().calculate(benchmark_frame)
             vol=MarketVolatilityEngine().calculate(benchmark_frame)
             strength=MarketStrengthEngine().calculate(trend)
+            regimes=detect_benchmark_regime(benchmark_frame)
         breadth=MarketBreadthEngine().calculate(f) if "symbol" in f else pd.DataFrame()
         sectors=SectorIntelligenceEngine().calculate(f) if "sector" in f else pd.DataFrame()
         rotation=SectorRotationEngine().calculate(sectors) if not sectors.empty else sectors
@@ -54,4 +56,4 @@ class MarketBotOrchestrator:
         state=fuse_market_state(parts,timestamp=ts.to_pydatetime(),benchmark=benchmark,quality=quality,version=self.version)
         validate_state(state)
         prov=build_provenance(bot_version=self.version,data_version=data_version,feature_version=feature_version,benchmark=benchmark,as_of=ts.to_pydatetime(),sources=("market_data","deterministic_engines"))
-        return state,{"trend":trend,"range":rng,"volatility":vol,"breadth":breadth,"sector":sectors,"rotation":rotation,"correlation":corr,"liquidity":liq,"strength":strength,"provenance":prov}
+        return state,{"trend":trend,"range":rng,"volatility":vol,"breadth":breadth,"sector":sectors,"rotation":rotation,"correlation":corr,"liquidity":liq,"strength":strength,"regime":regimes,"provenance":prov}
