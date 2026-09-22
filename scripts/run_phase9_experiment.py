@@ -26,6 +26,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import pandas as pd
+from sklearn.metrics import f1_score, precision_score, recall_score
 
 from market.features.builder import FEATURE_COLUMNS
 from ml.datasets.models import TrainingDataset
@@ -35,6 +36,7 @@ from ml.evaluation import (
     diagnose_effective_sample,
     evaluate_predictions,
     expected_calibration_error,
+    evaluate_by_column,
     majority_class,
     majority_probabilities,
     multiclass_brier_score,
@@ -231,6 +233,95 @@ def _strategy_probabilities(context: pd.DataFrame) -> pd.DataFrame:
     return probabilities
 
 
+def _prediction_diagnostics(
+    y_true: pd.Series,
+    probabilities: pd.DataFrame,
+) -> dict[str, object]:
+    """Summarize predicted classes and per-class validation performance."""
+    predicted = probabilities.idxmax(axis=1).reset_index(drop=True)
+    actual = y_true.reset_index(drop=True)
+
+    classes = ["LONG_SUCCESS", "SHORT_SUCCESS", "NO_EDGE"]
+
+    per_class: dict[str, object] = {}
+    for label in classes:
+        per_class[label] = {
+            "precision": float(
+                precision_score(
+                    actual,
+                    predicted,
+                    labels=classes,
+                    average=None,
+                    zero_division=0,
+                )[classes.index(label)]
+            ),
+            "recall": float(
+                recall_score(
+                    actual,
+                    predicted,
+                    labels=classes,
+                    average=None,
+                    zero_division=0,
+                )[classes.index(label)]
+            ),
+            "f1": float(
+                f1_score(
+                    actual,
+                    predicted,
+                    labels=classes,
+                    average=None,
+                    zero_division=0,
+                )[classes.index(label)]
+            ),
+        }
+
+    return {
+        "predicted_class_distribution": (
+            predicted.value_counts()
+            .reindex(classes, fill_value=0)
+            .to_dict()
+        ),
+        "predicted_class_distribution_pct": (
+            (predicted.value_counts(normalize=True)
+             .reindex(classes, fill_value=0) * 100.0)
+            .to_dict()
+        ),
+        "probability_summary": {
+            label: {
+                "mean": float(probabilities[label].mean()),
+                "median": float(probabilities[label].median()),
+                "min": float(probabilities[label].min()),
+                "max": float(probabilities[label].max()),
+            }
+            for label in classes
+        },
+        "per_class": per_class,
+    }
+
+
+def _stratified_report(
+    y_true: pd.Series,
+    probabilities: pd.DataFrame,
+    metadata: pd.DataFrame,
+) -> dict[str, object]:
+    """Evaluate existing OOS predictions by regime, symbol, and date."""
+    result: dict[str, object] = {}
+
+    for column in ("regime", "symbol", "date"):
+        slices = evaluate_by_column(
+            y_true.reset_index(drop=True),
+            probabilities.reset_index(drop=True),
+            metadata.reset_index(drop=True),
+            column=column,
+        )
+        result[column] = {
+            item.key: item.metrics
+            for item in slices
+        }
+
+    return result
+
+
 def _effective_sample_report(dataset: TrainingDataset) -> dict[str, object]:
     """Return dependence diagnostics for one partition."""
     diagnostics = diagnose_effective_sample(
@@ -276,6 +367,15 @@ def main() -> int:
     validation_context = _validation_context(split.validation, context)
 
     y_validation = split.validation.y.reset_index(drop=True)
+    validation_metadata = validation_context.loc[
+        :,
+        ["symbol", "regime"],
+    ].copy()
+    validation_metadata["date"] = (
+        split.validation.data["timestamp"]
+        .reset_index(drop=True)
+        .dt.strftime("%Y-%m-%d")
+    )
 
     # ------------------------------------------------------------------
     # Baseline 1: majority class.
@@ -357,11 +457,76 @@ def main() -> int:
         "data_source_limitations": _phase9_data_source_limitations(),
         "majority_class": majority,
         "benchmarks": {
-            "majority_class": majority_result,
-            "class_prior": prior_result,
-            "phase8_baseline_strategy_v1": strategy_result,
-            "logistic_regression_v1": logistic_result,
-            "random_forest_benchmark": random_forest_result,
+            "majority_class": {
+                **majority_result,
+                "diagnostics": _prediction_diagnostics(
+                    y_validation,
+                    majority_probabilities(
+                        split.train.y,
+                        len(split.validation.data),
+                    ),
+                ),
+            },
+            "class_prior": {
+                **prior_result,
+                "diagnostics": _prediction_diagnostics(
+                    y_validation,
+                    class_prior_probabilities(
+                        split.train.y,
+                        len(split.validation.data),
+                    ),
+                ),
+            },
+            "phase8_baseline_strategy_v1": {
+                **strategy_result,
+                "diagnostics": _prediction_diagnostics(
+                    y_validation,
+                    strategy_probabilities,
+                ),
+            },
+            "logistic_regression_v1": {
+                **logistic_result,
+                "diagnostics": _prediction_diagnostics(
+                    y_validation,
+                    logistic.validation_probabilities.reset_index(drop=True),
+                ),
+            },
+            "random_forest_benchmark": {
+                **random_forest_result,
+                "diagnostics": _prediction_diagnostics(
+                    y_validation,
+                    random_forest.validation_probabilities.reset_index(drop=True),
+                ),
+            },
+        },
+        "stratified_validation": {
+            "phase8_baseline_strategy_v1": _stratified_report(
+                y_validation,
+                strategy_probabilities,
+                validation_metadata,
+            ),
+            "logistic_regression_v1": _stratified_report(
+                y_validation,
+                logistic.validation_probabilities.reset_index(drop=True),
+                validation_metadata,
+            ),
+            "random_forest_benchmark": _stratified_report(
+                y_validation,
+                random_forest.validation_probabilities.reset_index(drop=True),
+                validation_metadata,
+            ),
+        },
+        "strategy_signal_frequency": {
+            "validation_rows": len(validation_context),
+            "LONG": int(
+                (evaluate_strategy(validation_context)["direction"] == "LONG").sum()
+            ),
+            "SHORT": int(
+                (evaluate_strategy(validation_context)["direction"] == "SHORT").sum()
+            ),
+            "NO_TRADE": int(
+                (evaluate_strategy(validation_context)["direction"] == "NO_TRADE").sum()
+            ),
         },
         "effective_sample_diagnostics": {
             "train": _effective_sample_report(split.train),
