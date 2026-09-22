@@ -272,6 +272,7 @@ def main() -> None:
     print(f"Run id: {run_id}")
 
     all_feature_frames: list[pd.DataFrame] = []
+    all_strategy_context_frames: list[pd.DataFrame] = []
     sector_mappings = load_sector_mappings_csv(SECTOR_MAPPING_PATH)
 
     total_feature_rows = 0
@@ -401,6 +402,20 @@ def main() -> None:
             frame["as_of_date"] = as_of.isoformat()
             all_feature_frames.append(frame)
 
+            strategy_context = result.strategy_context.copy()
+            strategy_context = strategy_context.loc[
+                strategy_context["timestamp"].dt.date == as_of
+            ].copy()
+            strategy_context["as_of_date"] = as_of.isoformat()
+
+            if len(strategy_context) != len(frame):
+                raise AssertionError(
+                    f"{symbol}: strategy context rows ({len(strategy_context)}) "
+                    f"do not match dataset rows ({len(frame)})"
+                )
+
+            all_strategy_context_frames.append(strategy_context)
+
             for label, count in frame["label"].value_counts().items():
                 label_counts[str(label)] = label_counts.get(str(label), 0) + int(count)
 
@@ -429,6 +444,17 @@ def main() -> None:
         )
 
     combined = pd.concat(all_feature_frames, ignore_index=True)
+    strategy_context_combined = pd.concat(
+        all_strategy_context_frames,
+        ignore_index=True,
+    )
+
+    dataset_keys = combined[["timestamp", "symbol"]].reset_index(drop=True)
+    context_keys = strategy_context_combined[["timestamp", "symbol"]].reset_index(drop=True)
+    if not dataset_keys.equals(context_keys):
+        raise AssertionError(
+            "Phase 9 strategy context keys are not aligned with the final dataset."
+        )
 
     accounting_ok = (total_eligible_rows + total_excluded_rows) == total_feature_rows
 
@@ -454,6 +480,9 @@ def main() -> None:
     dataset_path = out_dir / f"phase9_dataset_{run_id}.parquet"
     combined.to_parquet(dataset_path, index=False)
 
+    strategy_context_path = out_dir / f"phase9_strategy_context_{run_id}.parquet"
+    strategy_context_combined.to_parquet(strategy_context_path, index=False)
+
     audit = {
         "run_id": run_id,
         "generated_at_utc": datetime.now(timezone.utc).isoformat(),
@@ -473,13 +502,15 @@ def main() -> None:
         "liquidity_policy": asdict(LIQUIDITY_POLICY),
         "universe_policy": asdict(UNIVERSE_POLICY),
         "dataset_file": dataset_path.name,
+        "strategy_context_file": strategy_context_path.name,
     }
     audit_path = out_dir / f"phase9_dataset_{run_id}.audit.json"
     audit_path.write_text(json.dumps(audit, indent=2))
 
-    print(f"\nDataset written to: {dataset_path}")
-    print(f"Audit written to:   {audit_path}")
-    print("\nSend both files back for the Logistic Regression baseline step.")
+    print(f"\nDataset written to:          {dataset_path}")
+    print(f"Strategy context written to: {strategy_context_path}")
+    print(f"Audit written to:            {audit_path}")
+    print("\nThese three artifacts are sufficient for the Phase 9 benchmark runner.")
 
 
 if __name__ == "__main__":
