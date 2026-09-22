@@ -4,7 +4,7 @@ from __future__ import annotations
 import pandas as pd
 
 from trading.risk.gate import RiskDecisionStatus, evaluate_strategy_risk
-from trading.strategy.models import StrategyDecision, StrategyDirection
+from trading.strategy.models import NoTradeReason, StrategyDecision, StrategyDirection
 
 
 def _decision(direction: StrategyDirection) -> StrategyDecision:
@@ -14,6 +14,11 @@ def _decision(direction: StrategyDirection) -> StrategyDecision:
         direction=direction,
         strategy_version="v1.0",
         rationale="test",
+        primary_reason=(
+            NoTradeReason.NO_EDGE
+            if direction is StrategyDirection.NO_TRADE
+            else None
+        ),
     )
 
 
