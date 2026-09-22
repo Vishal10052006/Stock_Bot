@@ -34,6 +34,22 @@ def _sanitize_mapping(value: Mapping[str, Any] | None) -> dict[str, Any]:
     """Copy a context mapping while preserving missing values."""
     return dict(value or {})
 
+def _dashboard_safe(value: Any) -> Any:
+    """Convert common pandas/NumPy values into dashboard-safe primitives."""
+    if value is None or value is pd.NA:
+        return None
+    if isinstance(value, (pd.Timestamp, datetime)):
+        return pd.Timestamp(value).isoformat()
+    if isinstance(value, np.generic):
+        return _dashboard_safe(value.item())
+    if isinstance(value, Mapping):
+        return {str(key): _dashboard_safe(item) for key, item in value.items()}
+    if isinstance(value, (tuple, list)):
+        return [_dashboard_safe(item) for item in value]
+    if isinstance(value, float) and not np.isfinite(value):
+        return None
+    return value
+
 
 @dataclass(frozen=True, slots=True)
 class AnalysisInput:
@@ -46,6 +62,8 @@ class AnalysisInput:
     market_context: Mapping[str, Any] | None = None
     sector_context: Mapping[str, Any] | None = None
     research_context: Any | None = None
+    fundamental_context: Any | None = None
+    valuation_context: Any | None = None
     data_version: str = "unknown"
     feature_version: str = FEATURE_CONTEXT_VERSION
 
@@ -62,10 +80,16 @@ class AnalysisInput:
             raise AnalysisContractError("feature_version must not be empty")
         object.__setattr__(self, "timestamp", timestamp)
         object.__setattr__(self, "symbol", symbol)
+        # Freeze mutable input mappings without inventing fields that do not
+        # belong to the AnalysisInput contract.
         object.__setattr__(self, "features", _sanitize_mapping(self.features))
         object.__setattr__(self, "regime", _sanitize_mapping(self.regime))
-        object.__setattr__(self, "market_context", _sanitize_mapping(self.market_context))
-        object.__setattr__(self, "sector_context", _sanitize_mapping(self.sector_context))
+        object.__setattr__(
+            self, "market_context", _sanitize_mapping(self.market_context)
+        )
+        object.__setattr__(
+            self, "sector_context", _sanitize_mapping(self.sector_context)
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -91,6 +115,8 @@ class AnalysisContext:
     feature_version: str = FEATURE_CONTEXT_VERSION
     data_version: str = "unknown"
     provenance: Mapping[str, Any] = field(default_factory=dict)
+    fundamental_context: Mapping[str, Any] = field(default_factory=dict)
+    valuation_context: Mapping[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         timestamp = _require_aware_timestamp(self.timestamp, "timestamp")
@@ -105,6 +131,57 @@ class AnalysisContext:
             raise AnalysisContractError("version fields must be non-empty")
         object.__setattr__(self, "timestamp", timestamp)
         object.__setattr__(self, "symbol", symbol)
+        # Freeze the canonical output boundary by owning its mutable mappings.
+        for field_name in (
+            "technical_context",
+            "structure_context",
+            "volume_context",
+            "volatility_context",
+            "market_context",
+            "sector_context",
+            "relative_performance",
+            "research_context",
+            "feature_vector",
+            "quality",
+            "provenance",
+            "fundamental_context",
+            "valuation_context",
+        ):
+            object.__setattr__(
+                self,
+                field_name,
+                _sanitize_mapping(getattr(self, field_name)),
+            )
+        object.__setattr__(self, "candidates", tuple(self.candidates))
+
+    def to_dashboard_payload(self) -> dict[str, Any]:
+        """Return a stable, JSON-safe dashboard/context payload."""
+        return _dashboard_safe(
+            {
+                "symbol": self.symbol,
+                "timestamp": self.timestamp,
+                "direction": self.analytical_direction,
+                "state": self.analytical_state,
+                "candidates": self.candidates,
+                "technical": self.technical_context,
+                "structure": self.structure_context,
+                "volume": self.volume_context,
+                "volatility": self.volatility_context,
+                "market": self.market_context,
+                "sector": self.sector_context,
+                "relative_performance": self.relative_performance,
+                "research": self.research_context,
+                "fundamentals": self.fundamental_context,
+                "valuation": self.valuation_context,
+                "quality": self.quality,
+                "versions": {
+                    "analysis": self.analysis_version,
+                    "features": self.feature_version,
+                    "data": self.data_version,
+                },
+                "provenance": self.provenance,
+            }
+        )
 
 
 def dataframe_to_feature_mapping(row: pd.Series) -> dict[str, Any]:

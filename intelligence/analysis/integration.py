@@ -12,6 +12,11 @@ import pandas as pd
 
 from intelligence.analysis.contracts import AnalysisContext, AnalysisInput
 from intelligence.analysis.engine import AnalysisEngine
+from intelligence.analysis.fundamentals.alignment import (
+    align_fundamental_snapshot,
+    align_valuation_snapshot,
+)
+from intelligence.analysis.fundamentals.provider import FundamentalProvider
 from market.features.validation import validate_feature_dataset
 
 
@@ -24,6 +29,8 @@ def build_analysis_context(
     *,
     regime_dataset: pd.DataFrame | None = None,
     research_context: Any | None = None,
+    fundamental_provider: FundamentalProvider | None = None,
+    valuation_context: Any | None = None,
     data_version: str = "unknown",
     feature_version: str = "v1.0",
     analysis_engine: AnalysisEngine | None = None,
@@ -74,19 +81,39 @@ def build_analysis_context(
             else:
                 features[column] = value
 
-    context_map = {
+    # Keep market and sector namespaces separate at the integration boundary.
+    # Both are PIT-aligned inputs, but they are semantically distinct contexts.
+    market_context = {
         key: features.get(key)
         for key in (
             "market_return_1",
             "market_return_3",
             "market_return_12",
             "market_volatility_20",
+        )
+    }
+    sector_context = {
+        key: features.get(key)
+        for key in (
             "sector_return_1",
             "sector_return_3",
             "sector_return_12",
             "sector_volatility_20",
         )
     }
+
+    fundamental_snapshot = None
+    if fundamental_provider is not None:
+        fundamental_snapshot = align_fundamental_snapshot(
+            fundamental_provider.snapshots(symbol),
+            symbol=symbol,
+            decision_timestamp=timestamp,
+        )
+
+    aligned_valuation = align_valuation_snapshot(
+        valuation_context,
+        decision_timestamp=timestamp,
+    )
 
     engine = analysis_engine or AnalysisEngine()
     return engine.analyze(
@@ -95,9 +122,11 @@ def build_analysis_context(
             symbol=symbol,
             features=features,
             regime=regime_context,
-            market_context=context_map,
-            sector_context=context_map,
+            market_context=market_context,
+            sector_context=sector_context,
             research_context=research_context,
+            fundamental_context=fundamental_snapshot,
+            valuation_context=aligned_valuation,
             data_version=data_version,
             feature_version=feature_version,
         )

@@ -1,25 +1,16 @@
 """Evidence-weighted Research Bot intelligence model.
 
-This model converts a point-in-time ResearchContext into a structured research
-stance. It is intentionally NOT a price/return predictor and does not emit a
+The model converts a point-in-time ResearchContext into a structured research
+stance. It is intentionally not a price/return predictor and does not emit a
 trade decision.
-
-Design principles:
-- Only documents already present in ResearchContext are eligible.
-- Sentiment is weighted by model confidence and source reliability.
-- Event importance/confidence increases evidence weight but never creates a
-  bullish/bearish sign by itself.
-- Recency reduces the influence of stale research.
-- Conflicting evidence is exposed instead of hidden.
-- Provenance is retained for every contributing document.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from math import exp, log
-from typing import Mapping
+from math import exp, isfinite, log
+from typing import Iterable, Mapping
 
 from research.contracts import ResearchContext
 
@@ -42,20 +33,34 @@ class ResearchIntelligenceResult:
     conflict_score: float
     provenance: tuple[str, ...]
 
+    def __post_init__(self) -> None:
+        if not self.symbol.strip():
+            raise ValueError("symbol must be non-empty")
+        if self.as_of.tzinfo is None or self.as_of.utcoffset() is None:
+            raise ValueError("as_of must be timezone-aware")
+        if not isfinite(float(self.score)) or not -1.0 <= self.score <= 1.0:
+            raise ValueError("score must be finite and within [-1, 1]")
+        if not isfinite(float(self.confidence)) or not 0.0 <= self.confidence <= 1.0:
+            raise ValueError("confidence must be finite and within [0, 1]")
+        for name, value in (
+            ("positive_evidence_fraction", self.positive_evidence_fraction),
+            ("negative_evidence_fraction", self.negative_evidence_fraction),
+            ("conflict_score", self.conflict_score),
+        ):
+            if not isfinite(float(value)) or not 0.0 <= value <= 1.0:
+                raise ValueError(f"{name} must be finite and within [0, 1]")
+        if min(self.evidence_count, self.source_count, self.event_count) < 0:
+            raise ValueError("evidence/source/event counts cannot be negative")
+
 
 class ResearchIntelligenceModel:
     """Aggregate causal research evidence into a bounded information stance.
 
-    The score is constrained to [-1, 1]:
-      -1 = strongly negative research evidence
-       0 = neutral/mixed/insufficient evidence
-      +1 = strongly positive research evidence
-
-    It must not be interpreted as expected return, probability of price
-    increase, or a trading recommendation.
+    The score is constrained to [-1, 1]. It is a research-context score, not
+    an expected return, price probability, or trading recommendation.
     """
 
-    model_version = "research-intelligence-1.0"
+    model_version = "research-intelligence-1.1"
 
     def __init__(
         self,
@@ -73,6 +78,13 @@ class ResearchIntelligenceModel:
         self.half_life_days = float(half_life_days)
 
     def score_context(self, context: ResearchContext) -> ResearchIntelligenceResult:
+        if len(context.documents) != len(context.sentiment):
+            raise ValueError(
+                "ResearchContext documents and sentiment must have equal length"
+            )
+        if context.as_of.tzinfo is None or context.as_of.utcoffset() is None:
+            raise ValueError("ResearchContext.as_of must be timezone-aware")
+
         if not context.documents:
             return ResearchIntelligenceResult(
                 model_version=self.model_version,
@@ -104,8 +116,12 @@ class ResearchIntelligenceModel:
         negative_weight = 0.0
         provenance: list[str] = []
 
-        # ResearchContextBuilder preserves document/sentiment order.
         for document, sentiment in zip(context.documents, context.sentiment):
+            if document.available_at > context.as_of:
+                raise ValueError(
+                    f"future research document entered context: {document.document_id}"
+                )
+
             age_days = max(
                 0.0,
                 (context.as_of - document.available_at).total_seconds() / 86400.0,
@@ -114,13 +130,17 @@ class ResearchIntelligenceModel:
             reliability = self.source_reliability.get(document.source_id, 0.5)
             sentiment_confidence = self._bounded(sentiment.confidence)
 
-            # Event evidence amplifies confidence/importance, but does not
-            # create direction independently of the document's sentiment.
             event_weight = event_weight_by_document.get(document.document_id, 0.0)
             evidence_weight = recency * reliability * sentiment_confidence
             evidence_weight *= 1.0 + 0.5 * event_weight
 
-            signed_score = max(-1.0, min(1.0, sentiment.score))
+            signed_score = max(-1.0, min(1.0, float(sentiment.score)))
+            # Non-informative evidence can legitimately have zero weight.
+            # It must not make a final aggregate non-finite.
+            if not isfinite(evidence_weight) or evidence_weight < 0.0:
+                raise ValueError(
+                    f"invalid evidence weight for document {document.document_id}"
+                )
             weighted_scores.append(signed_score * evidence_weight)
             weights.append(evidence_weight)
 
@@ -138,13 +158,23 @@ class ResearchIntelligenceModel:
         score = 0.0 if total_weight == 0 else sum(weighted_scores) / total_weight
         score = max(-1.0, min(1.0, score))
 
+        # Fraction denominators must include only directional evidence. If all
+        # available evidence is neutral/non-directional, fractions are zero.
+        directional_weight = positive_weight + negative_weight
         positive_fraction = (
-            positive_weight / total_weight if total_weight else 0.0
+            positive_weight / directional_weight
+            if directional_weight > 0.0
+            else 0.0
         )
         negative_fraction = (
-            negative_weight / total_weight if total_weight else 0.0
+            negative_weight / directional_weight
+            if directional_weight > 0.0
+            else 0.0
         )
-        conflict_score = min(1.0, 2.0 * min(positive_fraction, negative_fraction))
+        conflict_score = min(
+            1.0,
+            2.0 * min(positive_fraction, negative_fraction),
+        )
 
         source_count = len({d.source_id for d in context.documents})
         evidence_factor = min(1.0, len(context.documents) / 5.0)
@@ -180,6 +210,13 @@ class ResearchIntelligenceModel:
             conflict_score=conflict_score,
             provenance=tuple(provenance),
         )
+
+    def score_contexts(
+        self,
+        contexts: Iterable[ResearchContext],
+    ) -> tuple[ResearchIntelligenceResult, ...]:
+        """Score a deterministic sequence without changing model state."""
+        return tuple(self.score_context(context) for context in contexts)
 
     @staticmethod
     def _bounded(value: float) -> float:
