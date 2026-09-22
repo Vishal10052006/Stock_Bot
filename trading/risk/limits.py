@@ -17,7 +17,8 @@ class LimitResult:
 
 def check_daily_loss(state: PortfolioRiskState, policy: RiskPolicy) -> LimitResult:
     """Enforce the hard daily loss limit."""
-    limit = state.starting_equity * policy.max_daily_loss
+    daily_start = state.daily_starting_equity or state.starting_equity
+    limit = daily_start * policy.max_daily_loss
     return (
         LimitResult(False, RiskReasonCode.DAILY_LOSS_LIMIT, "daily loss limit reached")
         if -state.daily_pnl >= limit
