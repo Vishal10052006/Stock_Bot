@@ -120,6 +120,42 @@ def test_phase9_pipeline_returns_training_dataset() -> None:
     assert len(result.labels) == result.eligible_rows
 
 
+def test_phase9_exposes_aligned_causal_strategy_context() -> None:
+    dataset = make_historical_dataset()
+
+    timestamps = pd.date_range(
+        "2026-09-01 09:15",
+        periods=80,
+        freq="5min",
+        tz=IST,
+    )
+
+    result = build_phase9_dataset(
+        dataset,
+        market_context=make_market_context(timestamps),
+    )
+
+    context = result.strategy_context
+    required = {
+        "timestamp",
+        "symbol",
+        "regime",
+        "regime_probability",
+        "vwap_distance_pct",
+        "rvol_20",
+        "higher_high",
+        "higher_low",
+        "lower_low",
+        "lower_high",
+    }
+
+    assert required.issubset(context.columns)
+    assert len(context) == len(result.training_dataset.data)
+    assert context[["timestamp", "symbol"]].reset_index(drop=True).equals(
+        result.training_dataset.data[["timestamp", "symbol"]].reset_index(drop=True)
+    )
+    assert context[["regime", "regime_probability"]].notna().all().all()
+
 def test_phase9_dataset_has_exact_feature_schema() -> None:
     dataset = make_historical_dataset()
 
