@@ -11,6 +11,13 @@ from .failure import StaleMarketDataError
 class MarketContextStore(Protocol):
     def put(self, context: MarketContext) -> None: ...
     def get(self, benchmark: str, timestamp: datetime) -> MarketContext | None: ...
+    def get_latest_at_or_before(
+        self,
+        benchmark: str,
+        decision_timestamp: datetime,
+        *,
+        max_age: timedelta,
+    ) -> MarketContext | None: ...
 
 
 def require_fresh_market_context(
