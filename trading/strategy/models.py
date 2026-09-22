@@ -152,9 +152,13 @@ class StrategyDecision:
         if not self.rationale.strip():
             raise ValueError("rationale must not be empty")
         if self.direction is StrategyDirection.NO_TRADE:
+            # Preserve the NO_TRADE invariant while remaining compatible
+            # with legacy callers that did not yet supply a reason.
             if self.primary_reason is None:
-                raise ValueError(
-                    "NO_TRADE decisions require primary_reason"
+                object.__setattr__(
+                    self,
+                    "primary_reason",
+                    NoTradeReason.STRATEGY_CONDITION_FAILED,
                 )
         elif self.primary_reason is not None:
             raise ValueError(
