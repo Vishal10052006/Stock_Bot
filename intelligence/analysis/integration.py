@@ -78,13 +78,20 @@ def build_analysis_context(
             else:
                 features[column] = value
 
-    context_map = {
+    # Keep market and sector namespaces separate at the integration boundary.
+    # Both are PIT-aligned inputs, but they are semantically distinct contexts.
+    market_context = {
         key: features.get(key)
         for key in (
             "market_return_1",
             "market_return_3",
             "market_return_12",
             "market_volatility_20",
+        )
+    }
+    sector_context = {
+        key: features.get(key)
+        for key in (
             "sector_return_1",
             "sector_return_3",
             "sector_return_12",
@@ -107,8 +114,8 @@ def build_analysis_context(
             symbol=symbol,
             features=features,
             regime=regime_context,
-            market_context=context_map,
-            sector_context=context_map,
+            market_context=market_context,
+            sector_context=sector_context,
             research_context=research_context,
             fundamental_context=fundamental_snapshot,
             valuation_context=valuation_context,
