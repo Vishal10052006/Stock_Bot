@@ -3,7 +3,7 @@ name: market-bot-tests
 on:
   push:
     branches:
-      - feat/market-bot-production
+      - feat/market-bot-production-v2
   pull_request:
     branches:
       - main
