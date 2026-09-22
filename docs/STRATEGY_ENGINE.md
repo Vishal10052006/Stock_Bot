@@ -1,0 +1,62 @@
+# STOCK_BOT — Strategy Engine
+
+## Scope
+
+The Strategy Engine is the quantitative decision layer between Prediction and
+Risk. It converts validated evidence into LONG, SHORT, or NO_TRADE.
+
+It does not predict, perform final position sizing, override Risk, call a broker,
+place an order, or bypass execution authorization.
+
+## S0-S28 coverage
+
+S0 architecture audit; S1 contracts; S2 baseline integration; S3 prediction
+integration; S4 prediction policy; S5 regime eligibility; S6 analysis
+integration; S7 research integration; S8 conflict handling; S9 entry reference
+boundary; S10 stop/target boundary; S11 EV helper; S12 cost/slippage boundary;
+S13 liquidity boundary; S14 configuration; S15 registry; S16 NO_TRADE taxonomy;
+S17 TradeCandidate boundary; S18 Risk boundary; S19 backtest compatibility;
+S20 causal validation; S21 experiments; S22 evaluation; S23 OOS; S24 walk-forward;
+S25 failure analysis; S26 monitoring; S27 lineage; S28 controlled self-learning.
+
+## Decision order
+
+INPUT_VALIDATION -> CONTEXT_VALIDATION -> PREDICTION_VALIDATION ->
+BASELINE_STRATEGY -> REGIME_FILTER -> PREDICTION_POLICY -> ANALYSIS_FILTER ->
+LIQUIDITY_FILTER -> COST_FILTER -> FINAL_DECISION
+
+## Research controls
+
+The default configuration preserves the frozen Phase 8 deterministic baseline.
+Prediction thresholds and alignment rules are configurable experimental policies,
+not claims of predictive superiority.
+
+Expected value is only populated when a validated reward/loss/cost model exists.
+The helper is transparent and decision-time only.
+
+No OOS or walk-forward performance is claimed by this code. Such evidence must be
+generated from frozen chronological datasets and kept separate from tuning data.
+
+## Reused components
+
+- trading/strategy/baseline.py
+- trading/signals/*
+- ml/integration/analysis_prediction.py
+- intelligence/analysis/*
+- market/bot/*
+- backtesting/costs.py
+- backtesting/fills.py
+- backtesting/oos.py
+- backtesting/walk_forward.py
+- trading/risk/gate.py
+
+## Self-learning
+
+Strategy outcomes may create candidate experiments, but the Strategy Engine does
+not mutate its configuration after individual losses. Any proposed change must
+pass the same backtest -> OOS -> walk-forward -> paper validation pathway.
+
+## Live boundary
+
+The repository trading specification keeps live execution locked. This Strategy
+Engine has no broker authority.
