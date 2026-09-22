@@ -1,0 +1,22 @@
+name: Risk Engine Validation
+
+on:
+  push:
+    branches:
+      - risk-engine/r0-r20
+  pull_request:
+
+jobs:
+  risk-engine:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install project dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+      - name: Run risk tests
+        run: pytest -q tests/test_risk_gate.py tests/test_risk_engine.py
