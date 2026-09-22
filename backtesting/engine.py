@@ -134,6 +134,10 @@ class HistoricalBacktestEngine:
         self.lifecycle = lifecycle or PaperTradeLifecycle()
         self.risk_engine = risk_engine or RiskEngine(policy=RISK_POLICY_V1)
         self._trade_levels: dict[str, dict[str, float]] = {}
+        self._last_marks: dict[str, float] = {}
+        self._peak_equity: float = self.config.starting_equity
+        self._day_start_equity: float = self.config.starting_equity
+        self._active_day: object | None = None
 
     def run(self, rows: pd.DataFrame) -> BacktestResult:
         """Run deterministic chronological historical replay."""
@@ -152,6 +156,7 @@ class HistoricalBacktestEngine:
 
             # Existing positions are managed before any new signal at T.
             self._manage_open_trade(row, timestamp)
+            self._last_marks[symbol] = price
             self._close_expired_trade(
                 symbol=symbol,
                 timestamp=timestamp,
@@ -285,10 +290,17 @@ class HistoricalBacktestEngine:
         return entry - distance
 
     def _portfolio_state(self, timestamp: pd.Timestamp) -> PortfolioRiskState:
-        """Construct point-in-time portfolio state from active lifecycle trades."""
+        """Construct point-in-time account state including marked open P&L."""
+        day = timestamp.tz_convert("Asia/Kolkata").date()
+        if self._active_day != day:
+            # Daily loss limits are measured from the equity entering the
+            # current NSE session, not from the original account capital.
+            self._active_day = day
+            self._day_start_equity = self._current_equity()
+
         gross = 0.0
         net = 0.0
-        symbol_exposure: dict[str, float] = {}
+        unrealized = 0.0
         open_records = getattr(self.lifecycle, "_open", {})
 
         for symbol, record in open_records.items():
@@ -298,36 +310,67 @@ class HistoricalBacktestEngine:
             quantity = float(record.get("quantity", order.quantity))
             if quantity <= 0:
                 continue
-            notional = quantity * order.fill_price
+            mark = float(self._last_marks.get(symbol, order.fill_price))
+            notional = quantity * mark
             gross += notional
-            net += (
-                notional
+            net += notional if order.direction is StrategyDirection.LONG else -notional
+            signed_move = (
+                mark - order.fill_price
                 if order.direction is StrategyDirection.LONG
-                else -notional
+                else order.fill_price - mark
             )
-            symbol_exposure[symbol] = notional
+            unrealized += signed_move * quantity
+            # Entry costs have already reduced deployable equity and remain
+            # attributable to the open position until its final close.
+            unrealized -= float(record.get("entry_fees", 0.0))
 
-        realized = sum(outcome.net_pnl for outcome in self.lifecycle.outcomes)
-        equity = max(1e-9, self.config.starting_equity + realized)
+        realized_total = sum(outcome.net_pnl for outcome in self.lifecycle.outcomes)
+        equity = max(1e-9, self.config.starting_equity + realized_total + unrealized)
+        self._peak_equity = max(self._peak_equity, equity)
+
+        realized_today = sum(
+            outcome.net_pnl
+            for outcome in self.lifecycle.outcomes
+            if outcome.exit_time.tz_convert("Asia/Kolkata").date() == day
+        )
+        daily_pnl = realized_today + unrealized
 
         return PortfolioRiskState(
             timestamp=timestamp,
             starting_equity=self.config.starting_equity,
             equity=equity,
-            available_cash=max(0.0, self.config.starting_equity - gross),
-            open_positions=len(symbol_exposure),
+            daily_starting_equity=self._day_start_equity,
+            realized_pnl_today=realized_today,
+            unrealized_pnl_today=unrealized,
+            cumulative_pnl=equity - self.config.starting_equity,
+            available_cash=max(0.0, equity - gross),
+            open_positions=len(open_records),
             entries_today=sum(
                 1
                 for order in self.broker.journal
                 if order.status.value == "FILLED"
-                and order.timestamp.date() == timestamp.date()
+                and order.timestamp.tz_convert("Asia/Kolkata").date() == day
             ),
             gross_exposure=gross,
             net_exposure=net,
-            open_trade_risk=0.0,
-            symbol_exposure=symbol_exposure,
-            peak_equity=max(self.config.starting_equity, equity),
+            open_trade_risk=sum(
+                float(record.get("quantity", 0.0))
+                * abs(float(record["order"].fill_price) - float(self._trade_levels.get(symbol, {}).get("stop", record["order"].fill_price)))
+                for symbol, record in open_records.items()
+                if isinstance(record.get("order"), PaperOrder)
+            ),
+            symbol_exposure={
+                symbol: float(record["quantity"]) * float(self._last_marks.get(symbol, record["order"].fill_price))
+                for symbol, record in open_records.items()
+                if isinstance(record.get("order"), PaperOrder)
+            },
+            peak_equity=self._peak_equity,
         )
+
+    def _current_equity(self) -> float:
+        """Return account equity before current-day open-position marking."""
+        realized_total = sum(outcome.net_pnl for outcome in self.lifecycle.outcomes)
+        return max(1e-9, self.config.starting_equity + realized_total)
 
     @staticmethod
     def _market_context(
