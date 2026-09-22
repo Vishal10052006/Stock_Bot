@@ -111,7 +111,7 @@ def _phase9_data_source_limitations() -> dict[str, object]:
             ),
             "handling": (
                 "Sector context remains missing; no sector membership or "
-                "historical values are fabricated."
+                "historical values are unavailable and are not fabricated."
             ),
         },
         "retest_distance_pct": {
