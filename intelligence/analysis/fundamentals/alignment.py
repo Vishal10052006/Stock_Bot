@@ -38,3 +38,28 @@ def align_fundamental_snapshot(
         candidates,
         key=lambda snapshot: (snapshot.available_at, snapshot.period_end),
     )
+
+
+def align_valuation_snapshot(
+    snapshot: object | None,
+    *,
+    decision_timestamp: pd.Timestamp,
+) -> object | None:
+    """Return a valuation observation only when it is available at decision time.
+
+    Valuation facts are not statement facts, so they use their own as_of
+    timestamp. A future valuation snapshot is treated as unavailable rather
+    than being forward-filled.
+    """
+    from intelligence.analysis.fundamentals.contracts import ValuationSnapshot
+
+    decision = pd.Timestamp(decision_timestamp)
+    if decision.tzinfo is None:
+        raise FundamentalAlignmentError("decision_timestamp must be timezone-aware")
+    if snapshot is None:
+        return None
+    if not isinstance(snapshot, ValuationSnapshot):
+        raise TypeError("snapshot must be a ValuationSnapshot or None")
+    if snapshot.symbol != snapshot.symbol.strip().upper():
+        raise FundamentalAlignmentError("valuation symbol must be normalized")
+    return snapshot if snapshot.as_of <= decision else None
