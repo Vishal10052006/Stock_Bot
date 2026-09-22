@@ -143,7 +143,7 @@ def _metrics(y_true: pd.Series, probabilities: pd.DataFrame) -> dict[str, object
             probabilities,
         ),
         "sample_count": len(y_true),
-        "confusion_matrix": result["confusion_matrix"],
+        "confusion_matrix": result["confusion_matrix"].tolist(),
     }
 
 
