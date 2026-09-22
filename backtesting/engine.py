@@ -148,6 +148,7 @@ class HistoricalBacktestEngine:
 
         steps: list[BacktestStep] = []
         final_timestamp = working["timestamp"].max()
+        session_end_rows = self._session_end_rows(working)
 
         for _, row in working.iterrows():
             timestamp = pd.Timestamp(row["timestamp"])
@@ -162,6 +163,18 @@ class HistoricalBacktestEngine:
                 timestamp=timestamp,
                 price=price,
             )
+
+            # Intraday specification: every symbol must be flat before its
+            # final bar of an NSE session. This prevents positions from
+            # silently carrying into the next trading day.
+            session_end = (symbol, timestamp) in session_end_rows
+            if session_end and self._open_trade(symbol) is not None:
+                self._close_trade(
+                    symbol=symbol,
+                    timestamp=timestamp,
+                    price=price,
+                )
+                self._trade_levels.pop(symbol, None)
 
             strategy_input = self._strategy_input_from_row(
                 row,
@@ -205,7 +218,8 @@ class HistoricalBacktestEngine:
             order: PaperOrder | None = None
 
             if (
-                timestamp < final_timestamp
+                not session_end
+                and timestamp < final_timestamp
                 and authorization.status is ExecutionAuthorizationStatus.AUTHORIZED
             ):
                 order = self._handle_authorized_decision(
@@ -564,6 +578,22 @@ class HistoricalBacktestEngine:
         if age >= timedelta(minutes=self.config.max_holding_minutes):
             self._close_trade(symbol=symbol, timestamp=timestamp, price=price)
             self._trade_levels.pop(symbol, None)
+
+    @staticmethod
+    def _session_end_rows(rows: pd.DataFrame) -> set[tuple[str, pd.Timestamp]]:
+        """Return the final available bar for each symbol and IST session."""
+        indexed = rows.assign(
+            _ist_day=rows["timestamp"].dt.tz_convert("Asia/Kolkata").dt.date,
+            _symbol=rows["symbol"].astype(str).str.upper(),
+        )
+        last_rows = (
+            indexed.groupby(["_symbol", "_ist_day"], sort=False)["timestamp"]
+            .max()
+        )
+        return {
+            (str(symbol).upper(), pd.Timestamp(timestamp))
+            for (symbol, _day), timestamp in last_rows.items()
+        }
 
     def _close_remaining_trades(self, rows: pd.DataFrame) -> None:
         for symbol, group in rows.groupby("symbol", sort=False):
