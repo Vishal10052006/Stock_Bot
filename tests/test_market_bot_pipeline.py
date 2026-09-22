@@ -49,6 +49,8 @@ def test_market_bot_context_feeds_frozen_ab30_without_duplicate_regime_logic():
     assert not result.features.empty
     assert not result.regime.empty
     assert result.analysis.timestamp == result.features.iloc[-1]["timestamp"]
+    assert result.analysis.provenance["market_bot"]["market_version"] == context.metadata.market_version
+    assert result.analysis.provenance["market_bot"]["data_version"] == "market-test"
 
 
 def test_market_bot_ab30_composition_rejects_stale_snapshot_endpoint():
