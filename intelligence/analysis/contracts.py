@@ -80,32 +80,16 @@ class AnalysisInput:
             raise AnalysisContractError("feature_version must not be empty")
         object.__setattr__(self, "timestamp", timestamp)
         object.__setattr__(self, "symbol", symbol)
-        # Freeze the boundary by copying mutable mappings into owned dicts.
-        for field_name in (
-            "technical_context",
-            "structure_context",
-            "volume_context",
-            "volatility_context",
-            "market_context",
-            "sector_context",
-            "relative_performance",
-            "research_context",
-            "feature_vector",
-            "quality",
-            "provenance",
-            "fundamental_context",
-            "valuation_context",
-        ):
-            object.__setattr__(
-                self,
-                field_name,
-                _sanitize_mapping(getattr(self, field_name)),
-            )
-        object.__setattr__(self, "candidates", tuple(self.candidates))
+        # Freeze mutable input mappings without inventing fields that do not
+        # belong to the AnalysisInput contract.
         object.__setattr__(self, "features", _sanitize_mapping(self.features))
         object.__setattr__(self, "regime", _sanitize_mapping(self.regime))
-        object.__setattr__(self, "market_context", _sanitize_mapping(self.market_context))
-        object.__setattr__(self, "sector_context", _sanitize_mapping(self.sector_context))
+        object.__setattr__(
+            self, "market_context", _sanitize_mapping(self.market_context)
+        )
+        object.__setattr__(
+            self, "sector_context", _sanitize_mapping(self.sector_context)
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -147,6 +131,28 @@ class AnalysisContext:
             raise AnalysisContractError("version fields must be non-empty")
         object.__setattr__(self, "timestamp", timestamp)
         object.__setattr__(self, "symbol", symbol)
+        # Freeze the canonical output boundary by owning its mutable mappings.
+        for field_name in (
+            "technical_context",
+            "structure_context",
+            "volume_context",
+            "volatility_context",
+            "market_context",
+            "sector_context",
+            "relative_performance",
+            "research_context",
+            "feature_vector",
+            "quality",
+            "provenance",
+            "fundamental_context",
+            "valuation_context",
+        ):
+            object.__setattr__(
+                self,
+                field_name,
+                _sanitize_mapping(getattr(self, field_name)),
+            )
+        object.__setattr__(self, "candidates", tuple(self.candidates))
 
     def to_dashboard_payload(self) -> dict[str, Any]:
         """Return a stable, JSON-safe dashboard/context payload."""
