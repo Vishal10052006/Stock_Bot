@@ -71,3 +71,26 @@ def test_market_bot_ab30_composition_rejects_stale_snapshot_endpoint():
         assert "endpoint" in str(exc)
     else:
         raise AssertionError("stale MarketContext snapshot must fail closed")
+
+
+def test_market_bot_ab30_composition_rejects_context_after_candle_endpoint():
+    benchmark = _benchmark()
+    context = MarketBot(
+        MarketBotConfig(benchmark="NIFTY")
+    ).build(benchmark_data=benchmark)
+
+    candles = _candles().iloc[:-1].copy()
+
+    try:
+        build_market_analysis_from_market_bot(
+            candles,
+            symbol="RELIANCE",
+            benchmark_history=benchmark,
+            market_context=context,
+        )
+    except ValueError as exc:
+        assert "future" in str(exc)
+    else:
+        raise AssertionError(
+            "MarketContext after the analysis candle endpoint must fail closed"
+        )
