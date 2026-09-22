@@ -18,14 +18,44 @@ from market.features.builder import FEATURE_COLUMNS
 
 @dataclass(frozen=True)
 class SignalPrediction:
-    """One probability prediction at a decision timestamp."""
+    """One probability prediction at a decision timestamp.
+
+    The object is deliberately prediction-only: it contains calibrated
+    outcome probabilities and version metadata, never a trade decision.
+    """
 
     timestamp: pd.Timestamp
     symbol: str
     long_probability: float
     short_probability: float
     no_edge_probability: float
-    model_version: str = "1.0"
+    model_version: str = "phase9-signal-v1.0"
+
+    def __post_init__(self) -> None:
+        """Validate the immutable single-prediction probability contract."""
+        if pd.Timestamp(self.timestamp).tzinfo is None:
+            raise ValueError("timestamp must be timezone-aware")
+
+        probabilities = (
+            self.long_probability,
+            self.short_probability,
+            self.no_edge_probability,
+        )
+
+        if not all(pd.notna(value) for value in probabilities):
+            raise ValueError("prediction probabilities must be finite")
+
+        if not all(0.0 <= float(value) <= 1.0 for value in probabilities):
+            raise ValueError("prediction probabilities must lie in [0, 1]")
+
+        if abs(sum(float(value) for value in probabilities) - 1.0) > 1e-8:
+            raise ValueError("prediction probabilities must sum to 1")
+
+        if not str(self.symbol).strip():
+            raise ValueError("symbol must not be empty")
+
+        if not str(self.model_version).strip():
+            raise ValueError("model_version must not be empty")
 
 
 @dataclass
