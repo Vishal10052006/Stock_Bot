@@ -221,3 +221,34 @@ def test_missing_required_strategy_column_is_rejected() -> None:
         match="missing required columns",
     ):
         HistoricalBacktestEngine().run(rows)
+
+
+def test_future_row_cannot_change_earlier_risk_decision() -> None:
+    """Changing a future observation must not change an earlier decision."""
+
+    base_rows = pd.DataFrame(
+        [
+            _row("2026-01-01 09:15:00+05:30", close=100.0),
+            _row("2026-01-01 09:20:00+05:30", close=101.0),
+        ]
+    )
+    altered_rows = base_rows.copy()
+    altered_rows.loc[1, "regime"] = "RANGE"
+    altered_rows.loc[1, "regime_probability"] = 0.99
+    altered_rows.loc[1, "vwap_distance_pct"] = -999.0
+
+    base_result = HistoricalBacktestEngine().run(base_rows)
+    altered_result = HistoricalBacktestEngine().run(altered_rows)
+
+    assert base_result.steps[0].strategy == altered_result.steps[0].strategy
+    assert base_result.steps[0].risk == altered_result.steps[0].risk
+
+
+def test_lifecycle_public_open_state_is_exposed() -> None:
+    """Lifecycle state must be queryable without private storage access."""
+
+    lifecycle = HistoricalBacktestEngine().lifecycle
+
+    assert lifecycle.open_symbols == ()
+    assert lifecycle.is_open("ITC") is False
+    assert lifecycle.open_order("ITC") is None
