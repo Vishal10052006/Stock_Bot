@@ -150,8 +150,8 @@ class PaperTradeLifecycle:
             else order.fill_price - price
         )
         gross_pnl = signed_unit_pnl * quantity
-        entry_fee_share = float(record["entry_fees"]) * quantity / order.quantity
-        entry_slippage_share = float(record["entry_slippage_cost"]) * quantity / order.quantity
+        entry_fee_share = float(record["entry_fees"]) * quantity / current_quantity
+        entry_slippage_share = float(record["entry_slippage_cost"]) * quantity / current_quantity
 
         outcome = TradeOutcome(
             symbol=symbol,
