@@ -349,7 +349,6 @@ def main() -> None:
 
             try:
                 sector_context = build_phase9_sector_context_for_date(
-                    provider=provider,
                     symbols=[symbol],
                     as_of=as_of,
                     lookback_days=LOOKBACK_DAYS,
