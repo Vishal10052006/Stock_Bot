@@ -26,6 +26,17 @@ def _snapshot() -> PaperEvidenceSnapshot:
     )
 
 
+def _complete_step(timestamp: str) -> SimpleNamespace:
+    strategy = SimpleNamespace(
+        direction=StrategyDirection.LONG,
+        regime="TREND_UP",
+        timestamp=pd.Timestamp(timestamp, tz="UTC"),
+        prediction_probability=0.8,
+    )
+    order = SimpleNamespace(status=PaperOrderStatus.FILLED)
+    return SimpleNamespace(strategy=strategy, order=order)
+
+
 def _record(source_run_id: str = "paper-run-001") -> PaperEvidenceRecord:
     return PaperEvidenceRecord.create(
         evidence=_snapshot(),
@@ -90,4 +101,50 @@ def test_record_requires_timezone_aware_period() -> None:
             period_start="2026-09-01 09:15:00",
             period_end="2026-09-23 15:30:00+00:00",
             source_run_id="paper-run-001",
+        )
+
+
+def test_persist_paper_decision_run_connects_collection_to_journal(tmp_path: Path) -> None:
+    run = SimpleNamespace(
+        steps=(
+            _complete_step("2026-09-23 09:15:00"),
+            _complete_step("2026-09-23 09:20:00"),
+        )
+    )
+    journal = PaperEvidenceJournal(tmp_path / "paper_evidence.jsonl")
+
+    record = persist_paper_decision_run(
+        run,
+        journal=journal,
+        source_run_id="paper-run-001",
+        fill_timestamps={
+            0: pd.Timestamp("2026-09-23 09:15:01", tz="UTC"),
+            1: pd.Timestamp("2026-09-23 09:20:01", tz="UTC"),
+        },
+        false_signals={0: False, 1: False},
+        equity_observations={0: 100_000.0, 1: 100_050.0},
+        calibration_outcomes={0: 1.0, 1: 1.0},
+        operational_events=2,
+        evidence_version="PAPER-EVIDENCE-v1",
+        dataset_version="paper-2026-09",
+        code_version="abc123",
+    )
+
+    assert record.source_run_id == "paper-run-001"
+    assert record.period_start == "2026-09-23T09:15:00+00:00"
+    assert record.period_end == "2026-09-23T09:20:00+00:00"
+    assert journal.records() == (record,)
+
+
+def test_persist_rejects_empty_run(tmp_path: Path) -> None:
+    journal = PaperEvidenceJournal(tmp_path / "paper_evidence.jsonl")
+
+    with pytest.raises(ValueError, match="empty"):
+        persist_paper_decision_run(
+            SimpleNamespace(steps=()),
+            journal=journal,
+            source_run_id="paper-run-empty",
+            evidence_version="PAPER-EVIDENCE-v1",
+            dataset_version="paper-2026-09",
+            code_version="abc123",
         )
