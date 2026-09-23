@@ -1,10 +1,17 @@
 from pathlib import Path
+from types import SimpleNamespace
 
 import pandas as pd
 import pytest
 
 from experiments.paper_evidence import PaperEvidenceSnapshot
-from experiments.paper_journal import PaperEvidenceJournal, PaperEvidenceRecord
+from experiments.paper_journal import (
+    PaperEvidenceJournal,
+    PaperEvidenceRecord,
+    persist_paper_decision_run,
+)
+from paper.runtime import PaperOrderStatus
+from trading.strategy.models import StrategyDirection
 
 
 def _snapshot() -> PaperEvidenceSnapshot:
