@@ -221,3 +221,19 @@ explicit error unless the caller intentionally disables that artifact binding.
 
 This is a provenance adapter only. It does not set readiness gates to true,
 evaluate performance, or enable live execution.
+
+## Composite execution control
+
+`execution.control.authorize_execution(...)` is the broker-facing composition
+boundary for an already-evaluated RiskDecision and IndependentSafetyGate
+decision. Both controls must allow execution. A safety veto blocks the final
+authorization even when Risk approved the trade.
+
+The composite control is deliberately broker-free and does not enable live
+execution. It preserves the exact Risk Engine quantity on the allow path and
+sets approved quantity/notional to zero on a safety veto. Safety restrictions
+are carried into the immutable authorization for auditability.
+
+Paper and historical backtest paths remain separate lifecycle paths; this
+control is the final composition boundary for future broker-facing routing.
+The repository still has no live broker order adapter enabled.
