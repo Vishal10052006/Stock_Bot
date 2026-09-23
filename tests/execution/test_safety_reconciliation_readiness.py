@@ -2,6 +2,9 @@ import pandas as pd
 import pytest
 
 from experiments.paper_evidence import PaperEvidenceSnapshot
+from backtesting.engine import BacktestResult
+from backtesting.oos import OOSReport
+from backtesting.walk_forward import WalkForwardTradingReport, WalkForwardWindow
 from experiments.paper_journal import PaperEvidenceRecord
 from experiments.paper_quality import assess_paper_evidence
 from experiments.monitoring import MonitoringReport
