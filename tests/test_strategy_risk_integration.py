@@ -106,6 +106,6 @@ def test_paper_run_has_deterministic_identity_and_persists_evidence(tmp_path) ->
     )
 
     assert run.run_id == record.source_run_id
-    assert run.run_id == loop.run(rows).run_id
+    assert run.run_id == PaperDecisionLoop().run(rows).run_id
     assert journal.records() == (record,)
 
