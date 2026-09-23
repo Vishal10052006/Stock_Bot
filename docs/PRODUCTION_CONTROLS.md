@@ -51,3 +51,17 @@ It does not itself enable a broker connection or place an order.
 Current broker credentials, broker-specific order semantics, exchange rules,
 and regulatory requirements must be verified separately and kept as dated
 evidence before any future activation.
+
+
+## Paper-evidence boundary
+
+`experiments.paper_evidence` provides a structural evidence contract for the
+paper-trading requirements in `TRADING_SPECIFICATION.md §24`. A frozen evidence
+snapshot records counts for signals, fills, slippage, latency, false signals,
+drawdown, regime behavior, calibration, and operational events, together with
+dataset/code identity.
+
+The validator checks completeness and internal count consistency. It deliberately
+does not apply a profitability threshold, rank strategies, or convert paper
+results into live authorization. Paper evidence remains one input to the separate
+live-readiness checklist.
