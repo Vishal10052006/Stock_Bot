@@ -127,3 +127,26 @@ The definition has deterministic JSON serialization and a SHA-256 fingerprint so
 an experiment result can be tied back to the exact specification that produced it.
 This is an experiment-definition contract only; it does not constitute measured
 trading performance or OOS/walk-forward evidence.
+
+
+
+### S22 evaluation status
+
+The S22 evaluation boundary is now explicit through
+experiments.evaluate_experiment_record.
+
+It validates measured experiment outputs without selecting a strategy or making a
+profitability conclusion. The boundary checks:
+
+- numeric metric integrity, including NaN rejection;
+- bounded classification/rate metrics;
+- non-negative count, cost, drawdown, and exposure fields;
+- the legitimate infinite profit_factor representation when no losses exist;
+- consistency between completed backtest trades and recorded trade metrics;
+- consistency of winning and losing trade counts.
+
+The resulting EvaluationReport records the experiment fingerprint, observation
+count, available result sections, metric count, and validation issues.
+
+S22 is measurement-integrity validation, not OOS performance evidence and not a
+model-selection policy.
