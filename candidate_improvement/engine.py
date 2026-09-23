@@ -11,7 +11,7 @@ from learning.models import LearningExperience
 
 from .models import (
     ALLOWED_CHANGE_FIELDS,
-    CandidateChangeField,
+    CandidateExperimentBinding,
     CandidateImprovementProposal,
     CandidateStatus,
     CandidateValidation,
@@ -61,6 +61,12 @@ class CandidateImprovementEngine:
                 "candidate changes are not declared by experiment: "
                 + ", ".join(sorted(undeclared))
             )
+        missing_from_candidate = allowed_by_experiment - set(parameter_changes)
+        if missing_from_candidate:
+            raise ValueError(
+                "experiment declares changes not present in candidate: "
+                + ", ".join(sorted(missing_from_candidate))
+            )
 
         expected_experiment = experiment_definition.fingerprint()
         learning_fingerprint = self._learning_fingerprint(experience)
@@ -83,6 +89,38 @@ class CandidateImprovementEngine:
             experiment_definition_fingerprint=expected_experiment,
             evidence_confidence=experience.confidence,
             evidence_count=experience.evidence_count,
+        )
+
+    @staticmethod
+    def bind_to_experiment(
+        candidate: CandidateImprovementProposal,
+        experiment_definition: ExperimentDefinition,
+    ) -> CandidateExperimentBinding:
+        """Bind a candidate only to the exact frozen definition it declares.
+
+        Binding is structural only: no experiment is executed, no StrategyConfig
+        is mutated, and the candidate remains PROPOSED.
+        """
+        if not isinstance(candidate, CandidateImprovementProposal):
+            raise TypeError("candidate must be a CandidateImprovementProposal")
+        if not isinstance(experiment_definition, ExperimentDefinition):
+            raise TypeError("experiment_definition must be an ExperimentDefinition")
+        if candidate.status is not CandidateStatus.PROPOSED:
+            raise ValueError("candidate must remain PROPOSED before experiment binding")
+
+        definition_fingerprint = experiment_definition.fingerprint()
+        if candidate.experiment_definition_fingerprint != definition_fingerprint:
+            raise ValueError("candidate experiment definition fingerprint mismatch")
+
+        candidate_fields = {key for key, _ in candidate.parameter_changes}
+        experiment_fields = set(experiment_definition.allowed_change)
+        if candidate_fields != experiment_fields:
+            raise ValueError("candidate parameter changes do not exactly match experiment allowed_change")
+
+        return CandidateExperimentBinding(
+            candidate_fingerprint=candidate.fingerprint,
+            experiment_definition_fingerprint=definition_fingerprint,
+            parameter_changes=candidate.parameter_changes,
         )
 
     @staticmethod
