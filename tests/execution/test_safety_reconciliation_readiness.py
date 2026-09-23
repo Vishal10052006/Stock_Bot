@@ -83,3 +83,10 @@ def test_duplicate_broker_positions_are_rejected() -> None:
             ),
             (),
         )
+
+
+def test_reconciliation_blocks_when_snapshot_is_missing() -> None:
+    report = BrokerReconciler().reconcile(None, ())
+
+    assert report.status is ReconciliationStatus.BLOCKED
+    assert not report.safe
