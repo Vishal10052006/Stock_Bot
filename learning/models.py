@@ -50,6 +50,11 @@ class LearningExperience:
     total_reward: float = 0.0
     source_trade_ids: tuple[str, ...] = ()
     rationale: str = "Observable trading outcome evidence."
+    # Preserve contextual pattern metadata for downstream candidate generation.
+    conditions: tuple[str, ...] = ()
+    average_net_pnl: float = 0.0
+    total_net_pnl: float = 0.0
+    detail: str = ""
 
     def __post_init__(self) -> None:
         if self.evidence_count < 1:
