@@ -168,7 +168,27 @@ class LiveReadinessGate:
         if not isinstance(require_provenance, bool):
             raise TypeError("require_provenance must be a bool")
         if require_provenance:
-            evidence_by_gate = {item.gate: item for item in evidence}
+            if not isinstance(evidence, tuple):
+                raise TypeError("evidence must be a tuple of ReadinessEvidence")
+            evidence_by_gate: dict[str, ReadinessEvidence] = {}
+            for item in evidence:
+                if not isinstance(item, ReadinessEvidence):
+                    raise TypeError("evidence entries must be ReadinessEvidence")
+                if item.gate not in self._FIELDS:
+                    raise ValueError(f"unknown readiness evidence gate: {item.gate}")
+                if item.gate in evidence_by_gate:
+                    raise ValueError(f"duplicate readiness evidence gate: {item.gate}")
+                if (
+                    len(item.artifact_fingerprint) != 64
+                    or any(
+                        char not in "0123456789abcdef"
+                        for char in item.artifact_fingerprint.lower()
+                    )
+                ):
+                    raise ValueError(
+                        f"artifact_fingerprint must be a SHA-256 hex digest: {item.gate}"
+                    )
+                evidence_by_gate[item.gate] = item
             for field in self._FIELDS:
                 if getattr(gates, field) and field not in evidence_by_gate:
                     failed.append(f"{field}_provenance")
