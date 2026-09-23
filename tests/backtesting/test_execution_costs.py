@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import pandas as pd
 
-from backtesting.engine import BacktestConfig, HistoricalBacktestEngine
+from backtesting.engine import HistoricalBacktestEngine
 from paper.runtime import PaperTradingConfig, PaperTradingRuntime
+
 
 def _row(timestamp: str, *, close: float) -> dict:
     return {
@@ -35,20 +36,11 @@ def test_backtest_applies_entry_and_exit_costs() -> None:
         )
     )
 
-    result = HistoricalBacktestEngine(
-        runtime=runtime,
-        config=BacktestConfig(target_reward_risk=100.0),
-    ).run(
+    result = HistoricalBacktestEngine(runtime=runtime).run(
         pd.DataFrame(
             [
-                _row(
-                    "2026-01-01 09:15:00+05:30",
-                    close=100.0,
-                ),
-                _row(
-                    "2026-01-01 09:20:00+05:30",
-                    close=110.0,
-                ),
+                _row("2026-01-01 09:15:00+05:30", close=100.0),
+                _row("2026-01-01 09:20:00+05:30", close=101.0),
             ]
         )
     )
@@ -56,10 +48,12 @@ def test_backtest_applies_entry_and_exit_costs() -> None:
     outcome = result.outcomes[0]
     entry = result.orders[0]
 
-    assert outcome.gross_pnl < 10.0
+    assert entry.quantity == 250.0
+    assert outcome.gross_pnl > 0.0
     assert outcome.slippage_cost > entry.slippage_cost
     assert outcome.fees > entry.fees
     assert outcome.net_pnl < outcome.gross_pnl
+    assert outcome.net_pnl == outcome.gross_pnl - outcome.fees - outcome.slippage_cost
 
 
 def test_zero_cost_backtest_matches_market_move() -> None:
@@ -70,20 +64,11 @@ def test_zero_cost_backtest_matches_market_move() -> None:
         )
     )
 
-    result = HistoricalBacktestEngine(
-        runtime=runtime,
-        config=BacktestConfig(target_reward_risk=100.0),
-    ).run(
+    result = HistoricalBacktestEngine(runtime=runtime).run(
         pd.DataFrame(
             [
-                _row(
-                    "2026-01-01 09:15:00+05:30",
-                    close=100.0,
-                ),
-                _row(
-                    "2026-01-01 09:20:00+05:30",
-                    close=110.0,
-                ),
+                _row("2026-01-01 09:15:00+05:30", close=100.0),
+                _row("2026-01-01 09:20:00+05:30", close=101.0),
             ]
         )
     )
@@ -91,8 +76,9 @@ def test_zero_cost_backtest_matches_market_move() -> None:
     outcome = result.outcomes[0]
 
     assert outcome.entry_price == 100.0
-    assert outcome.exit_price == 110.0
-    assert outcome.gross_pnl == 10.0
+    assert outcome.exit_price == 101.0
+    assert outcome.quantity == 250.0
+    assert outcome.gross_pnl == 250.0
     assert outcome.fees == 0.0
     assert outcome.slippage_cost == 0.0
-    assert outcome.net_pnl == 10.0
+    assert outcome.net_pnl == 250.0
