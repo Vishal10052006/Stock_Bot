@@ -96,3 +96,9 @@ execution.
 `experiments.paper_quality.assess_paper_evidence(...)` aggregates persisted journal records into a structural quality report. It reports record validity, observation counts, dataset/code/evidence versions, and validation issues across the supplied period.
 
 The report is intentionally not a performance evaluator: it does not rank paper runs, calculate profitability, infer missing observations, or authorize live execution. An empty journal is not considered sufficient evidence, and any structurally invalid supplied record is surfaced explicitly.
+
+## Paper evidence → live-readiness boundary
+
+`LiveReadinessGate.evaluate(...)` can now accept a `PaperEvidenceQualityReport`. When supplied, an invalid or empty quality report adds the explicit `paper_evidence_quality_validated` failure gate. This connects structural paper-evidence quality to readiness without treating paper quality as a profitability judgment.
+
+The existing `paper_evidence_validated` gate remains an explicit caller-supplied gate. The quality report is an additional evidence-integrity check; passing it does not enable live execution and does not replace OOS, walk-forward, risk, broker, reconciliation, or current compliance evidence.
