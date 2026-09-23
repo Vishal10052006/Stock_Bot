@@ -38,7 +38,7 @@ and orders remain downstream.
 | Multi-horizon forecast contract | COMPLETE | `ml/prediction/contracts.py` |
 | Chronological conformal return intervals | COMPLETE | `ml/models/return_forecast.py` |
 | Uncertainty diagnostics | COMPLETE | `ml/prediction/uncertainty.py` |
-| Prediction distribution drift | COMPLETE | `ml/prediction/drift.py` |
+| Prediction distribution drift | COMPLETE | `ml/prediction/drift.py` |\n| Feature distribution drift | COMPLETE | `ml/prediction/feature_drift.py` |\n| Prediction telemetry storage | COMPLETE | `ml/prediction/storage.py` |\n| Versioned inference boundary | COMPLETE | `ml/prediction/inference.py` |
 | Regime/symbol/date robustness slices | COMPLETE | `ml/evaluation/robustness.py` |
 | Purged walk-forward infrastructure | AVAILABLE/REUSED | `research/validation/walk_forward.py`, `backtesting/walk_forward.py` |
 | Optional XGBoost/LightGBM adapters | COMPLETE | `ml/models/boosting.py` |
@@ -83,9 +83,7 @@ run the repository's full test suite and the real-data benchmark from a clean
 environment. The external test partition must remain untouched during model
 selection and calibration.
 
-The return-forecast interval implementation is contract/test complete, but
-empirical interval coverage must still be measured on untouched chronological
-OOS data before treating it as production-calibrated uncertainty.
+The return-forecast interval implementation is contract/test complete. A real-data\nchronological benchmark path is now implemented in\n`scripts/build_phase9_return_target_dataset.py` and\n`scripts/run_phase9_return_forecast_experiment.py`; empirical interval coverage\nremains a release-gate measurement and must be obtained from untouched OOS data.\n\nThe Prediction Bot also now has explicit feature-drift diagnostics, append-only\nprediction telemetry, and a versioned inference boundary. These components are\nobservability/integration infrastructure; they do not authorize trades or alter\nmodel parameters automatically.
 
 No predictive accuracy, profitability, or future performance claim is made by
 this status document.
