@@ -111,11 +111,7 @@ def test_learning_filters_analysis_to_supplied_population() -> None:
         analysis,
     )
 
-    assert all(
-        set(experience.source_trade_ids)
-        <= {"T0", "T1"}
-        for experience in subset_report.experiences
-    )
+    assert subset_report.experiences == ()
 
 
 def test_learning_does_not_mutate_or_promote() -> None:
