@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import hashlib
+import json
 from enum import Enum
 
 
@@ -33,6 +35,16 @@ class SafetyDecision:
     allowed: bool
     block: SafetyBlock
     reason: str
+
+    @property
+    def fingerprint(self) -> str:
+        payload = {
+            "allowed": self.allowed,
+            "block": self.block.value,
+            "reason": self.reason,
+        }
+        canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+        return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
 class IndependentSafetyGate:
