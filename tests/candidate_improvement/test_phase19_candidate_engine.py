@@ -1,6 +1,7 @@
 import pytest
 
 from candidate_improvement import (
+    CandidateExperimentBinding,
     CandidateImprovementEngine,
     CandidateStatus,
 )
@@ -47,17 +48,20 @@ def _definition(*, allowed_change=("baseline.minimum_rvol",)) -> ExperimentDefin
     )
 
 
-def test_candidate_is_evidence_bound_and_immutable() -> None:
-    experience = _experience()
+def _candidate() -> tuple[object, ExperimentDefinition]:
     definition = _definition()
-
     candidate = CandidateImprovementEngine().propose(
-        experience,
+        _experience(),
         baseline_strategy_fingerprint="strategy-fp",
         parameter_changes={"baseline.minimum_rvol": 1.10},
         experiment_definition=definition,
         candidate_id="CAND-001",
     )
+    return candidate, definition
+
+
+def test_candidate_is_evidence_bound_and_immutable() -> None:
+    candidate, definition = _candidate()
 
     assert candidate.status is CandidateStatus.PROPOSED
     assert candidate.source_trade_ids == ("T1", "T2", "T3")
@@ -91,14 +95,54 @@ def test_candidate_rejects_non_strategy_fields() -> None:
         )
 
 
-def test_validation_never_promotes_candidate() -> None:
-    candidate = CandidateImprovementEngine().propose(
-        _experience(),
-        baseline_strategy_fingerprint="strategy-fp",
-        parameter_changes={"baseline.minimum_rvol": 1.10},
-        experiment_definition=_definition(),
-        candidate_id="CAND-004",
+def test_candidate_rejects_experiment_with_extra_undeclared_change() -> None:
+    definition = _definition(
+        allowed_change=("baseline.minimum_rvol", "prediction_min_margin"),
     )
+    with pytest.raises(ValueError, match="not present in candidate"):
+        CandidateImprovementEngine().propose(
+            _experience(),
+            baseline_strategy_fingerprint="strategy-fp",
+            parameter_changes={"baseline.minimum_rvol": 1.10},
+            experiment_definition=definition,
+            candidate_id="CAND-004",
+        )
+
+
+def test_candidate_binds_to_exact_frozen_experiment() -> None:
+    candidate, definition = _candidate()
+
+    binding = CandidateImprovementEngine.bind_to_experiment(candidate, definition)
+
+    assert isinstance(binding, CandidateExperimentBinding)
+    assert binding.candidate_fingerprint == candidate.fingerprint
+    assert binding.experiment_definition_fingerprint == definition.fingerprint()
+    assert binding.parameter_changes == candidate.parameter_changes
+    assert candidate.status is CandidateStatus.PROPOSED
+
+
+def test_candidate_binding_rejects_definition_fingerprint_mismatch() -> None:
+    candidate, _ = _candidate()
+    different_definition = ExperimentDefinition(
+        experiment_id="EXP-P19-002",
+        research_question="Different question",
+        hypothesis="Different hypothesis",
+        failure_criterion="Different failure criterion",
+        dataset_version="dataset-v2",
+        code_version="code-v2",
+        period_start="2025-01-01",
+        period_end="2026-01-01",
+        symbols=("ITC",),
+        method="backtest_oos_walk_forward",
+        allowed_change=("baseline.minimum_rvol",),
+    )
+
+    with pytest.raises(ValueError, match="fingerprint mismatch"):
+        CandidateImprovementEngine.bind_to_experiment(candidate, different_definition)
+
+
+def test_validation_never_promotes_candidate() -> None:
+    candidate, _ = _candidate()
 
     result = CandidateImprovementEngine.validate(candidate, minimum_evidence=3)
     assert result.accepted is True
@@ -106,13 +150,7 @@ def test_validation_never_promotes_candidate() -> None:
 
 
 def test_validation_rejects_insufficient_evidence() -> None:
-    candidate = CandidateImprovementEngine().propose(
-        _experience(),
-        baseline_strategy_fingerprint="strategy-fp",
-        parameter_changes={"baseline.minimum_rvol": 1.10},
-        experiment_definition=_definition(),
-        candidate_id="CAND-005",
-    )
+    candidate, _ = _candidate()
 
     result = CandidateImprovementEngine.validate(candidate, minimum_evidence=4)
     assert result.accepted is False
