@@ -703,8 +703,10 @@ class HistoricalBacktestEngine:
             raise ValueError("backtest symbols must not be missing")
         if (working[self.config.price_column] <= 0).any():
             raise ValueError("backtest rows must contain positive prices")
-        if (working["volume"] <= 0).any():
-            raise ValueError("backtest volume must be positive")
+        if "volume" in working.columns:
+            volume = pd.to_numeric(working["volume"], errors="coerce")
+            if volume.isna().any() or (volume <= 0).any():
+                raise ValueError("backtest volume must be positive when provided")
 
         return (
             working.sort_values(
