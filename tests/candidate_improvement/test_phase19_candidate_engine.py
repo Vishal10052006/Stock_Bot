@@ -456,3 +456,21 @@ def test_candidate_execution_preserves_proposed_status_and_does_not_promote() ->
     assert candidate.status is CandidateStatus.PROPOSED
 
 
+
+
+def test_binding_rejects_forbidden_or_malformed_identity() -> None:
+    with pytest.raises(ValueError, match="SHA-256"):
+        CandidateExperimentBinding(
+            candidate_fingerprint="not-a-digest",
+            experiment_definition_fingerprint="b" * 64,
+            baseline_strategy_fingerprint="c" * 64,
+            parameter_changes=(("baseline.minimum_rvol", "1.1"),),
+        )
+
+    with pytest.raises(ValueError, match="forbidden"):
+        CandidateExperimentBinding(
+            candidate_fingerprint="a" * 64,
+            experiment_definition_fingerprint="b" * 64,
+            baseline_strategy_fingerprint="c" * 64,
+            parameter_changes=(("risk.risk_per_trade", "0.005"),),
+        )
