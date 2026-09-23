@@ -127,3 +127,18 @@ evidence item is a ReadinessEvidence instance, names a known readiness gate,
 appears at most once, and carries a 64-character SHA-256 hexadecimal artifact
 fingerprint. Invalid provenance fails immediately rather than being treated as
 satisfied evidence.
+
+### Gate-specific evidence kinds
+
+Readiness provenance now carries an explicit `evidence_kind`. When provenance
+is required, each readiness gate accepts only the evidence kinds defined by the
+readiness contract. This prevents an unrelated artifact from satisfying a gate
+merely because its fingerprint is structurally valid.
+
+The contract currently maps the 17 readiness gates to the repository's existing
+validation boundaries: validation/audit evidence for data and leakage checks,
+experiment lineage for baseline/model research, dedicated OOS/walk-forward and
+backtest evidence where available, paper-evidence quality, risk, monitoring,
+safety, broker, reconciliation, and compliance evidence. The mapping is a
+traceability contract; it does not manufacture an artifact or claim that a gate
+has passed. A caller must still supply the corresponding true gate and evidence.
