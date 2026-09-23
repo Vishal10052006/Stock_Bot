@@ -269,7 +269,7 @@ def test_readiness_evidence_can_bind_existing_lineage() -> None:
     assert evidence.artifact_fingerprint == lineage.computed_id()
     assert evidence.dataset_version == "dataset-v1"
     assert evidence.code_version == "code-v1"
-    assert evidence.source == f"lineage:{'c' * 64}"
+    assert evidence.source == f"lineage:{lineage.computed_id()}"
 
 
 def _provenance_evidence(gate: str) -> ReadinessEvidence:
