@@ -122,14 +122,25 @@ class CandidateExperimentBinding:
     parameter_changes: tuple[tuple[str, str], ...]
 
     def __post_init__(self) -> None:
-        if not self.candidate_fingerprint.strip():
-            raise ValueError("candidate_fingerprint must be non-empty")
-        if not self.experiment_definition_fingerprint.strip():
-            raise ValueError("experiment_definition_fingerprint must be non-empty")
-        if not self.baseline_strategy_fingerprint.strip():
-            raise ValueError("baseline_strategy_fingerprint must be non-empty")
+        for name in (
+            "candidate_fingerprint",
+            "experiment_definition_fingerprint",
+            "baseline_strategy_fingerprint",
+        ):
+            value = getattr(self, name)
+            if not isinstance(value, str) or not value.strip():
+                raise ValueError(f"{name} must be non-empty")
+            if len(value) != 64 or any(character not in "0123456789abcdef" for character in value):
+                raise ValueError(f"{name} must be a SHA-256 hex digest")
+
         if not self.parameter_changes:
             raise ValueError("parameter_changes must not be empty")
+
+        keys = tuple(key for key, _ in self.parameter_changes)
+        if len(keys) != len(set(keys)):
+            raise ValueError("parameter_changes keys must be unique")
+        if any(key not in ALLOWED_CHANGE_FIELDS for key in keys):
+            raise ValueError("parameter_changes contains a forbidden field")
 
     @property
     def fingerprint(self) -> str:
