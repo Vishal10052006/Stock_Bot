@@ -118,6 +118,7 @@ class CandidateExperimentBinding:
 
     candidate_fingerprint: str
     experiment_definition_fingerprint: str
+    baseline_strategy_fingerprint: str
     parameter_changes: tuple[tuple[str, str], ...]
 
     def __post_init__(self) -> None:
@@ -125,6 +126,8 @@ class CandidateExperimentBinding:
             raise ValueError("candidate_fingerprint must be non-empty")
         if not self.experiment_definition_fingerprint.strip():
             raise ValueError("experiment_definition_fingerprint must be non-empty")
+        if not self.baseline_strategy_fingerprint.strip():
+            raise ValueError("baseline_strategy_fingerprint must be non-empty")
         if not self.parameter_changes:
             raise ValueError("parameter_changes must not be empty")
 
@@ -134,6 +137,7 @@ class CandidateExperimentBinding:
             {
                 "candidate_fingerprint": self.candidate_fingerprint,
                 "experiment_definition_fingerprint": self.experiment_definition_fingerprint,
+                "baseline_strategy_fingerprint": self.baseline_strategy_fingerprint,
                 "parameter_changes": list(self.parameter_changes),
             },
             sort_keys=True,
