@@ -150,3 +150,22 @@ count, available result sections, metric count, and validation issues.
 
 S22 is measurement-integrity validation, not OOS performance evidence and not a
 model-selection policy.
+
+
+### S23 OOS validation status
+
+The S23 final out-of-sample boundary is explicit through `backtesting.evaluate_oos`.
+
+The boundary:
+
+- creates chronological train, validation, and test partitions through the existing temporal splitter;
+- passes only train + validation rows as predictor fitting context;
+- passes the final test partition separately for inference;
+- checks that the predictor returns exactly one prediction per test row;
+- detects mutation of the supplied test partition;
+- verifies that the predictor training context does not reach the test period;
+- records structural train/validation/test counts and temporal boundaries.
+
+The OOS contract is validation infrastructure, not evidence that a model is profitable or superior.
+Performance conclusions require frozen experiment inputs, measured outputs, and the later
+evaluation/validation stages.
