@@ -1,6 +1,5 @@
 import pandas as pd
 import pytest
-import pandas as pd
 
 from experiments.paper_evidence import PaperEvidenceSnapshot
 from experiments.paper_journal import PaperEvidenceRecord
@@ -259,8 +258,7 @@ def test_readiness_evidence_can_bind_existing_lineage() -> None:
         record_fingerprint="b" * 64,
         dataset_version="dataset-v1",
         code_version="code-v1",
-        lineage_id="c" * 64,
-    )
+    ).with_computed_id()
 
     evidence = ReadinessEvidence.from_lineage(
         lineage,
@@ -268,10 +266,28 @@ def test_readiness_evidence_can_bind_existing_lineage() -> None:
         validated_at=pd.Timestamp("2026-09-23T10:00:00Z").to_pydatetime(),
     )
 
-    assert evidence.artifact_fingerprint == "c" * 64
+    assert evidence.artifact_fingerprint == lineage.computed_id()
     assert evidence.dataset_version == "dataset-v1"
     assert evidence.code_version == "code-v1"
     assert evidence.source == f"lineage:{'c' * 64}"
+
+
+def test_readiness_rejects_tampered_lineage_id() -> None:
+    lineage = LineageRecord(
+        experiment_id="EXP-1",
+        definition_fingerprint="a" * 64,
+        record_fingerprint="b" * 64,
+        dataset_version="dataset-v1",
+        code_version="code-v1",
+        lineage_id="c" * 64,
+    )
+
+    with pytest.raises(ValueError, match="does not match"):
+        ReadinessEvidence.from_lineage(
+            lineage,
+            gate="oos_validated",
+            validated_at=pd.Timestamp("2026-09-23T10:00:00Z").to_pydatetime(),
+        )
 
 
 def _provenance_evidence(gate: str) -> ReadinessEvidence:
