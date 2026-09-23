@@ -46,12 +46,10 @@ class LearningExperience:
     population_count: int = 1
     occurrence_rate: float = 1.0
     confidence: float = 0.0
-    average_reward: float
-    total_reward: float
-    source_trade_ids: tuple[str, ...] = ()
-    rationale: str = "Observable trading outcome evidence."
     average_reward: float = 0.0
     total_reward: float = 0.0
+    source_trade_ids: tuple[str, ...] = ()
+    rationale: str = "Observable trading outcome evidence."
 
     def __post_init__(self) -> None:
         if self.evidence_count < 1:
