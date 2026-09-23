@@ -44,10 +44,12 @@ class CandidateImprovementEngine:
             raise TypeError("experience must be a LearningExperience")
         if not isinstance(experiment_definition, ExperimentDefinition):
             raise TypeError("experiment_definition must be an ExperimentDefinition")
-        if not baseline_strategy_fingerprint.strip():
+        if not isinstance(baseline_strategy_fingerprint, str) or not baseline_strategy_fingerprint.strip():
             raise ValueError("baseline_strategy_fingerprint must be non-empty")
         if not candidate_id.strip():
             raise ValueError("candidate_id must be non-empty")
+        if not isinstance(parameter_changes, Mapping):
+            raise TypeError("parameter_changes must be a mapping")
         if not parameter_changes:
             raise ValueError("parameter_changes must not be empty")
 
