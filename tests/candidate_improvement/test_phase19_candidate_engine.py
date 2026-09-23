@@ -145,6 +145,7 @@ def test_candidate_binds_to_exact_frozen_experiment() -> None:
     assert isinstance(binding, CandidateExperimentBinding)
     assert binding.candidate_fingerprint == candidate.fingerprint
     assert binding.experiment_definition_fingerprint == definition.fingerprint()
+    assert binding.baseline_strategy_fingerprint == candidate.baseline_strategy_fingerprint
     assert binding.parameter_changes == candidate.parameter_changes
     assert candidate.status is CandidateStatus.PROPOSED
 
@@ -178,25 +179,64 @@ def test_materialization_rejects_wrong_baseline_identity() -> None:
         )
 
 
-def test_candidate_execution_routes_through_experiment_runner() -> None:
+def test_candidate_execution_materializes_candidate_strategy_and_routes_through_runner() -> None:
     candidate, definition = _candidate()
-    calls: list[str] = []
+    baseline = _baseline()
+    calls: list[tuple[str, float, str]] = []
 
-    def executor(received: ExperimentDefinition) -> ExperimentRecord:
-        calls.append(received.fingerprint())
+    def executor(received: ExperimentDefinition, strategy: StrategyConfig) -> ExperimentRecord:
+        calls.append(
+            (
+                received.fingerprint(),
+                strategy.baseline.minimum_rvol,
+                CandidateImprovementEngine.strategy_config_fingerprint(strategy),
+            )
+        )
         return _record(received)
 
     result = CandidateImprovementEngine.execute_bound_experiment(
         candidate,
         definition,
+        baseline,
         executor,
     )
 
     assert result.binding.candidate_fingerprint == candidate.fingerprint
+    assert result.binding.baseline_strategy_fingerprint == (
+        CandidateImprovementEngine.strategy_config_fingerprint(baseline)
+    )
     assert result.execution.definition.fingerprint() == definition.fingerprint()
     assert result.execution.record.definition_fingerprint == definition.fingerprint()
-    assert calls == [definition.fingerprint()]
+    assert calls == [
+        (
+            definition.fingerprint(),
+            1.10,
+            CandidateImprovementEngine.strategy_config_fingerprint(
+                CandidateImprovementEngine.materialize_strategy_config(candidate, baseline)
+            ),
+        )
+    ]
+    assert baseline.baseline.minimum_rvol == 1.0
     assert candidate.status is CandidateStatus.PROPOSED
+
+
+def test_candidate_execution_rejects_baseline_identity_before_executor() -> None:
+    candidate, definition = _candidate()
+    calls = 0
+
+    def executor(_: ExperimentDefinition, __: StrategyConfig) -> ExperimentRecord:
+        nonlocal calls
+        calls += 1
+        return _record(definition)
+
+    with pytest.raises(ValueError, match="baseline strategy"):
+        CandidateImprovementEngine.execute_bound_experiment(
+            candidate,
+            definition,
+            StrategyConfig(strategy_version="STRAT-v9.0"),
+            executor,
+        )
+    assert calls == 0
 
 
 def test_candidate_execution_rejects_wrong_record_identity() -> None:
@@ -215,13 +255,14 @@ def test_candidate_execution_rejects_wrong_record_identity() -> None:
         allowed_change=definition.allowed_change,
     )
 
-    def executor(_: ExperimentDefinition) -> ExperimentRecord:
+    def executor(_: ExperimentDefinition, __: StrategyConfig) -> ExperimentRecord:
         return _record(different_definition)
 
     with pytest.raises(ValueError, match="record fingerprint"):
         CandidateImprovementEngine.execute_bound_experiment(
             candidate,
             definition,
+            _baseline(),
             executor,
         )
 
