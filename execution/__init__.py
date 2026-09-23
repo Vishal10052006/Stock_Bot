@@ -1,6 +1,6 @@
 """Execution safety and readiness boundaries."""
 
-from .readiness import LiveReadinessGate, LiveReadinessInput, LiveReadinessReport
+from .readiness import LiveReadinessGate, LiveReadinessInput, LiveReadinessReport, ReadinessEvidence
 from .reconciliation import (
     BrokerPosition,
     BrokerReconciler,
@@ -21,6 +21,7 @@ __all__ = [
     "LiveReadinessGate",
     "LiveReadinessInput",
     "LiveReadinessReport",
+    "ReadinessEvidence",
     "ReconciliationReport",
     "ReconciliationStatus",
     "SafetyBlock",
