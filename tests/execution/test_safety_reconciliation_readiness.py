@@ -233,7 +233,7 @@ def test_readiness_accepts_complete_gate_provenance() -> None:
     evidence = tuple(
         ReadinessEvidence(
             gate=field,
-            artifact_fingerprint=f"artifact-{field}",
+            artifact_fingerprint="a" * 64,
             dataset_version="dataset-v1",
             code_version="code-v1",
             validated_at=pd.Timestamp("2026-09-23T10:00:00Z").to_pydatetime(),
@@ -271,7 +271,7 @@ def test_readiness_evidence_can_bind_existing_lineage() -> None:
     assert evidence.artifact_fingerprint == lineage.computed_id()
     assert evidence.dataset_version == "dataset-v1"
     assert evidence.code_version == "code-v1"
-    assert evidence.source == f"lineage:{'c' * 64}"
+    assert evidence.source == f"lineage:{lineage.computed_id()}"
 
 
 def test_readiness_rejects_tampered_lineage_id() -> None:
