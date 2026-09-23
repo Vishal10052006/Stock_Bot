@@ -274,6 +274,53 @@ def test_readiness_evidence_can_bind_existing_lineage() -> None:
     assert evidence.source == f"lineage:{'c' * 64}"
 
 
+def _provenance_evidence(gate: str) -> ReadinessEvidence:
+    return ReadinessEvidence(
+        gate=gate,
+        artifact_fingerprint="a" * 64,
+        dataset_version="dataset-v1",
+        code_version="code-v1",
+        validated_at=pd.Timestamp("2026-09-23T10:00:00Z").to_pydatetime(),
+        source="test",
+    )
+
+
+def test_readiness_rejects_unknown_provenance_gate() -> None:
+    with pytest.raises(ValueError, match="unknown readiness evidence gate"):
+        LiveReadinessGate().evaluate(
+            LiveReadinessInput(**{field: True for field in LiveReadinessGate._FIELDS}),
+            evidence=(_provenance_evidence("unknown_gate"),),
+            require_provenance=True,
+        )
+
+
+def test_readiness_rejects_duplicate_provenance_gate() -> None:
+    evidence = _provenance_evidence("oos_validated")
+    with pytest.raises(ValueError, match="duplicate readiness evidence gate"):
+        LiveReadinessGate().evaluate(
+            LiveReadinessInput(**{field: True for field in LiveReadinessGate._FIELDS}),
+            evidence=(evidence, evidence),
+            require_provenance=True,
+        )
+
+
+def test_readiness_rejects_malformed_provenance_fingerprint() -> None:
+    evidence = ReadinessEvidence(
+        gate="oos_validated",
+        artifact_fingerprint="not-a-sha",
+        dataset_version="dataset-v1",
+        code_version="code-v1",
+        validated_at=pd.Timestamp("2026-09-23T10:00:00Z").to_pydatetime(),
+        source="test",
+    )
+    with pytest.raises(ValueError, match="SHA-256"):
+        LiveReadinessGate().evaluate(
+            LiveReadinessInput(**{field: True for field in LiveReadinessGate._FIELDS}),
+            evidence=(evidence,),
+            require_provenance=True,
+        )
+
+
 def test_readiness_evidence_requires_timezone() -> None:
     with pytest.raises(ValueError, match="timezone-aware"):
         ReadinessEvidence(
