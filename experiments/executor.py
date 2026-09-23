@@ -29,9 +29,9 @@ class ExperimentExecutionInputs:
 
     oos_dataset: Any
     oos_predictor: Callable[[pd.DataFrame, pd.DataFrame], pd.Series]
-    oos_config: Any | None = None
     walk_forward_data: pd.DataFrame
     walk_forward_evaluator: Callable[[pd.DataFrame, pd.DataFrame], object]
+    oos_config: Any | None = None
     folds: int = 3
     purge_minutes: int = 60
     backtest_rows: pd.DataFrame | None = None
