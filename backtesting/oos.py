@@ -68,7 +68,7 @@ def evaluate_oos(
 
     predictions = predictor(
         training_context,
-        test.copy(deep=True),
+        test,
     )
 
     if not isinstance(predictions, pd.Series):
