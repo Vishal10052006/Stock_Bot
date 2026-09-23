@@ -27,10 +27,11 @@ from execution.trading_execution import (
 from paper.runtime import PaperOrder, PaperTradingRuntime
 from trading.paper.lifecycle import PaperTradeLifecycle, TradeOutcome
 from trading.risk.gate import RiskDecision
-from trading.risk.engine import RiskEngine, RiskInput
+from trading.risk.engine import RiskConfig, RiskEngine
 from trading.signals.candidate import build_candidate
 from trading.signals.models import CandidateConfig, CandidateDirection
 from trading.strategy.engine import StrategyEngine
+from trading.risk.pipeline import evaluate_strategy_candidate_risk
 from trading.strategy.models import (
     BaselineStrategyConfig,
     StrategyDecision,
@@ -127,7 +128,7 @@ class HistoricalBacktestEngine:
         self.broker = broker or BrokerSimulator(runtime=runtime)
         self.runtime = self.broker.runtime
         self.lifecycle = lifecycle or PaperTradeLifecycle()
-        self.risk_engine = risk_engine or RiskEngine()
+        self.risk_engine = risk_engine or RiskEngine(config=RiskConfig(target_multiple_r=self.config.target_reward_risk, quantity_step=self.config.quantity_step))
         self._trade_levels: dict[str, dict[str, float]] = {}
         self._last_marks: dict[str, float] = {}
         self._peak_equity: float = self.config.starting_equity
@@ -180,53 +181,27 @@ class HistoricalBacktestEngine:
 
             target_price: float | None = None
             stop_price: float | None = None
-            assessment = None
 
-            if strategy.direction is StrategyDirection.NO_TRADE:
-                # The full Risk Engine receives only TradeCandidates. A
-                # NO_TRADE strategy therefore becomes a deterministic
-                # rejected risk decision through the explicit gate adapter.
-                from trading.risk.gate import evaluate_strategy_risk
-                risk = evaluate_strategy_risk(
-                    strategy,
-                    risk_enabled=self.config.risk_enabled,
-                )
-            elif self.config.risk_enabled:
-                candidate = self._candidate_from_row(strategy, row)
-                state = self._portfolio_state(timestamp, symbol)
-                assessment = self.risk_engine.evaluate(
-                    RiskInput(
-                        timestamp=timestamp,
-                        symbol=symbol,
-                        candidate=candidate,
-                        available_equity=float(state["equity"]),
-                        day_start_equity=float(state["day_start_equity"]),
-                        available_cash=float(state["available_cash"]),
-                        peak_equity=float(state["peak_equity"]),
-                        realized_pnl=float(state["realized_pnl"]),
-                        unrealized_pnl=float(state["unrealized_pnl"]),
-                        open_positions=int(state["open_positions"]),
-                        trades_today=int(state["trades_today"]),
-                        gross_exposure=float(state["gross_exposure"]),
-                        symbol_already_open=bool(state["symbol_already_open"]),
-                        liquidity_available=bool(state["liquidity_available"]),
-                        kill_switch_active=False,
-                        sector=str(row.get("sector", "")).strip() or None,
-                        symbol_exposure=state["symbol_exposure"],
-                        sector_exposure={},
-                        pairwise_correlation={},
-                        atr=float(row["atr_14"]),
-                        high_volatility=str(row.get("volatility_regime", "NORMAL")).upper() == "HIGH",
-                        market_data_valid=True,
-                        system_ready=True,
-                    )
-                )
-                risk = assessment.decision
-                stop_price = assessment.stop_price
-                target_price = assessment.target_price
-            else:
-                from trading.risk.gate import evaluate_strategy_risk
-                risk = evaluate_strategy_risk(strategy, risk_enabled=False)
+            state = self._portfolio_state(timestamp, symbol)
+            assessment = evaluate_strategy_candidate_risk(
+                strategy,
+                row,
+                self.risk_engine,
+                available_equity=float(state["equity"]),
+                day_start_equity=float(state["day_start_equity"]),
+                realized_pnl=float(state["realized_pnl"]),
+                unrealized_pnl=float(state["unrealized_pnl"]),
+                open_positions=int(state["open_positions"]),
+                trades_today=int(state["trades_today"]),
+                gross_exposure=float(state["gross_exposure"]),
+                symbol_already_open=bool(state["symbol_already_open"]),
+                liquidity_available=bool(state["liquidity_available"]),
+                risk_enabled=self.config.risk_enabled,
+                candidate_config=self.config.candidate_config,
+            )
+            risk = assessment.decision
+            stop_price = assessment.stop_price
+            target_price = assessment.target_price
 
             authorization = authorize_risk_decision(
                 risk,
@@ -707,10 +682,6 @@ class HistoricalBacktestEngine:
             "higher_low",
             "lower_low",
             "lower_high",
-            "atr_14",
-            "support_20",
-            "resistance_20",
-            "volume",
         }
         missing = required.difference(rows.columns)
         if missing:
