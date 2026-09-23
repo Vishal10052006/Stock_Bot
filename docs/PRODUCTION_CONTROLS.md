@@ -90,3 +90,9 @@ execution.
 `PaperDecisionRun.run_id` now provides a deterministic identity derived from the completed strategy, risk, authorization, and paper-order outputs. `PaperDecisionLoop.run_and_persist_evidence(...)` uses that identity automatically as the journal record's `source_run_id`, so evidence cannot be accidentally attached to an unrelated manually supplied run label.
 
 `run_and_persist_evidence` still requires explicit observations that the decision loop cannot establish causally on its own, including fill timestamps, false-signal outcomes, equity observations, calibration outcomes, and operational counts. The convenience boundary therefore reduces identity ambiguity without manufacturing evidence.
+
+## Aggregate paper-evidence quality
+
+`experiments.paper_quality.assess_paper_evidence(...)` aggregates persisted journal records into a structural quality report. It reports record validity, observation counts, dataset/code/evidence versions, and validation issues across the supplied period.
+
+The report is intentionally not a performance evaluator: it does not rank paper runs, calculate profitability, infer missing observations, or authorize live execution. An empty journal is not considered sufficient evidence, and any structurally invalid supplied record is surfaced explicitly.
