@@ -176,3 +176,31 @@ This establishes artifact identity and traceability only. It does not establish
 out-of-sample performance, walk-forward robustness, profitability, or regulatory
 readiness; those claims require the corresponding measured evidence and
 external verification.
+
+
+### Validation execution to experiment lineage
+
+The execute_validation_experiment_with_lineage(...) boundary now provides a
+single immutable execution bundle containing the ExperimentRecord, its
+LineageRecord, and the exact OOS, walk-forward, and optional historical
+backtest artifacts produced during that execution.
+
+The lineage records deterministic artifact fingerprints for OOS and
+walk-forward validation, plus the backtest result when a backtest was
+explicitly supplied. The existing execute_validation_experiment(...) API
+remains compatible and returns only the ExperimentRecord.
+
+This creates an explicit provenance chain:
+
+experiment definition
+        ↓
+OOS / walk-forward / optional backtest artifacts
+        ↓
+ExperimentRecord
+        ↓
+LineageRecord
+        ↓
+readiness provenance
+
+The chain establishes reproducible identity and artifact association. It does
+not infer model quality, profitability, robustness, or live authorization.
