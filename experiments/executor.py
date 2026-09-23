@@ -10,6 +10,7 @@ import pandas as pd
 from backtesting.engine import BacktestConfig, BacktestResult, HistoricalBacktestEngine
 from backtesting.metrics import BacktestMetrics, calculate_metrics
 from backtesting.oos import OOSReport, evaluate_oos
+from ml.datasets.splitting import TemporalSplitConfig
 from backtesting.walk_forward import (
     WalkForwardTradingReport,
     evaluate_walk_forward,
