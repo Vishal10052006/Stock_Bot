@@ -150,8 +150,12 @@ class CandidateExperimentExecution:
     execution: "ExperimentExecution"
 
     def __post_init__(self) -> None:
-        if not isinstance(self.execution, object):
+        from experiments.runner import ExperimentExecution
+
+        if not isinstance(self.execution, ExperimentExecution):
             raise TypeError("execution must be an ExperimentExecution")
+        if self.binding.experiment_definition_fingerprint != self.execution.definition.fingerprint():
+            raise ValueError("binding does not match executed experiment definition")
 
     @property
     def fingerprint(self) -> str:
