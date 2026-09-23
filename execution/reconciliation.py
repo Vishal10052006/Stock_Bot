@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import hashlib
+import json
 from enum import Enum
 
 
@@ -31,6 +33,12 @@ class BrokerPosition:
 class ReconciliationReport:
     status: ReconciliationStatus
     mismatches: tuple[str, ...]
+
+    @property
+    def fingerprint(self) -> str:
+        payload = {"status": self.status.value, "mismatches": self.mismatches}
+        canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+        return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
     @property
     def safe(self) -> bool:
