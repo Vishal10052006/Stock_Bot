@@ -267,6 +267,7 @@ def main() -> None:
         "run_id": run_id,
         "source_dataset": str(source_path),
         "horizon_bars": args.horizon_bars,
+        "labeling_horizon_bars": args.horizon_bars,
         "lookback_days": LOOKBACK_DAYS,
         "source_decision_rows": int(len(dataset)),
         "target_rows": int(len(result)),
