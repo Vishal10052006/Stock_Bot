@@ -22,4 +22,5 @@ jobs:
           python -m pip install numpy pandas scikit-learn pytest yfinance
       - name: Run Prediction Bot contract tests
         run: |
-          pytest -q             tests/test_prediction_artifacts_registry.py             tests/test_prediction_contracts_and_drift.py             tests/test_prediction_uncertainty.py             tests/test_prediction_robustness.py             tests/test_boosting_models.py
+          pytest -q             tests/test_prediction_artifacts_registry.py             tests/test_prediction_contracts_and_drift.py             tests/test_prediction_uncertainty.py             tests/test_prediction_robustness.py             tests/test_boosting_models.py \
+            tests/test_return_forecast.py
