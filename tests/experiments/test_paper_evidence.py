@@ -1,7 +1,14 @@
+from types import SimpleNamespace
+
+import pandas as pd
+
 from experiments.paper_evidence import (
+    PaperEvidenceCollector,
     PaperEvidenceSnapshot,
     validate_paper_evidence,
 )
+from paper.runtime import PaperOrderStatus
+from trading.strategy.models import StrategyDirection
 
 
 def _valid_snapshot() -> PaperEvidenceSnapshot:
@@ -65,3 +72,62 @@ def test_paper_evidence_rejects_inconsistent_counts() -> None:
 
     assert not report.valid
     assert "fill_count cannot exceed signal_count" in report.issues
+
+
+def test_paper_evidence_collector_builds_snapshot_from_step() -> None:
+    collector = PaperEvidenceCollector(
+        evidence_version="PAPER-EVIDENCE-v1",
+        dataset_version="paper-2026-09",
+        code_version="abc123",
+    )
+    strategy = SimpleNamespace(
+        direction=StrategyDirection.LONG,
+        regime="TREND_UP",
+        timestamp=pd.Timestamp("2026-09-23 09:15:00", tz="UTC"),
+        prediction_probability=0.8,
+    )
+    order = SimpleNamespace(status=PaperOrderStatus.FILLED)
+    step = SimpleNamespace(strategy=strategy, order=order)
+
+    collector.record_step(
+        step,
+        fill_timestamp=pd.Timestamp("2026-09-23 09:15:02", tz="UTC"),
+        false_signal=False,
+        realized_equity=100_100.0,
+        calibration_outcome=1.0,
+    )
+    collector.record_operational_event()
+
+    snapshot = collector.snapshot()
+    report = validate_paper_evidence(snapshot)
+
+    assert report.valid
+    assert snapshot.signal_count == 1
+    assert snapshot.fill_count == 1
+    assert snapshot.latency_observation_count == 1
+    assert snapshot.drawdown_observation_count == 1
+    assert snapshot.calibration_observation_count == 1
+    assert snapshot.operational_event_count == 1
+
+
+def test_paper_evidence_collector_rejects_backdated_fill() -> None:
+    collector = PaperEvidenceCollector(
+        evidence_version="PAPER-EVIDENCE-v1",
+        dataset_version="paper-2026-09",
+        code_version="abc123",
+    )
+    strategy = SimpleNamespace(
+        direction=StrategyDirection.LONG,
+        regime="TREND_UP",
+        timestamp=pd.Timestamp("2026-09-23 09:15:00", tz="UTC"),
+        prediction_probability=0.8,
+    )
+    order = SimpleNamespace(status=PaperOrderStatus.FILLED)
+
+    import pytest
+
+    with pytest.raises(ValueError, match="cannot precede"):
+        collector.record_step(
+            SimpleNamespace(strategy=strategy, order=order),
+            fill_timestamp=pd.Timestamp("2026-09-23 09:14:59", tz="UTC"),
+        )
