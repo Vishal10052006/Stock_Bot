@@ -41,6 +41,7 @@ from ml.models.return_forecast import (  # noqa: E402
     ReturnForecastConfig,
     ReturnForecastModel,
 )
+from ml.labeling.models import LabelingConfig  # noqa: E402
 
 
 def _chronological_split(
@@ -234,6 +235,8 @@ def main() -> None:
     if missing:
         raise ValueError(f"targets missing required columns: {sorted(missing)}")
 
+    target_horizon_bars = LabelingConfig().horizon_bars
+
     feature_columns = [
         column for column in FEATURE_COLUMNS if column in dataset.columns
     ]
@@ -296,8 +299,8 @@ def main() -> None:
             "target_column": "future_return",
             "target_definition": (
                 "close-to-close return from decision timestamp to the "
-                "12th strictly-future 5-minute candle unless target artifact "
-                "was built with another horizon"
+                f"{target_horizon_bars}th strictly-future 5-minute candle "
+                "when built with the canonical LabelingConfig horizon"
             ),
             "external_test_used_for_model_selection": False,
         },
