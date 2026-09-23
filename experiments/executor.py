@@ -7,6 +7,8 @@ from typing import Any, Callable
 
 import pandas as pd
 
+from backtesting.engine import BacktestConfig, BacktestResult, HistoricalBacktestEngine
+from backtesting.metrics import BacktestMetrics, calculate_metrics
 from backtesting.oos import OOSReport, evaluate_oos
 from backtesting.walk_forward import (
     WalkForwardTradingReport,
@@ -31,6 +33,8 @@ class ExperimentExecutionInputs:
     walk_forward_evaluator: Callable[[pd.DataFrame, pd.DataFrame], object]
     folds: int = 3
     purge_minutes: int = 60
+    backtest_rows: pd.DataFrame | None = None
+    backtest_config: BacktestConfig | None = None
 
 
 def _oos_summary(report: OOSReport) -> dict[str, Any]:
@@ -66,6 +70,45 @@ def _walk_forward_summary(
     }
 
 
+def _backtest_summary(result: BacktestResult, metrics: BacktestMetrics) -> dict[str, Any]:
+    """Serialize explicit trading backtest evidence and metrics."""
+    return {
+        "completed_trades": result.completed_trades,
+        "net_pnl": result.net_pnl,
+        "metrics": {
+            "trade_count": metrics.trade_count,
+            "winning_trades": metrics.winning_trades,
+            "losing_trades": metrics.losing_trades,
+            "gross_pnl": metrics.gross_pnl,
+            "net_pnl": metrics.net_pnl,
+            "total_fees": metrics.total_fees,
+            "total_slippage": metrics.total_slippage,
+            "win_rate": metrics.win_rate,
+            "average_win": metrics.average_win,
+            "average_loss": metrics.average_loss,
+            "profit_factor": metrics.profit_factor,
+            "expectancy": metrics.expectancy,
+            "maximum_drawdown": metrics.maximum_drawdown,
+            "sharpe_ratio": metrics.sharpe_ratio,
+            "exposure_minutes": metrics.exposure_minutes,
+            "turnover": metrics.turnover,
+        },
+    }
+
+
+def execute_backtest(
+    rows: pd.DataFrame,
+    *,
+    config: BacktestConfig | None = None,
+) -> tuple[BacktestResult, BacktestMetrics]:
+    """Execute the authoritative historical backtest and calculate metrics."""
+    if not isinstance(rows, pd.DataFrame):
+        raise TypeError("rows must be a pandas DataFrame")
+    engine = HistoricalBacktestEngine(config=config)
+    result = engine.run(rows)
+    return result, calculate_metrics(result.outcomes)
+
+
 def execute_validation_experiment(
     definition: ExperimentDefinition,
     inputs: ExperimentExecutionInputs,
@@ -86,6 +129,14 @@ def execute_validation_experiment(
     if not isinstance(inputs.walk_forward_data, pd.DataFrame):
         raise TypeError(
             "walk_forward_data must be a pandas DataFrame"
+        )
+
+    backtest_result: BacktestResult | None = None
+    backtest_metrics: BacktestMetrics | None = None
+    if inputs.backtest_rows is not None:
+        backtest_result, backtest_metrics = execute_backtest(
+            inputs.backtest_rows,
+            config=inputs.backtest_config,
         )
 
     oos_report = evaluate_oos(
@@ -110,6 +161,11 @@ def execute_validation_experiment(
         observations=observations,
         baseline_results={
             "oos": _oos_summary(oos_report),
+            **(
+                {"backtest": _backtest_summary(backtest_result, backtest_metrics)}
+                if backtest_result is not None and backtest_metrics is not None
+                else {}
+            ),
         },
         model_results={
             "walk_forward": _walk_forward_summary(walk_forward_report),
@@ -121,6 +177,6 @@ def execute_validation_experiment(
         decision="INCONCLUSIVE",
         limitations=(
             "This adapter records validation structure, not model quality.",
-            "Backtest profitability metrics require an explicit trading evaluator.",
+            "Backtest execution is optional and must be supplied explicitly.",
         ),
     )
