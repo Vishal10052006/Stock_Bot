@@ -70,7 +70,10 @@ def _walk_forward_summary(
     }
 
 
-def _backtest_summary(result: BacktestResult, metrics: BacktestMetrics) -> dict[str, Any]:
+def _backtest_summary(
+    result: BacktestResult,
+    metrics: BacktestMetrics,
+) -> dict[str, Any]:
     """Serialize explicit trading backtest evidence and metrics."""
     return {
         "completed_trades": result.completed_trades,
@@ -126,6 +129,11 @@ def execute_validation_experiment(
             "definition must be an ExperimentDefinition"
         )
 
+    if not isinstance(inputs, ExperimentExecutionInputs):
+        raise TypeError(
+            "inputs must be an ExperimentExecutionInputs"
+        )
+
     if not isinstance(inputs.walk_forward_data, pd.DataFrame):
         raise TypeError(
             "walk_forward_data must be a pandas DataFrame"
@@ -162,7 +170,12 @@ def execute_validation_experiment(
         baseline_results={
             "oos": _oos_summary(oos_report),
             **(
-                {"backtest": _backtest_summary(backtest_result, backtest_metrics)}
+                {
+                    "backtest": _backtest_summary(
+                        backtest_result,
+                        backtest_metrics,
+                    )
+                }
                 if backtest_result is not None and backtest_metrics is not None
                 else {}
             ),
