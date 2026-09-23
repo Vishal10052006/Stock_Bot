@@ -55,6 +55,7 @@ class RiskConfig:
     max_correlated_exposure_fraction: float | None = None
     high_volatility_factor: float = 1.0
     max_atr_fraction: float | None = None
+    max_drawdown_fraction: float | None = None
 
     # The frozen v1 paper policy treats exposure violations as NO_TRADE.
     # Volatility/concentration policies can use RESIZE once explicitly enabled.
@@ -84,6 +85,7 @@ class RiskConfig:
             ("max_sector_exposure_fraction", self.max_sector_exposure_fraction),
             ("max_correlated_exposure_fraction", self.max_correlated_exposure_fraction),
             ("max_atr_fraction", self.max_atr_fraction),
+            ("max_drawdown_fraction", self.max_drawdown_fraction),
         ):
             if value is not None and not 0.0 < value <= 1.0:
                 raise ValueError(f"{name} must be in (0, 1] when configured")
@@ -103,6 +105,8 @@ class RiskInput:
     candidate: TradeCandidate
     available_equity: float
     day_start_equity: float
+    available_cash: float | None = None
+    peak_equity: float | None = None
 
     realized_pnl: float = 0.0
     unrealized_pnl: float = 0.0
@@ -161,6 +165,18 @@ class RiskInput:
 
         if self.day_start_equity <= 0:
             raise ValueError("day_start_equity must be positive")
+
+        if self.available_cash is not None and (
+            not math.isfinite(float(self.available_cash))
+            or self.available_cash < 0
+        ):
+            raise ValueError("available_cash must be finite and non-negative")
+
+        if self.peak_equity is not None and (
+            not math.isfinite(float(self.peak_equity))
+            or self.peak_equity <= 0
+        ):
+            raise ValueError("peak_equity must be positive and finite")
 
         if self.gross_exposure < 0:
             raise ValueError("gross_exposure must be non-negative")
@@ -317,6 +333,21 @@ class RiskEngine:
                 RiskReasonCode.DUPLICATE_SYMBOL,
             )
 
+        # Drawdown is optional because the frozen specification defines daily
+        # loss but does not freeze a numeric total-drawdown cap.
+        if (
+            self.config.max_drawdown_fraction is not None
+            and value.peak_equity is not None
+            and value.available_equity
+            <= value.peak_equity * (1.0 - self.config.max_drawdown_fraction)
+        ):
+            return self._reject(
+                value,
+                "Maximum drawdown limit reached.",
+                daily_pnl,
+                RiskReasonCode.DAILY_LOSS_LIMIT,
+            )
+
         # 3. Candidate price/stop validation. Stop construction itself stays
         # in trading.signals.candidate and is never duplicated here.
         entry = float(candidate.entry_price)
@@ -350,6 +381,24 @@ class RiskEngine:
         )
 
         requested_quantity = sizing.quantity
+
+        # Available cash is an optional account-level constraint. It can only
+        # reduce risk-first size; it never increases it.
+        if value.available_cash is not None:
+            cash_quantity = floor_to_step(
+                value.available_cash / entry,
+                self.config.quantity_step,
+            )
+            if cash_quantity < requested_quantity:
+                if not self.config.allow_resize:
+                    return self._reject(
+                        value,
+                        "Available cash cannot support the risk-first quantity.",
+                        daily_pnl,
+                        RiskReasonCode.INVALID_RISK_STATE,
+                    )
+                requested_quantity = cash_quantity
+
         if requested_quantity <= 0:
             return self._reject(
                 value,
