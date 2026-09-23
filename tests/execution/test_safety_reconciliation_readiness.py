@@ -291,6 +291,25 @@ def test_readiness_rejects_tampered_lineage_id() -> None:
 
 
 def _provenance_evidence(gate: str) -> ReadinessEvidence:
+    kind = {
+        "historical_data_validated": "validation",
+        "indicators_validated": "validation",
+        "features_leakage_safe": "audit",
+        "labels_validated": "validation",
+        "baseline_validated": "experiment_lineage",
+        "model_validated": "experiment_lineage",
+        "realistic_backtest_validated": "backtest",
+        "leakage_audit_passed": "audit",
+        "oos_validated": "oos",
+        "walk_forward_validated": "walk_forward",
+        "paper_evidence_validated": "paper_evidence",
+        "risk_controls_validated": "risk",
+        "monitoring_validated": "monitoring",
+        "kill_switch_validated": "safety",
+        "broker_integration_validated": "broker",
+        "reconciliation_validated": "reconciliation",
+        "compliance_verified_current": "compliance",
+    }[gate]
     return ReadinessEvidence(
         gate=gate,
         artifact_fingerprint="a" * 64,
@@ -298,6 +317,7 @@ def _provenance_evidence(gate: str) -> ReadinessEvidence:
         code_version="code-v1",
         validated_at=pd.Timestamp("2026-09-23T10:00:00Z").to_pydatetime(),
         source="test",
+        evidence_kind=kind,
     )
 
 
@@ -316,6 +336,25 @@ def test_readiness_rejects_duplicate_provenance_gate() -> None:
         LiveReadinessGate().evaluate(
             LiveReadinessInput(**{field: True for field in LiveReadinessGate._FIELDS}),
             evidence=(evidence, evidence),
+            require_provenance=True,
+        )
+
+
+def test_readiness_rejects_wrong_provenance_kind() -> None:
+    evidence = _provenance_evidence("oos_validated")
+    evidence = ReadinessEvidence(
+        gate=evidence.gate,
+        artifact_fingerprint=evidence.artifact_fingerprint,
+        dataset_version=evidence.dataset_version,
+        code_version=evidence.code_version,
+        validated_at=evidence.validated_at,
+        source=evidence.source,
+        evidence_kind="risk",
+    )
+    with pytest.raises(ValueError, match="invalid evidence_kind"):
+        LiveReadinessGate().evaluate(
+            LiveReadinessInput(**{field: True for field in LiveReadinessGate._FIELDS}),
+            evidence=(evidence,),
             require_provenance=True,
         )
 
