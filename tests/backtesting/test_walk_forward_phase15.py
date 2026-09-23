@@ -77,7 +77,7 @@ def test_walk_forward_report_rejects_overlapping_windows() -> None:
     windows = generate_windows(_data(), folds=3, purge_minutes=5)
     broken = list(windows)
     broken[1] = type(broken[1])(
-        fold_id=2, train_start=broken[1].train_start, train_end=broken[1].train_end,
+        fold_id=2, train_start=broken[1].train_start, train_end=broken[0].train_end,
         test_start=broken[0].test_start, test_end=broken[1].test_end,
         train_rows=broken[1].train_rows, test_rows=broken[1].test_rows,
         purged_rows=broken[1].purged_rows,
