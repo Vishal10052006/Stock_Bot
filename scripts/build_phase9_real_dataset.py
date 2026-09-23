@@ -352,6 +352,7 @@ def main() -> None:
                     symbols=[symbol],
                     as_of=as_of,
                     lookback_days=LOOKBACK_DAYS,
+                    access_token=access_token,
                 )
 
                 if sector_context.empty:
