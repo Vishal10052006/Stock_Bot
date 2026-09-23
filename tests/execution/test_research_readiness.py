@@ -190,3 +190,50 @@ def test_research_readiness_binds_backtest_artifact() -> None:
     )
     assert backtest_evidence.artifact_fingerprint == backtest.fingerprint
     assert backtest_evidence.evidence_kind == "backtest"
+
+
+def test_research_evidence_satisfies_only_the_research_gates() -> None:
+    execution = execute_validation_experiment_with_lineage(
+        _definition(),
+        _inputs(),
+    )
+    evidence = build_research_readiness_evidence(
+        execution,
+        validated_at=pd.Timestamp("2026-09-23T10:00:00Z").to_pydatetime(),
+        include_backtest=False,
+    )
+
+    from execution.readiness import LiveReadinessGate, LiveReadinessInput
+
+    gates = LiveReadinessInput(
+        historical_data_validated=False,
+        indicators_validated=False,
+        features_leakage_safe=False,
+        labels_validated=False,
+        baseline_validated=True,
+        model_validated=True,
+        realistic_backtest_validated=False,
+        leakage_audit_passed=False,
+        oos_validated=True,
+        walk_forward_validated=True,
+        paper_evidence_validated=False,
+        risk_controls_validated=False,
+        monitoring_validated=False,
+        kill_switch_validated=False,
+        broker_integration_validated=False,
+        reconciliation_validated=False,
+        compliance_verified_current=False,
+    )
+    report = LiveReadinessGate().evaluate(
+        gates,
+        evidence=evidence,
+        require_provenance=True,
+    )
+
+    assert not report.ready
+    assert "paper_evidence_validated" in report.failed_gates
+    assert "risk_controls_validated" in report.failed_gates
+    assert "oos_validated_provenance" not in report.failed_gates
+    assert "walk_forward_validated_provenance" not in report.failed_gates
+    assert "baseline_validated_provenance" not in report.failed_gates
+    assert "model_validated_provenance" not in report.failed_gates
