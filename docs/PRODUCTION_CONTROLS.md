@@ -119,3 +119,11 @@ identity for an experiment that already has deterministic lineage.
 
 The adapter uses the lineage attribute contract without a runtime import from
 experiments.lineage, preserving the execution/experiments dependency boundary.
+
+### Readiness provenance contract validation
+
+When provenance is required, the readiness gate now validates that every
+evidence item is a ReadinessEvidence instance, names a known readiness gate,
+appears at most once, and carries a 64-character SHA-256 hexadecimal artifact
+fingerprint. Invalid provenance fails immediately rather than being treated as
+satisfied evidence.
