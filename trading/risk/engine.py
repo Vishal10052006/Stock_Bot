@@ -14,6 +14,8 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
+import hashlib
+import json
 from typing import Mapping
 
 import pandas as pd
@@ -60,6 +62,15 @@ class RiskConfig:
     # The frozen v1 paper policy treats exposure violations as NO_TRADE.
     # Volatility/concentration policies can use RESIZE once explicitly enabled.
     allow_resize: bool = False
+
+    @property
+    def fingerprint(self) -> str:
+        payload = {
+            name: getattr(self, name)
+            for name in self.__dataclass_fields__
+        }
+        canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
+        return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
     def __post_init__(self) -> None:
         if not 0.0 < self.risk_per_trade <= 1.0:
