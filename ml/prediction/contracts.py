@@ -1,6 +1,6 @@
 """Model-neutral Prediction Bot contracts beyond Phase 9 classification.
 
-These contracts carry probabilistic information only.  They deliberately do
+These contracts carry probabilistic information only. They deliberately do
 not contain trade direction, position sizing, risk authorization, or orders.
 
 The contracts are designed so later return-forecasting, multi-horizon, and
@@ -86,6 +86,9 @@ class ReturnForecast:
     expected_return: float
     uncertainty: float | None
     provenance: PredictionProvenance
+    interval_lower: float | None = None
+    interval_upper: float | None = None
+    interval_confidence: float | None = None
 
     def __post_init__(self) -> None:
         if pd.Timestamp(self.timestamp).tzinfo is None:
@@ -96,10 +99,35 @@ class ReturnForecast:
             raise ValueError("horizon_minutes must be greater than zero")
         if not pd.notna(float(self.expected_return)):
             raise ValueError("expected_return must be finite")
+
         if self.uncertainty is not None and (
             not pd.notna(float(self.uncertainty)) or float(self.uncertainty) < 0.0
         ):
             raise ValueError("uncertainty must be finite and non-negative")
+
+        if self.interval_lower is not None and not pd.notna(float(self.interval_lower)):
+            raise ValueError("interval_lower must be finite")
+        if self.interval_upper is not None and not pd.notna(float(self.interval_upper)):
+            raise ValueError("interval_upper must be finite")
+
+        if (self.interval_lower is None) != (self.interval_upper is None):
+            raise ValueError("interval_lower and interval_upper must be provided together")
+
+        if self.interval_lower is not None and self.interval_upper is not None:
+            lower = float(self.interval_lower)
+            upper = float(self.interval_upper)
+            expected = float(self.expected_return)
+            if lower > upper:
+                raise ValueError("interval_lower must not exceed interval_upper")
+            if not lower <= expected <= upper:
+                raise ValueError("expected_return must lie inside the prediction interval")
+
+        if self.interval_confidence is not None:
+            confidence = float(self.interval_confidence)
+            if not 0.0 < confidence < 1.0:
+                raise ValueError("interval_confidence must lie in (0, 1)")
+            if self.interval_lower is None:
+                raise ValueError("interval_confidence requires a prediction interval")
 
 
 @dataclass(frozen=True, slots=True)
