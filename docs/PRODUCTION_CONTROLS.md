@@ -142,3 +142,17 @@ backtest evidence where available, paper-evidence quality, risk, monitoring,
 safety, broker, reconciliation, and compliance evidence. The mapping is a
 traceability contract; it does not manufacture an artifact or claim that a gate
 has passed. A caller must still supply the corresponding true gate and evidence.
+
+### Artifact-backed readiness provenance
+
+The readiness layer now supports binding evidence directly to repository artifacts
+that expose deterministic SHA-256 fingerprints. Existing paper-evidence quality,
+monitoring reports, reconciliation reports, safety decisions, and risk
+configuration can therefore provide their own artifact identity instead of
+requiring a caller to invent a digest.
+
+The `ReadinessEvidence.from_artifact(...)` boundary validates the artifact
+fingerprint and the gate-specific evidence kind before creating readiness
+provenance. This remains evidence construction only: it does not mark a gate
+true, and it does not enable live execution.
+
