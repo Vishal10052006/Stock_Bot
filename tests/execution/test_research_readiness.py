@@ -35,7 +35,7 @@ def _inputs() -> ExperimentExecutionInputs:
         periods=200,
         freq="5min",
     )
-    data = pd.DataFrame({"timestamp": timestamps, "feature": range(200), "label": ["LONG_SUCCESS", "NO_EDGE"] * 100})
+    data = pd.DataFrame({"timestamp": timestamps, "symbol": ["ITC"] * 200, "feature": range(200), "label": ["LONG_SUCCESS", "NO_EDGE"] * 100})
 
     def predictor(train: pd.DataFrame, test: pd.DataFrame) -> pd.Series:
         return pd.Series(["LONG_SUCCESS"] * len(test), index=test.index)
