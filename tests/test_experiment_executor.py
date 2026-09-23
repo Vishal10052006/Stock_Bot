@@ -5,6 +5,7 @@ from experiments import (
     ExperimentExecutionInputs,
     execute_validation_experiment,
 )
+from backtesting.engine import BacktestConfig
 from ml.datasets.models import TrainingDataset
 
 
@@ -113,6 +114,7 @@ def test_validation_executor_can_run_authoritative_backtest() -> None:
             folds=2,
             purge_minutes=1,
             backtest_rows=backtest_rows,
+            backtest_config=BacktestConfig(max_holding_minutes=60.0),
         ),
     )
 
