@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from experiments.paper_quality import PaperEvidenceQualityReport
+
 
 @dataclass(frozen=True, slots=True)
 class LiveReadinessInput:
@@ -59,15 +61,28 @@ class LiveReadinessGate:
         "compliance_verified_current",
     )
 
-    def evaluate(self, gates: LiveReadinessInput) -> LiveReadinessReport:
+    def evaluate(
+        self,
+        gates: LiveReadinessInput,
+        *,
+        paper_evidence_quality: PaperEvidenceQualityReport | None = None,
+    ) -> LiveReadinessReport:
         if not isinstance(gates, LiveReadinessInput):
             raise TypeError("gates must be a LiveReadinessInput")
 
-        failed = tuple(
+        failed = [
             field
             for field in self._FIELDS
             if not getattr(gates, field)
-        )
+        ]
+        if paper_evidence_quality is not None:
+            if not isinstance(paper_evidence_quality, PaperEvidenceQualityReport):
+                raise TypeError(
+                    "paper_evidence_quality must be a PaperEvidenceQualityReport"
+                )
+            if not paper_evidence_quality.valid:
+                failed.append("paper_evidence_quality_validated")
+        failed = tuple(failed)
         return LiveReadinessReport(
             ready=not failed,
             failed_gates=failed,
