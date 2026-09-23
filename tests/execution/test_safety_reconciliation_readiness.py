@@ -1,5 +1,9 @@
 import pytest
 
+from experiments.paper_evidence import PaperEvidenceSnapshot
+from experiments.paper_journal import PaperEvidenceRecord
+from experiments.paper_quality import assess_paper_evidence
+
 from execution.reconciliation import (
     BrokerPosition,
     BrokerReconciler,
@@ -90,3 +94,87 @@ def test_reconciliation_blocks_when_snapshot_is_missing() -> None:
 
     assert report.status is ReconciliationStatus.BLOCKED
     assert not report.safe
+
+
+def _valid_paper_quality():
+    snapshot = PaperEvidenceSnapshot(
+        evidence_version="PAPER-EVIDENCE-v1",
+        dataset_version="paper-v1",
+        code_version="code-v1",
+        signal_count=10,
+        fill_count=8,
+        slippage_observation_count=8,
+        latency_observation_count=8,
+        false_signal_count=1,
+        drawdown_observation_count=8,
+        regime_observation_count=8,
+        calibration_observation_count=8,
+        operational_event_count=8,
+        operational_error_count=1,
+        stale_event_count=0,
+    )
+    record = PaperEvidenceRecord.create(
+        evidence=snapshot,
+        period_start="2026-09-21T09:15:00+00:00",
+        period_end="2026-09-21T15:30:00+00:00",
+        source_run_id="readiness-test",
+    )
+    return assess_paper_evidence((record,))
+
+
+def test_readiness_accepts_structurally_valid_paper_quality() -> None:
+    gates = LiveReadinessInput(
+        historical_data_validated=True,
+        indicators_validated=True,
+        features_leakage_safe=True,
+        labels_validated=True,
+        baseline_validated=True,
+        model_validated=True,
+        realistic_backtest_validated=True,
+        leakage_audit_passed=True,
+        oos_validated=True,
+        walk_forward_validated=True,
+        paper_evidence_validated=True,
+        risk_controls_validated=True,
+        monitoring_validated=True,
+        kill_switch_validated=True,
+        broker_integration_validated=True,
+        reconciliation_validated=True,
+        compliance_verified_current=True,
+    )
+    report = LiveReadinessGate().evaluate(
+        gates,
+        paper_evidence_quality=_valid_paper_quality(),
+    )
+
+    assert report.ready
+
+
+def test_readiness_blocks_invalid_paper_quality() -> None:
+    gates = LiveReadinessInput(
+        historical_data_validated=True,
+        indicators_validated=True,
+        features_leakage_safe=True,
+        labels_validated=True,
+        baseline_validated=True,
+        model_validated=True,
+        realistic_backtest_validated=True,
+        leakage_audit_passed=True,
+        oos_validated=True,
+        walk_forward_validated=True,
+        paper_evidence_validated=True,
+        risk_controls_validated=True,
+        monitoring_validated=True,
+        kill_switch_validated=True,
+        broker_integration_validated=True,
+        reconciliation_validated=True,
+        compliance_verified_current=True,
+    )
+    invalid = assess_paper_evidence(())
+    report = LiveReadinessGate().evaluate(
+        gates,
+        paper_evidence_quality=invalid,
+    )
+
+    assert not report.ready
+    assert "paper_evidence_quality_validated" in report.failed_gates
