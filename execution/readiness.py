@@ -59,6 +59,46 @@ class ReadinessEvidence:
         return hashlib.sha256(self.canonical_json().encode("utf-8")).hexdigest()
 
     @classmethod
+    def from_artifact(
+        cls,
+        artifact: object,
+        *,
+        gate: str,
+        evidence_kind: str,
+        dataset_version: str,
+        code_version: str,
+        validated_at: datetime,
+        source: str,
+    ) -> "ReadinessEvidence":
+        """Bind readiness provenance to an existing fingerprinted artifact."""
+        if not isinstance(artifact, object) or not hasattr(artifact, "fingerprint"):
+            raise TypeError("artifact must expose a fingerprint property")
+        artifact_fingerprint = getattr(artifact, "fingerprint")
+        if not isinstance(artifact_fingerprint, str):
+            raise TypeError("artifact fingerprint must be a string")
+        if (
+            len(artifact_fingerprint) != 64
+            or any(char not in "0123456789abcdef" for char in artifact_fingerprint.lower())
+        ):
+            raise ValueError("artifact fingerprint must be a SHA-256 hex digest")
+        if gate not in LiveReadinessGate._FIELDS:
+            raise ValueError(f"unknown readiness evidence gate: {gate}")
+        allowed = LiveReadinessGate._EVIDENCE_KINDS[gate]
+        if evidence_kind not in allowed:
+            raise ValueError(
+                f"invalid evidence_kind for {gate}: {evidence_kind!r}"
+            )
+        return cls(
+            gate=gate,
+            artifact_fingerprint=artifact_fingerprint,
+            dataset_version=dataset_version,
+            code_version=code_version,
+            validated_at=validated_at,
+            source=source,
+            evidence_kind=evidence_kind,
+        )
+
+    @classmethod
     def from_lineage(
         cls,
         lineage: object,
