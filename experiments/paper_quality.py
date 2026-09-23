@@ -39,7 +39,6 @@ class PaperEvidenceQualityReport:
     issues: tuple[str, ...]
 
     @property
-    @property
     def fingerprint(self) -> str:
         payload = {
             "record_count": self.record_count,
