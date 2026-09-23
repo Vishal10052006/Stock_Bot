@@ -46,7 +46,7 @@ def test_evaluation_accepts_coherent_backtest_metrics() -> None:
     )
 
     assert report.valid
-    assert report.metric_count == 6
+    assert report.metric_count == 7
     assert report.sections == ("baseline_results",)
 
 
