@@ -51,7 +51,7 @@ class ReturnForecastModel:
                 max_depth=self.config.max_depth,
                 min_samples_leaf=self.config.min_samples_leaf,
                 random_state=self.config.random_state,
-                n_jobs=self.config.n_estimators and -1,
+                n_jobs=-1,
             )
         self._fitted = False
         self._feature_count: int | None = None
