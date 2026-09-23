@@ -5,7 +5,7 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from trading.risk.contracts import RiskDecision
+from trading.risk.gate import RiskDecision
 
 from backtesting.engine import (
     BacktestConfig,
@@ -98,7 +98,7 @@ def test_nse_session_is_evaluated_in_ist() -> None:
         ]
     )
     result = HistoricalBacktestEngine().run(rows)
-    assert result.steps[0].risk.risk_policy_version == "risk_v1.0"
+    assert result.steps[0].risk.risk_version == "risk_v1.0"
     assert result.steps[0].risk.status.value != "REJECTED" or (
         "SESSION_CLOSED" not in {code.value for code in result.steps[0].risk.reason_codes}
     )
