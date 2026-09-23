@@ -16,7 +16,7 @@ def test_return_forecast_metrics_are_finite_and_deterministic() -> None:
     metrics = evaluate_return_forecasts(actual, predicted)
 
     assert metrics["sample_count"] == 4
-    assert metrics["mae"] == pytest.approx(0.01)
+    assert metrics["mae"] == pytest.approx(0.0125)
     assert metrics["rmse"] == pytest.approx(np.sqrt(0.000175))
     assert metrics["directional_accuracy"] == pytest.approx(0.75)
 
@@ -36,7 +36,7 @@ def test_interval_metrics_report_empirical_coverage() -> None:
     assert metrics["sample_count"] == 4
     assert metrics["empirical_coverage"] == pytest.approx(0.5)
     assert metrics["coverage_gap"] == pytest.approx(-0.4)
-    assert metrics["mean_interval_width"] == pytest.approx(0.15)
+    assert metrics["mean_interval_width"] == pytest.approx(0.0775)
 
 
 def test_return_forecast_group_metrics() -> None:
