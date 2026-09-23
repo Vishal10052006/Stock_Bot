@@ -4,6 +4,7 @@ import pandas as pd
 
 from experiments.paper_evidence import (
     PaperEvidenceCollector,
+    collect_paper_decision_run,
     PaperEvidenceSnapshot,
     validate_paper_evidence,
 )
@@ -131,3 +132,37 @@ def test_paper_evidence_collector_rejects_backdated_fill() -> None:
             SimpleNamespace(strategy=strategy, order=order),
             fill_timestamp=pd.Timestamp("2026-09-23 09:14:59", tz="UTC"),
         )
+
+
+def test_paper_run_adapter_preserves_explicit_operational_counts() -> None:
+    strategy = SimpleNamespace(
+        direction=StrategyDirection.LONG,
+        regime="TREND_UP",
+        timestamp=pd.Timestamp("2026-09-23 09:15:00", tz="UTC"),
+        prediction_probability=0.8,
+    )
+    order = SimpleNamespace(status=PaperOrderStatus.FILLED)
+    run = SimpleNamespace(
+        steps=(SimpleNamespace(strategy=strategy, order=order),),
+    )
+
+    snapshot = collect_paper_decision_run(
+        run,
+        fill_timestamps={
+            0: pd.Timestamp("2026-09-23 09:15:01", tz="UTC"),
+        },
+        false_signals={0: False},
+        equity_observations={0: 100_000.0},
+        calibration_outcomes={0: 1.0},
+        operational_events=2,
+        operational_errors=1,
+        stale_events=1,
+        evidence_version="PAPER-EVIDENCE-v1",
+        dataset_version="paper-2026-09",
+        code_version="abc123",
+    )
+
+    assert snapshot.operational_event_count == 2
+    assert snapshot.operational_error_count == 1
+    assert snapshot.stale_event_count == 1
+    assert validate_paper_evidence(snapshot).valid
