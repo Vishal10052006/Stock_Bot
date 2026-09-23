@@ -26,6 +26,7 @@ class LearningPattern(str, Enum):
 
 class ErrorClass(str, Enum):
     OUTCOME_LOSS = "OUTCOME_LOSS"
+    POSITIVE_OUTCOME = "POSITIVE_OUTCOME"
     LARGE_ADVERSE_EXCURSION = "LARGE_ADVERSE_EXCURSION"
     LOW_FAVORABLE_EXCURSION = "LOW_FAVORABLE_EXCURSION"
     EXECUTION_COST_DRAG = "EXECUTION_COST_DRAG"
@@ -39,16 +40,18 @@ class LearningExperience:
     """One evidence-backed observation, not a model-change instruction."""
 
     pattern: LearningPattern
-    error_class: ErrorClass
-    symbol: str | None
-    evidence_count: int
-    population_count: int
-    occurrence_rate: float
-    confidence: float
+    error_class: ErrorClass = ErrorClass.OUTCOME_LOSS
+    symbol: str | None = None
+    evidence_count: int = 1
+    population_count: int = 1
+    occurrence_rate: float = 1.0
+    confidence: float = 0.0
     average_reward: float
     total_reward: float
-    source_trade_ids: tuple[str, ...]
-    rationale: str
+    source_trade_ids: tuple[str, ...] = ()
+    rationale: str = "Observable trading outcome evidence."
+    average_reward: float = 0.0
+    total_reward: float = 0.0
 
     def __post_init__(self) -> None:
         if self.evidence_count < 1:
