@@ -584,7 +584,7 @@ def main() -> int:
     }
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(json.dumps(report, indent=2))
+    output_path.write_text(json.dumps(_json_safe(report), indent=2))
 
     print("=" * 72)
     print("PHASE 9 — REAL EXPERIMENT COMPLETE")
