@@ -59,3 +59,18 @@ This prevents hidden research configuration and keeps experiment policy auditabl
 The runner therefore establishes reproducible orchestration, but it is not itself
 evidence of model quality, profitability, OOS performance, or walk-forward
 performance.
+
+
+## S21 validation execution adapter
+
+`execute_validation_experiment` connects the experiment boundary to the existing
+temporal OOS and walk-forward contracts. The caller must explicitly provide the
+dataset, OOS predictor, walk-forward data, evaluator, fold count, and purge
+interval.
+
+The adapter records validation structure and deliberately leaves performance
+interpretation, model selection, and the final KEEP/REJECT decision outside the
+adapter. It therefore cannot manufacture profitability or model-quality claims.
+
+The next integration boundary is an explicit trading/backtest evaluator when a
+research experiment defines one.
