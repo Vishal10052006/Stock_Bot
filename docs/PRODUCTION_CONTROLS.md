@@ -84,3 +84,9 @@ detected instead of being silently accepted.
 The journal provides reproducibility and auditability only. It does not infer
 missing observations, alter evidence, rank paper runs, or authorize live
 execution.
+
+## Paper run identity boundary
+
+`PaperDecisionRun.run_id` now provides a deterministic identity derived from the completed strategy, risk, authorization, and paper-order outputs. `PaperDecisionLoop.run_and_persist_evidence(...)` uses that identity automatically as the journal record's `source_run_id`, so evidence cannot be accidentally attached to an unrelated manually supplied run label.
+
+`run_and_persist_evidence` still requires explicit observations that the decision loop cannot establish causally on its own, including fill timestamps, false-signal outcomes, equity observations, calibration outcomes, and operational counts. The convenience boundary therefore reduces identity ambiguity without manufacturing evidence.
