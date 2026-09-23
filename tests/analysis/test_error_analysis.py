@@ -7,7 +7,7 @@ from analysis import (
     FindingType,
     TradeErrorAnalyzer,
 )
-from journal.models import TradeJournalRecord
+from journal.models import TradeDecisionRecord, TradeJournalRecord
 from trading.paper.lifecycle import TradeOutcome
 from trading.strategy.models import StrategyDirection
 
@@ -330,7 +330,14 @@ def test_phase17_discovers_opening_and_post_loss_patterns() -> None:
         )
         for i in range(6)
     )
-    post_loss_report = analyzer.analyze_linked(
+    post_loss_analyzer = TradeErrorAnalyzer(
+        ErrorAnalysisConfig(
+            minimum_pattern_evidence=3,
+            minimum_pattern_occurrence_rate=0.75,
+            consecutive_loss_threshold=2,
+        )
+    )
+    post_loss_report = post_loss_analyzer.analyze_linked(
         [decision for decision, _ in post_loss_pairs],
         [record for _, record in post_loss_pairs],
     )
