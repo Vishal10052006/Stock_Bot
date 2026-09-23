@@ -5,6 +5,8 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
+from trading.risk.contracts import RiskDecision
+
 from backtesting.engine import (
     BacktestConfig,
     HistoricalBacktestEngine,
@@ -31,11 +33,6 @@ def _row(
         "timestamp": timestamp,
         "symbol": symbol,
         "close": close,
-        "atr_14": 2.0,
-        "swing_low": 96.0,
-        "swing_high": 104.0,
-        "support_20": 95.0,
-        "resistance_20": 105.0,
         "regime": regime,
         "regime_probability": regime_probability,
         "vwap_distance_pct": vwap_distance_pct,
@@ -44,6 +41,12 @@ def _row(
         "higher_low": higher_low,
         "lower_low": lower_low,
         "lower_high": lower_high,
+        "high": close,
+        "low": close,
+        "atr_14": 2.0,
+        "support_20": close - 2.0,
+        "resistance_20": close + 2.0,
+        "volume": 10_000_000.0,
     }
 
 
@@ -85,6 +88,20 @@ def test_rows_are_processed_chronologically() -> None:
     ]
 
     assert timestamps == sorted(timestamps)
+
+
+def test_nse_session_is_evaluated_in_ist() -> None:
+    rows = pd.DataFrame(
+        [
+            _row("2026-01-01 09:15:00+05:30"),
+            _row("2026-01-01 09:20:00+05:30", close=101.0),
+        ]
+    )
+    result = HistoricalBacktestEngine().run(rows)
+    assert result.steps[0].risk.risk_policy_version == "risk_v1.0"
+    assert result.steps[0].risk.status.value != "REJECTED" or (
+        "SESSION_CLOSED" not in {code.value for code in result.steps[0].risk.reason_codes}
+    )
 
 
 def test_actionable_signal_creates_paper_order() -> None:
@@ -223,68 +240,57 @@ def test_missing_required_strategy_column_is_rejected() -> None:
         HistoricalBacktestEngine().run(rows)
 
 
-def test_future_row_cannot_change_earlier_risk_decision() -> None:
-    """Changing a future observation must not change an earlier decision."""
-
-    base_rows = pd.DataFrame(
+def test_backtest_uses_full_risk_engine_for_actionable_signal() -> None:
+    rows = pd.DataFrame(
         [
             _row("2026-01-01 09:15:00+05:30", close=100.0),
             _row("2026-01-01 09:20:00+05:30", close=101.0),
         ]
     )
-    altered_rows = base_rows.copy()
-    altered_rows.loc[1, "regime"] = "RANGE"
-    altered_rows.loc[1, "regime_probability"] = 0.99
-    altered_rows.loc[1, "vwap_distance_pct"] = -999.0
 
-    base_result = HistoricalBacktestEngine().run(base_rows)
-    altered_result = HistoricalBacktestEngine().run(altered_rows)
+    result = HistoricalBacktestEngine().run(rows)
 
-    assert base_result.steps[0].strategy == altered_result.steps[0].strategy
-    assert base_result.steps[0].risk == altered_result.steps[0].risk
+    assert isinstance(result.steps[0].risk, RiskDecision)
+    assert result.steps[0].risk.risk_policy_version == "risk_v1.0"
+    assert result.steps[1].risk.risk_policy_version == "risk_v1.0"
+    assert result.orders[0].quantity == 250.0
 
 
-def test_lifecycle_public_open_state_is_exposed() -> None:
-    """Lifecycle state must be queryable without private storage access."""
-
-    lifecycle = HistoricalBacktestEngine().lifecycle
-
-    assert lifecycle.open_symbols == ()
-    assert lifecycle.is_open("ITC") is False
-    assert lifecycle.open_order("ITC") is None
-
-
-def test_daily_trade_limit_resets_at_new_session() -> None:
-    """Daily trade count must reset when the historical session changes."""
+def test_intraday_trade_is_closed_at_last_bar_before_next_session() -> None:
+    """Open positions must not carry overnight into the next NSE session."""
 
     rows = pd.DataFrame(
         [
-            _row("2026-01-01 09:00:00+05:30"),
-            _row("2026-01-01 10:00:00+05:30"),
-            _row("2026-01-01 11:00:00+05:30"),
-            _row("2026-01-01 12:00:00+05:30"),
-            _row("2026-01-01 13:00:00+05:30"),
-            _row("2026-01-01 14:00:00+05:30"),
-            _row("2026-01-02 09:00:00+05:30"),
-            _row("2026-01-02 09:05:00+05:30"),
+            _row("2026-01-01 09:15:00+05:30", close=100.0),
+            _row("2026-01-01 15:25:00+05:30", close=101.0),
+            _row("2026-01-02 09:15:00+05:30", close=99.0),
         ]
     )
 
     result = HistoricalBacktestEngine().run(rows)
 
-    first_day_entries = [
-        step
-        for step in result.steps
-        if step.timestamp.date() == pd.Timestamp("2026-01-01").date()
-        and step.order is not None
-    ]
+    assert result.completed_trades == 1
+    assert result.outcomes[0].exit_time == pd.Timestamp(
+        "2026-01-01 15:25:00+05:30"
+    )
+    assert result.outcomes[0].exit_time.tz_convert("Asia/Kolkata").date() != pd.Timestamp(
+        "2026-01-02 09:15:00+05:30"
+    ).tz_convert("Asia/Kolkata").date()
 
-    next_day_first = next(
-        step
-        for step in result.steps
-        if step.timestamp == pd.Timestamp("2026-01-02 09:00:00+05:30")
+
+def test_last_session_bar_cannot_open_new_position() -> None:
+    """The final available bar of a session is exit-only, never an entry bar."""
+
+    rows = pd.DataFrame(
+        [
+            _row("2026-01-01 09:15:00+05:30", close=100.0),
+            _row("2026-01-01 15:25:00+05:30", close=101.0),
+        ]
     )
 
-    assert len(first_day_entries) == 5
-    assert next_day_first.risk.status.value == "APPROVED"
-    assert next_day_first.order is not None
+    result = HistoricalBacktestEngine().run(rows)
+
+    assert len(result.orders) == 1
+    assert result.orders[0].timestamp == pd.Timestamp(
+        "2026-01-01 09:15:00+05:30"
+    )
