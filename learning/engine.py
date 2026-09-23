@@ -7,6 +7,7 @@ from collections import defaultdict
 from analysis.error_analysis import (
     ErrorAnalysisReport,
     FindingType,
+    PatternFinding,
 )
 from journal.models import TradeJournalRecord
 
@@ -188,9 +189,73 @@ class LearningEngine:
                 )
             )
 
-        return LearningReport(
-            experiences=tuple(experiences)
+        experiences.extend(
+            self._learn_from_patterns(
+                analysis.pattern_findings,
+                record_ids,
+            )
         )
+
+        return LearningReport(
+            experiences=tuple(
+                sorted(
+                    experiences,
+                    key=lambda item: (
+                        item.pattern.value,
+                        item.symbol or "",
+                        item.source_trade_ids,
+                    ),
+                )
+            )
+        )
+
+    def _learn_from_patterns(
+        self,
+        patterns: tuple[PatternFinding, ...],
+        record_ids: set[str],
+    ) -> list[LearningExperience]:
+        """Convert Phase-17 patterns into immutable learning evidence."""
+
+        experiences: list[LearningExperience] = []
+
+        for pattern in patterns:
+            source_ids = tuple(
+                sorted(
+                    trade_id
+                    for trade_id in pattern.source_trade_ids
+                    if trade_id in record_ids
+                )
+            )
+
+            if len(source_ids) < self.config.minimum_evidence:
+                continue
+
+            if pattern.occurrence_rate < self.config.minimum_occurrence_rate:
+                continue
+
+            confidence = self._confidence(
+                evidence_count=len(source_ids),
+                population_count=pattern.population_count,
+                occurrence_rate=pattern.occurrence_rate,
+            )
+
+            experiences.append(
+                LearningExperience(
+                    pattern=LearningPattern(pattern.pattern_type.value),
+                    symbol=None,
+                    evidence_count=len(source_ids),
+                    population_count=pattern.population_count,
+                    occurrence_rate=pattern.occurrence_rate,
+                    confidence=confidence,
+                    source_trade_ids=source_ids,
+                    conditions=pattern.conditions,
+                    average_net_pnl=pattern.average_net_pnl,
+                    total_net_pnl=pattern.total_net_pnl,
+                    detail=pattern.detail,
+                )
+            )
+
+        return experiences
 
     @staticmethod
     def _confidence(
