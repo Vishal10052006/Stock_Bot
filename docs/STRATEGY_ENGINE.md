@@ -109,3 +109,21 @@ S19/S20 compatibility and causal checks now include:
 These tests establish implementation-level causal invariants. They are not empirical
 proof of out-of-sample trading performance; OOS and walk-forward evidence remains a
 separate experimental validation stage.
+
+
+### S21 experiment contract status
+
+The first S21 boundary is now explicit through `experiments.ExperimentDefinition`.
+Each experiment definition freezes:
+
+- research question, hypothesis, and failure criterion;
+- dataset and code identity;
+- evaluation period and symbol universe;
+- method;
+- fixed parameters;
+- explicitly allowed changes.
+
+The definition has deterministic JSON serialization and a SHA-256 fingerprint so
+an experiment result can be tied back to the exact specification that produced it.
+This is an experiment-definition contract only; it does not constitute measured
+trading performance or OOS/walk-forward evidence.
