@@ -33,4 +33,5 @@ jobs:
             tests/test_prediction_feature_drift.py \
             tests/test_prediction_storage.py \
             tests/test_prediction_inference.py \
+            tests/test_prediction_failures.py \
             tests/datasets/test_return_targets.py
