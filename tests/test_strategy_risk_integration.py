@@ -6,6 +6,8 @@ import pandas as pd
 
 from experiments.paper_journal import PaperEvidenceJournal
 
+from experiments.paper_journal import PaperEvidenceJournal
+
 from backtesting.engine import HistoricalBacktestEngine
 from trading.paper.decision_loop import PaperDecisionLoop
 
@@ -78,6 +80,35 @@ def test_backtest_uses_risk_engine_position_size() -> None:
     assert result.orders
     assert result.orders[0].quantity == 166.0
     assert result.steps[0].risk.status.value == "APPROVED"
+
+
+def test_paper_run_has_deterministic_identity_and_persists_evidence(tmp_path) -> None:
+    """The paper boundary must bind evidence to the completed run identity."""
+    rows = pd.DataFrame(
+        [
+            risk_row("2026-09-21 10:00:00"),
+            risk_row("2026-09-21 10:05:00"),
+        ]
+    )
+    journal = PaperEvidenceJournal(tmp_path / "paper_evidence.jsonl")
+
+    loop = PaperDecisionLoop()
+    run, record = loop.run_and_persist_evidence(
+        rows,
+        journal=journal,
+        fill_timestamps={0: pd.Timestamp("2026-09-21 10:00:01", tz="UTC")},
+        false_signals={0: False, 1: True},
+        equity_observations={0: 100_000.0},
+        calibration_outcomes={0: 1.0},
+        operational_events=2,
+        evidence_version="PAPER-EVIDENCE-v1",
+        dataset_version="paper-test-v1",
+        code_version="test-code-v1",
+    )
+
+    assert run.run_id == record.source_run_id
+    assert run.run_id == loop.run(rows).run_id
+    assert journal.records() == (record,)
 
 
 def test_paper_run_has_deterministic_identity_and_persists_evidence(tmp_path) -> None:
