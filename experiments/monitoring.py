@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import hashlib
+import json
 import math
 
 from research.monitoring.drift import population_stability_index
@@ -60,6 +62,17 @@ class MonitoringReport:
     stale_rate: float
     prediction_psi: float | None
     alerts: tuple[str, ...]
+
+    @property
+    def fingerprint(self) -> str:
+        payload = {
+            "error_rate": self.error_rate,
+            "stale_rate": self.stale_rate,
+            "prediction_psi": self.prediction_psi,
+            "alerts": self.alerts,
+        }
+        canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+        return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
     @property
     def healthy(self) -> bool:
