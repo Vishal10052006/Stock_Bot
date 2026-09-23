@@ -16,6 +16,8 @@ It owns:
 - maximum entries/day;
 - maximum open positions;
 - gross exposure limit;
+- optional available-cash constraint;
+- optional total-drawdown limit;
 - optional symbol/sector concentration;
 - optional correlation concentration;
 - optional volatility-aware sizing;
@@ -37,6 +39,9 @@ The defaults match TRADING_SPECIFICATION.md:
 - maximum simultaneous positions: 3;
 - maximum gross exposure: 75%;
 - minimum target: 1.5R.
+
+The specification does not freeze a numeric total-drawdown cap, so that
+control remains opt-in.
 
 These defaults are not silently changed by the Risk Engine.
 
