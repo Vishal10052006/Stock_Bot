@@ -36,6 +36,7 @@ class RiskDecision:
     reason: str
     risk_version: str = "RISK-v1.0"
     reason_code: RiskReasonCode | None = None
+    resized: bool = False
 
     def __post_init__(self) -> None:
         timestamp = pd.Timestamp(self.timestamp)
@@ -62,11 +63,11 @@ class RiskDecision:
     @property
     def action(self) -> RiskAction:
         """Return the downstream action from the legacy status."""
-        return (
-            RiskAction.APPROVE
-            if self.status is RiskDecisionStatus.APPROVED
-            else RiskAction.REJECT
-        )
+        if self.status is RiskDecisionStatus.REJECTED:
+            return RiskAction.REJECT
+        if self.resized:
+            return RiskAction.RESIZE
+        return RiskAction.APPROVE
 
 
 def evaluate_strategy_risk(
