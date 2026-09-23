@@ -36,6 +36,7 @@ def test_target_uses_exactly_n_strictly_future_bars() -> None:
     assert result.iloc[0]["future_timestamp"] == candles.iloc[2]["timestamp"]
     assert result.iloc[0]["future_close"] == 102.0
     assert result.iloc[0]["future_return"] == pytest.approx(0.02)
+    assert result.iloc[0]["horizon_bars"] == 2
 
 
 def test_incomplete_future_horizon_is_excluded() -> None:
