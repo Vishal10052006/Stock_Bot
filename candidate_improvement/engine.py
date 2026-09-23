@@ -4,14 +4,17 @@ from __future__ import annotations
 
 import hashlib
 import json
-from typing import Mapping
+from typing import Callable, Mapping
 
 from experiments.definition import ExperimentDefinition
+from experiments.record import ExperimentRecord
+from experiments.runner import ExperimentExecution, ExperimentRunner
 from learning.models import LearningExperience
 
 from .models import (
     ALLOWED_CHANGE_FIELDS,
     CandidateExperimentBinding,
+    CandidateExperimentExecution,
     CandidateImprovementProposal,
     CandidateStatus,
     CandidateValidation,
@@ -121,6 +124,27 @@ class CandidateImprovementEngine:
             candidate_fingerprint=candidate.fingerprint,
             experiment_definition_fingerprint=definition_fingerprint,
             parameter_changes=candidate.parameter_changes,
+        )
+
+    @classmethod
+    def execute_bound_experiment(
+        cls,
+        candidate: CandidateImprovementProposal,
+        experiment_definition: ExperimentDefinition,
+        executor: Callable[[ExperimentDefinition], ExperimentRecord],
+    ) -> CandidateExperimentExecution:
+        """Execute a bound candidate through the existing ExperimentRunner.
+
+        The candidate is not applied by this method. The supplied executor owns
+        experiment-specific strategy construction and must return an immutable
+        ExperimentRecord bound to the same definition. This preserves the
+        existing experiment runner's identity and validation boundaries.
+        """
+        binding = cls.bind_to_experiment(candidate, experiment_definition)
+        execution: ExperimentExecution = ExperimentRunner(experiment_definition).run(executor)
+        return CandidateExperimentExecution(
+            binding=binding,
+            execution=execution,
         )
 
     @staticmethod
