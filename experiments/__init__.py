@@ -9,6 +9,7 @@ from .monitoring import MonitoringPolicy, MonitoringReport, MonitoringSnapshot, 
 from .paper_evidence import (
     PaperEvidenceCollector,
     PaperEvidenceReport,
+    collect_paper_decision_run,
     PaperEvidenceSnapshot,
     validate_paper_evidence,
 )
@@ -28,6 +29,7 @@ __all__ = [
     "MonitoringSnapshot",
     "PaperEvidenceCollector",
     "PaperEvidenceReport",
+    "collect_paper_decision_run",
     "PaperEvidenceSnapshot",
     "ExperimentDefinition",
     "ExperimentExecution",
