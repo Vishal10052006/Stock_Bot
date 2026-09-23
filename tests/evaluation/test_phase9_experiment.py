@@ -40,12 +40,25 @@ def test_feature_coverage_report_preserves_frozen_schema() -> None:
 
 
 def test_phase9_source_limitation_report_is_explicit() -> None:
-    report = _phase9_data_source_limitations()
+    data = pd.DataFrame(
+        {
+            feature: [None] * 4
+            for feature in (
+                "sector_return_1",
+                "sector_return_3",
+                "sector_return_12",
+                "sector_volatility_20",
+                "stock_vs_sector_return_1",
+            )
+        }
+    )
+
+    report = _phase9_data_source_limitations(data)
 
     sector = report["sector_context"]
     assert sector["observed_coverage_pct"] == 0.0
     assert sector["timeframe_minutes"] == 5
-    assert "Yahoo Finance" in sector["source"]
+    assert sector["source"] == "Upstox"
     assert "not fabricated" in sector["handling"]
 
     retest = report["retest_distance_pct"]
