@@ -44,3 +44,18 @@ without implying that any particular decision is scientifically validated.
 The record contract does not itself run a backtest, OOS evaluation, or
 walk-forward evaluation. Those execution stages remain separate and must feed
 their measured outputs into the record.
+
+
+## S21 execution boundary
+
+`ExperimentRunner` now provides the explicit execution boundary for one frozen
+`ExperimentDefinition`. An executor receives that definition and must return an
+`ExperimentRecord` whose fingerprint matches the definition.
+
+The runner intentionally does not invent a dataset, model, backtest, OOS split,
+or walk-forward policy. Those components remain explicit inputs to the executor.
+This prevents hidden research configuration and keeps experiment policy auditable.
+
+The runner therefore establishes reproducible orchestration, but it is not itself
+evidence of model quality, profitability, OOS performance, or walk-forward
+performance.
