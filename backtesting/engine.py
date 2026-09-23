@@ -26,7 +26,7 @@ from execution.trading_execution import (
 )
 from paper.runtime import PaperOrder, PaperTradingRuntime
 from trading.paper.lifecycle import PaperTradeLifecycle, TradeOutcome
-from trading.risk.contracts import RiskDecision
+from trading.risk.gate import RiskDecision
 from trading.risk.engine import RiskEngine, RiskInput
 from trading.signals.candidate import build_candidate
 from trading.signals.models import CandidateConfig, CandidateDirection
