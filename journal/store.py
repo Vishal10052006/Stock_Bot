@@ -29,10 +29,18 @@ class TradeJournalStore:
         if not isinstance(record, (TradeDecisionRecord, TradeJournalRecord)):
             raise TypeError("record must be a TradeDecisionRecord or TradeJournalRecord")
 
-        existing_ids = {item.trade_id for item in self.read_events()}
-        if record.trade_id in existing_ids:
+        record_kind = "decision" if isinstance(record, TradeDecisionRecord) else "outcome"
+        existing_keys = {
+            (
+                "decision" if isinstance(item, TradeDecisionRecord) else "outcome",
+                item.trade_id,
+            )
+            for item in self.read_events()
+        }
+        key = (record_kind, record.trade_id)
+        if key in existing_keys:
             raise DuplicateJournalRecordError(
-                f"journal trade_id already exists: {record.trade_id}"
+                f"journal {record_kind} already exists for trade_id: {record.trade_id}"
             )
 
         self.path.parent.mkdir(parents=True, exist_ok=True)
