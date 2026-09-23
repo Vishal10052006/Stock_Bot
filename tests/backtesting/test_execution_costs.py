@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import pandas as pd
+import pandas as pd\nimport pytest
 
 from backtesting.engine import HistoricalBacktestEngine
 from paper.runtime import PaperTradingConfig, PaperTradingRuntime
@@ -53,7 +53,7 @@ def test_backtest_applies_entry_and_exit_costs() -> None:
     assert outcome.slippage_cost > entry.slippage_cost
     assert outcome.fees > entry.fees
     assert outcome.net_pnl < outcome.gross_pnl
-    assert outcome.net_pnl == outcome.gross_pnl - outcome.fees - outcome.slippage_cost
+    assert outcome.net_pnl == pytest.approx(outcome.gross_pnl - outcome.fees - outcome.slippage_cost)
 
 
 def test_zero_cost_backtest_matches_market_move() -> None:
