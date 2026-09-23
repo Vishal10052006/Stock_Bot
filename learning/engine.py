@@ -24,7 +24,7 @@ _FINDING_MAP = {
     FindingType.LARGE_MAE: (LearningPattern.LARGE_MAE, ErrorClass.LARGE_ADVERSE_EXCURSION),
     FindingType.LOW_MFE: (LearningPattern.LOW_MFE, ErrorClass.LOW_FAVORABLE_EXCURSION),
     FindingType.COST_DRAG: (LearningPattern.COST_DRAG, ErrorClass.EXECUTION_COST_DRAG),
-    FindingType.WIN: (LearningPattern.WIN, ErrorClass.OUTCOME_LOSS),
+    FindingType.WIN: (LearningPattern.WIN, ErrorClass.POSITIVE_OUTCOME),
 }
 
 _PATTERN_MAP = {
@@ -178,8 +178,11 @@ class LearningEngine:
             return
 
         average_reward = sum(reward_values) / len(reward_values)
-        if error_class is not ErrorClass.OUTCOME_LOSS and average_reward < self.config.minimum_negative_reward:
-            # Context/error experiences must still be materially negative.
+        if error_class not in {ErrorClass.OUTCOME_LOSS, ErrorClass.POSITIVE_OUTCOME} and average_reward > self.config.minimum_negative_reward:
+            return
+        if error_class is ErrorClass.OUTCOME_LOSS and average_reward >= 0:
+            return
+        if error_class is ErrorClass.POSITIVE_OUTCOME and average_reward <= 0:
             return
 
         confidence = occurrence_rate * (evidence_count / (evidence_count + 5.0))
