@@ -262,3 +262,70 @@ class PaperEvidenceCollector:
             operational_error_count=self._operational_error_count,
             stale_event_count=self._stale_event_count,
         )
+
+
+def collect_paper_decision_run(
+    run: object,
+    *,
+    fill_timestamps: dict[int, object] | None = None,
+    false_signals: dict[int, bool] | None = None,
+    equity_observations: dict[int, float] | None = None,
+    calibration_outcomes: dict[int, float] | None = None,
+    operational_events: int = 0,
+    operational_errors: int = 0,
+    stale_events: int = 0,
+    evidence_version: str,
+    dataset_version: str,
+    code_version: str,
+) -> PaperEvidenceSnapshot:
+    """Convert a PaperDecisionRun into a frozen evidence snapshot.
+
+    Optional maps are keyed by chronological step index. They make evidence
+    that cannot be inferred from the strategy step explicit instead of
+    inventing latency, outcomes, equity, or calibration observations.
+    """
+
+    steps = getattr(run, "steps", None)
+    if steps is None:
+        raise TypeError("run must expose a steps sequence")
+
+    if operational_events < 0 or operational_errors < 0 or stale_events < 0:
+        raise ValueError("operational event counts must be non-negative")
+    if operational_errors > operational_events:
+        raise ValueError("operational_errors cannot exceed operational_events")
+    if stale_events > operational_events:
+        raise ValueError("stale_events cannot exceed operational_events")
+
+    fill_timestamps = fill_timestamps or {}
+    false_signals = false_signals or {}
+    equity_observations = equity_observations or {}
+    calibration_outcomes = calibration_outcomes or {}
+
+    collector = PaperEvidenceCollector(
+        evidence_version=evidence_version,
+        dataset_version=dataset_version,
+        code_version=code_version,
+    )
+
+    for index, step in enumerate(steps):
+        collector.record_step(
+            step,
+            fill_timestamp=fill_timestamps.get(index),
+            false_signal=false_signals.get(index),
+            realized_equity=equity_observations.get(index),
+            calibration_outcome=calibration_outcomes.get(index),
+        )
+
+    for _ in range(operational_events):
+        collector.record_operational_event(
+            error=False,
+            stale=False,
+        )
+
+    # Preserve the supplied aggregate operational flags without creating
+    # synthetic market observations.
+    if operational_errors or stale_events:
+        collector._operational_error_count += operational_errors
+        collector._stale_event_count += stale_events
+
+    return collector.snapshot()
