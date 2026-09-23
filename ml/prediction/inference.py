@@ -73,6 +73,8 @@ class PredictionInferenceService:
         }
         if not expected.issubset(result.columns):
             raise ValueError("predictor returned an invalid classification schema")
+        if len(result) != len(request.features):
+            raise ValueError("predictor returned an unexpected row count")
 
         predictions: list[ClassificationPrediction] = []
         for _, row in result.iterrows():
