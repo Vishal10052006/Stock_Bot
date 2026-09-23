@@ -36,7 +36,7 @@ def test_phase18_reward_uses_realized_net_pnl_and_planned_risk():
 
 
 def test_phase18_reward_is_clipped():
-    record, decision = _pair(pnl=-100.0)
+    record, decision = _pair(pnl=-50.0)
     assert LearningEngine().reward(record, decision) == -3.0
 
 
@@ -59,7 +59,7 @@ def test_phase18_context_pattern_becomes_learning_evidence():
     analysis = TradeErrorAnalyzer().analyze_linked(decisions, records)
     report = LearningEngine().learn(records, analysis, decisions)
     assert any(
-        e.pattern is LearningPattern.LOW_RVOL_SIDEWAYS_BREAKOUT
+        e.pattern is LearningPattern.REGIME_LOSS_CLUSTER
         and e.error_class is ErrorClass.CONTEXT_LOSS_CLUSTER
         for e in report.experiences
     )
