@@ -7,10 +7,14 @@ Phase 8 baseline strategy contract does not consume prediction probabilities.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, fields, is_dataclass
+from enum import Enum
+import hashlib
+import json
 
 import pandas as pd
 
+from experiments.paper_journal import PaperEvidenceJournal, PaperEvidenceRecord, persist_paper_decision_run
 from execution.trading_execution import (
     ExecutionAuthorization,
     authorize_risk_decision,
@@ -38,6 +42,13 @@ class PaperDecisionRun:
     """Immutable result of a chronological paper decision run."""
 
     steps: tuple[PaperDecisionStep, ...]
+
+    @property
+    def run_id(self) -> str:
+        """Return a deterministic identity for this completed paper run."""
+        payload = [_canonical_value(step) for step in self.steps]
+        canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+        return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
     @property
     def orders(self) -> tuple[PaperOrder, ...]:
@@ -196,6 +207,48 @@ class PaperDecisionLoop:
 
         return PaperDecisionRun(steps=tuple(steps))
 
+    def run_and_persist_evidence(
+        self,
+        rows: pd.DataFrame,
+        *,
+        journal: PaperEvidenceJournal,
+        price_column: str = "close",
+        quantity: float = 1.0,
+        fill_timestamps: dict[int, object] | None = None,
+        false_signals: dict[int, bool] | None = None,
+        equity_observations: dict[int, float] | None = None,
+        calibration_outcomes: dict[int, float] | None = None,
+        operational_events: int = 0,
+        operational_errors: int = 0,
+        stale_events: int = 0,
+        evidence_version: str,
+        dataset_version: str,
+        code_version: str,
+    ) -> tuple[PaperDecisionRun, PaperEvidenceRecord]:
+        """Run paper decisions and persist evidence under the run's stable identity.
+
+        Evidence that cannot be inferred safely remains explicit at the API
+        boundary; this method does not synthesize latency, calibration,
+        equity, false-signal, or operational observations.
+        """
+        run = self.run(rows, price_column=price_column, quantity=quantity)
+        record = persist_paper_decision_run(
+            run,
+            journal=journal,
+            source_run_id=run.run_id,
+            fill_timestamps=fill_timestamps,
+            false_signals=false_signals,
+            equity_observations=equity_observations,
+            calibration_outcomes=calibration_outcomes,
+            operational_events=operational_events,
+            operational_errors=operational_errors,
+            stale_events=stale_events,
+            evidence_version=evidence_version,
+            dataset_version=dataset_version,
+            code_version=code_version,
+        )
+        return run, record
+
 
     @staticmethod
     def _strategy_input_from_row(row: pd.Series) -> StrategyInput:
@@ -236,3 +289,26 @@ class PaperDecisionLoop:
             regime=str(row["regime"]),
             regime_probability=float(row["regime_probability"]),
         )
+
+
+def _canonical_value(value: object) -> object:
+    """Convert run output objects into deterministic JSON-compatible values."""
+    if isinstance(value, pd.Timestamp):
+        return value.isoformat()
+    if isinstance(value, Enum):
+        return value.value
+    if is_dataclass(value):
+        return {
+            field.name: _canonical_value(getattr(value, field.name))
+            for field in fields(value)
+        }
+    if isinstance(value, dict):
+        return {
+            str(key): _canonical_value(item)
+            for key, item in sorted(value.items(), key=lambda pair: str(pair[0]))
+        }
+    if isinstance(value, (list, tuple)):
+        return [_canonical_value(item) for item in value]
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    return str(value)
