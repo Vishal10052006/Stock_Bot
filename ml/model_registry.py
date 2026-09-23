@@ -12,7 +12,7 @@ from typing import Mapping
 
 @dataclass(frozen=True, slots=True)
 class ModelRegistryRecord:
-    """Reproducibility record for one candidate SignalModel."""
+    """Reproducibility record for one candidate Prediction Bot model."""
 
     model_version: str
     model_family: str
@@ -27,6 +27,7 @@ class ModelRegistryRecord:
     test_period_end: str
     hyperparameters: Mapping[str, object]
     metrics: Mapping[str, float]
+    target_version: str = "unspecified"
     approval_status: str = "RESEARCH_ONLY"
 
     def __post_init__(self) -> None:
@@ -43,9 +44,14 @@ class ModelRegistryRecord:
             self.validation_period_end,
             self.test_period_start,
             self.test_period_end,
+            self.target_version,
         )
         if not all(str(value).strip() for value in required):
             raise ValueError("registry provenance fields must not be empty")
 
-        if self.approval_status not in {"RESEARCH_ONLY", "CANDIDATE", "APPROVED"}:
+        if self.approval_status not in {
+            "RESEARCH_ONLY",
+            "CANDIDATE",
+            "APPROVED",
+        }:
             raise ValueError("invalid approval_status")
