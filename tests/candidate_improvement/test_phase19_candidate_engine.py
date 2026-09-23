@@ -7,6 +7,7 @@ from candidate_improvement import (
 )
 from experiments import ExperimentDefinition, ExperimentRecord
 from learning import ErrorClass, LearningExperience, LearningPattern
+from trading.strategy.models import BaselineStrategyConfig, StrategyConfig
 
 
 def _experience() -> LearningExperience:
@@ -48,12 +49,32 @@ def _definition(*, allowed_change=("baseline.minimum_rvol",)) -> ExperimentDefin
     )
 
 
-def _candidate() -> tuple[object, ExperimentDefinition]:
-    definition = _definition()
+def _baseline() -> StrategyConfig:
+    return StrategyConfig(
+        strategy_id="baseline_trend_v1",
+        strategy_version="STRAT-v1.0",
+        baseline=BaselineStrategyConfig(
+            minimum_rvol=1.0,
+            minimum_regime_probability=0.50,
+            strategy_version="v1.0",
+        ),
+    )
+
+
+def _candidate(
+    *,
+    parameter_changes: dict[str, object] | None = None,
+    definition: ExperimentDefinition | None = None,
+) -> tuple[object, ExperimentDefinition]:
+    definition = definition or _definition(
+        allowed_change=tuple((parameter_changes or {"baseline.minimum_rvol": 1.10}).keys())
+    )
     candidate = CandidateImprovementEngine().propose(
         _experience(),
-        baseline_strategy_fingerprint="strategy-fp",
-        parameter_changes={"baseline.minimum_rvol": 1.10},
+        baseline_strategy_fingerprint=CandidateImprovementEngine.strategy_config_fingerprint(
+            _baseline()
+        ),
+        parameter_changes=parameter_changes or {"baseline.minimum_rvol": 1.10},
         experiment_definition=definition,
         candidate_id="CAND-001",
     )
@@ -75,9 +96,7 @@ def test_candidate_is_evidence_bound_and_immutable() -> None:
     assert candidate.status is CandidateStatus.PROPOSED
     assert candidate.source_trade_ids == ("T1", "T2", "T3")
     assert candidate.experiment_definition_fingerprint == definition.fingerprint()
-    assert candidate.parameter_changes == (
-        ("baseline.minimum_rvol", "1.1"),
-    )
+    assert candidate.parameter_changes == (("baseline.minimum_rvol", "1.1"),)
     assert candidate.fingerprint == candidate.fingerprint
 
 
@@ -130,6 +149,35 @@ def test_candidate_binds_to_exact_frozen_experiment() -> None:
     assert candidate.status is CandidateStatus.PROPOSED
 
 
+def test_candidate_materializes_research_strategy_without_mutating_baseline() -> None:
+    baseline = _baseline()
+    baseline_fingerprint = CandidateImprovementEngine.strategy_config_fingerprint(baseline)
+    candidate, _ = _candidate()
+
+    materialized = CandidateImprovementEngine.materialize_strategy_config(
+        candidate,
+        baseline,
+        expected_baseline_fingerprint=baseline_fingerprint,
+    )
+
+    assert materialized.baseline.minimum_rvol == 1.10
+    assert baseline.baseline.minimum_rvol == 1.0
+    assert (
+        CandidateImprovementEngine.strategy_config_fingerprint(baseline)
+        == baseline_fingerprint
+    )
+    assert materialized.strategy_version == baseline.strategy_version
+
+
+def test_materialization_rejects_wrong_baseline_identity() -> None:
+    candidate, _ = _candidate()
+    with pytest.raises(ValueError, match="baseline strategy"):
+        CandidateImprovementEngine.materialize_strategy_config(
+            candidate,
+            StrategyConfig(strategy_version="STRAT-v9.0"),
+        )
+
+
 def test_candidate_execution_routes_through_experiment_runner() -> None:
     candidate, definition = _candidate()
     calls: list[str] = []
@@ -153,19 +201,18 @@ def test_candidate_execution_routes_through_experiment_runner() -> None:
 
 def test_candidate_execution_rejects_wrong_record_identity() -> None:
     candidate, definition = _candidate()
-    different_definition = _definition()
     different_definition = ExperimentDefinition(
         experiment_id="EXP-P19-WRONG",
-        research_question=different_definition.research_question,
-        hypothesis=different_definition.hypothesis,
-        failure_criterion=different_definition.failure_criterion,
-        dataset_version=different_definition.dataset_version,
-        code_version=different_definition.code_version,
-        period_start=different_definition.period_start,
-        period_end=different_definition.period_end,
-        symbols=different_definition.symbols,
-        method=different_definition.method,
-        allowed_change=different_definition.allowed_change,
+        research_question=definition.research_question,
+        hypothesis=definition.hypothesis,
+        failure_criterion=definition.failure_criterion,
+        dataset_version=definition.dataset_version,
+        code_version=definition.code_version,
+        period_start=definition.period_start,
+        period_end=definition.period_end,
+        symbols=definition.symbols,
+        method=definition.method,
+        allowed_change=definition.allowed_change,
     )
 
     def executor(_: ExperimentDefinition) -> ExperimentRecord:
