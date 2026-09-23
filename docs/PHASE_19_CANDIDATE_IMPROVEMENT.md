@@ -141,3 +141,16 @@ Phase 19 does not claim that a proposed change improves profitability,
 risk-adjusted returns, drawdown, robustness, or live performance. Those claims
 require the existing backtest, OOS, walk-forward, paper-evidence, and readiness
 controls.
+
+
+## Phase-19 execution invariant
+
+A candidate must not merely be described as an experiment change; the bound experiment execution path must receive the candidate's materialized strategy configuration. The implementation therefore:
+
+1. binds the candidate to the exact frozen `ExperimentDefinition`;
+2. verifies the candidate's baseline strategy fingerprint;
+3. materializes a new immutable `StrategyConfig` from the baseline plus the whitelisted candidate changes;
+4. passes that research-only config to the experiment executor;
+5. runs the result through `ExperimentRunner`, which verifies the returned `ExperimentRecord` belongs to the same frozen definition.
+
+The authoritative baseline object is never mutated, and Phase 19 does not modify Risk, Execution, model registry state, or live enablement.
