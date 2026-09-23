@@ -14,7 +14,7 @@ Prediction Bot is prediction-only:
 `Market/Research/Analysis -> causal features -> Prediction -> Strategy -> Risk -> Execution`
 
 Prediction outputs are probabilities, return forecasts, multi-horizon forecasts,
-and uncertainty/provenance.  Trade decisions, sizing, stops, risk authorization,
+and uncertainty/provenance. Trade decisions, sizing, stops, risk authorization,
 and orders remain downstream.
 
 ## Engineering coverage
@@ -34,7 +34,9 @@ and orders remain downstream.
 | Artifact persistence + SHA-256 manifest | COMPLETE | `ml/prediction/artifacts.py` |
 | File-backed model registry | COMPLETE | `ml/prediction/registry.py` |
 | Return-forecast contract | COMPLETE | `ml/prediction/contracts.py` |
+| Return forecasting baselines | COMPLETE | `ml/models/return_forecast.py` |
 | Multi-horizon forecast contract | COMPLETE | `ml/prediction/contracts.py` |
+| Chronological conformal return intervals | COMPLETE | `ml/models/return_forecast.py` |
 | Uncertainty diagnostics | COMPLETE | `ml/prediction/uncertainty.py` |
 | Prediction distribution drift | COMPLETE | `ml/prediction/drift.py` |
 | Regime/symbol/date robustness slices | COMPLETE | `ml/evaluation/robustness.py` |
@@ -45,11 +47,22 @@ and orders remain downstream.
 | Foundation-model/TimesFM research | RESEARCH-ONLY | no dependency or model claim added |
 | Automatic self-learning | NOT AUTOMATIC | experiment-driven changes only |
 
+## Return-forecast uncertainty boundary
+
+`residual_std` is retained as a training-fit diagnostic only. It is not
+treated as calibrated predictive uncertainty.
+
+Return forecasting now also supports chronological split-conformal calibration:
+a model is fitted on an earlier training partition, absolute residuals are
+measured on a later calibration partition, and the resulting empirical radius
+can produce prediction intervals. The final external test partition must remain
+untouched.
+
 ## Real-data gate
 
 The canonical Phase 9 real-data build is reproducible and uses PIT universe
 membership, Upstox market data, causal 5-minute context, and explicit missing
-sector coverage.  The latest persisted build is:
+sector coverage. The latest persisted build is:
 
 `data/research/phase9_dataset_20260923T154216Z.parquet`
 
@@ -57,18 +70,22 @@ with 5,308 decision rows and 55 symbols across five decision dates.
 
 The latest benchmark established that the pipeline reaches model evaluation,
 but its experiment JSON initially required a serialization fix for nested
-NumPy confusion matrices.  The current branch includes that fix.
+NumPy confusion matrices. The current branch includes that fix.
 
 The dataset also showed incomplete historical sector-index coverage for older
-dates.  Missing sector context is represented honestly rather than fabricated;
+dates. Missing sector context is represented honestly rather than fabricated;
 this remains an empirical data-coverage limitation.
 
 ## Release gate
 
 Before merging this branch as a production-facing Prediction Bot release,
 run the repository's full test suite and the real-data benchmark from a clean
-environment.  The external test partition must remain untouched during model
+environment. The external test partition must remain untouched during model
 selection and calibration.
+
+The return-forecast interval implementation is contract/test complete, but
+empirical interval coverage must still be measured on untouched chronological
+OOS data before treating it as production-calibrated uncertainty.
 
 No predictive accuracy, profitability, or future performance claim is made by
 this status document.
