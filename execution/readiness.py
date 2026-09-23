@@ -26,6 +26,7 @@ class ReadinessEvidence:
     code_version: str
     validated_at: datetime
     source: str
+    evidence_kind: str = "unspecified"
 
     def __post_init__(self) -> None:
         for name in (
@@ -34,6 +35,7 @@ class ReadinessEvidence:
             "dataset_version",
             "code_version",
             "source",
+            "evidence_kind",
         ):
             if not getattr(self, name).strip():
                 raise ValueError(f"{name} must be non-empty")
@@ -48,6 +50,7 @@ class ReadinessEvidence:
             "code_version": self.code_version,
             "validated_at": self.validated_at.isoformat(),
             "source": self.source,
+            "evidence_kind": self.evidence_kind,
         }
         return json.dumps(payload, sort_keys=True, separators=(",", ":"))
 
@@ -97,6 +100,7 @@ class ReadinessEvidence:
             code_version=lineage.code_version,
             validated_at=validated_at,
             source=f"lineage:{lineage_id}",
+            evidence_kind="experiment_lineage",
         )
 
 
@@ -130,6 +134,25 @@ class LiveReadinessReport:
 class LiveReadinessGate:
     """Fail-closed checklist corresponding to TRADING_SPECIFICATION §26."""
 
+    _EVIDENCE_KINDS = {
+        "historical_data_validated": {"validation", "experiment_lineage"},
+        "indicators_validated": {"validation", "experiment_lineage"},
+        "features_leakage_safe": {"validation", "audit", "experiment_lineage"},
+        "labels_validated": {"validation", "experiment_lineage"},
+        "baseline_validated": {"experiment_lineage"},
+        "model_validated": {"experiment_lineage"},
+        "realistic_backtest_validated": {"backtest", "experiment_lineage"},
+        "leakage_audit_passed": {"audit", "experiment_lineage"},
+        "oos_validated": {"oos", "experiment_lineage"},
+        "walk_forward_validated": {"walk_forward", "experiment_lineage"},
+        "paper_evidence_validated": {"paper_evidence"},
+        "risk_controls_validated": {"risk"},
+        "monitoring_validated": {"monitoring"},
+        "kill_switch_validated": {"safety"},
+        "broker_integration_validated": {"broker"},
+        "reconciliation_validated": {"reconciliation"},
+        "compliance_verified_current": {"compliance"},
+    }
     _FIELDS = (
         "historical_data_validated",
         "indicators_validated",
@@ -196,6 +219,13 @@ class LiveReadinessGate:
                 ):
                     raise ValueError(
                         f"artifact_fingerprint must be a SHA-256 hex digest: {item.gate}"
+                    )
+                allowed_kinds = self._EVIDENCE_KINDS[item.gate]
+                if item.evidence_kind not in allowed_kinds:
+                    allowed = ", ".join(sorted(allowed_kinds))
+                    raise ValueError(
+                        f"invalid evidence_kind for {item.gate}: "
+                        f"{item.evidence_kind!r}; expected one of {allowed}"
                     )
                 evidence_by_gate[item.gate] = item
             for field in self._FIELDS:
