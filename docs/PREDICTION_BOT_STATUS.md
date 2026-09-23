@@ -42,10 +42,10 @@ and orders remain downstream.
 | Regime/symbol/date robustness slices | COMPLETE | `ml/evaluation/robustness.py` |
 | Purged walk-forward infrastructure | AVAILABLE/REUSED | `research/validation/walk_forward.py`, `backtesting/walk_forward.py` |
 | Optional XGBoost/LightGBM adapters | COMPLETE | `ml/models/boosting.py` |
-| Strategy boundary | COMPLETE | existing Strategy Engine integration |
+| Prediction → Strategy boundary | COMPLETE | `trading/strategy/prediction_adapter.py` + boundary tests |
 | Risk/execution boundary | COMPLETE | existing downstream architecture |
 | Foundation-model/TimesFM research | RESEARCH-ONLY | no dependency or model claim added |
-| Automatic self-learning | NOT AUTOMATIC | experiment-driven changes only |
+| Explicit prediction input lineage | COMPLETE | `ml/prediction/contracts.py` + inference binding |\n| Fail-closed failure telemetry | COMPLETE | `ml/prediction/failures.py` |\n| Automatic self-learning | NOT AUTOMATIC | experiment-driven changes only |
 
 ## Return-forecast uncertainty boundary
 
@@ -87,3 +87,20 @@ The return-forecast interval implementation is contract/test complete. A real-da
 
 No predictive accuracy, profitability, or future performance claim is made by
 this status document.
+
+
+## Boundary and failure hardening
+
+The Prediction → Strategy boundary is explicitly prediction-only: the existing
+Strategy Engine remains responsible for deterministic trade/no-trade direction.
+Prediction probabilities do not bypass failed strategy conditions.
+
+Prediction inference now binds each output to deterministic hashes of the
+decision-time feature row and inference context. The lineage record carries the
+source type/version, timestamp, symbol, feature names, and SHA-256 hashes.
+Predictor-returned identifiers must exactly match the request before lineage is
+created.
+
+Rejected prediction requests have a separate append-only failure contract.
+Missing/invalid inputs are recorded as failures rather than converted into
+synthetic prediction values.
