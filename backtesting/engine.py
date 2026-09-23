@@ -193,7 +193,7 @@ class HistoricalBacktestEngine:
                 )
             elif self.config.risk_enabled:
                 candidate = self._candidate_from_row(strategy, row)
-                state = self._portfolio_state(timestamp)
+                state = self._portfolio_state(timestamp, symbol)
                 assessment = self.risk_engine.evaluate(
                     RiskInput(
                         timestamp=timestamp,
@@ -334,7 +334,7 @@ class HistoricalBacktestEngine:
             return entry + distance
         return entry - distance
 
-    def _portfolio_state(self, timestamp: pd.Timestamp) -> dict[str, object]:
+    def _portfolio_state(self, timestamp: pd.Timestamp, symbol: str) -> dict[str, object]:
         """Build point-in-time account state for Risk Engine v1."""
         day = timestamp.tz_convert("Asia/Kolkata").date()
         if self._active_day != day:
