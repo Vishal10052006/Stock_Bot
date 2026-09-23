@@ -9,6 +9,7 @@ from experiments.executor import (
     execute_validation_experiment_with_lineage,
 )
 from experiments.lineage import LineageRecord
+from ml.datasets.models import TrainingDataset
 
 
 def _definition() -> ExperimentDefinition:
@@ -43,7 +44,7 @@ def _inputs() -> ExperimentExecutionInputs:
         return {"test_rows": len(test)}
 
     return ExperimentExecutionInputs(
-        oos_dataset=data,
+        oos_dataset=TrainingDataset(data=data, feature_columns=("feature",)),
         oos_predictor=predictor,
         walk_forward_data=data,
         walk_forward_evaluator=evaluator,
