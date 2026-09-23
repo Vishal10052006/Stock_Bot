@@ -25,6 +25,10 @@ class FeatureDriftReport:
 
 
 def _psi(reference: np.ndarray, current: np.ndarray, bins: int) -> float:
+    if np.allclose(reference, reference[0]):
+        if np.allclose(current, reference[0]):
+            return 0.0
+        return float(1.0 + np.log1p(abs(float(current.mean() - reference[0]))))
     edges = np.quantile(reference, np.linspace(0.0, 1.0, bins + 1))
     edges = np.unique(edges)
     if len(edges) < 2:
