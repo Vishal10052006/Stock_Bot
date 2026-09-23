@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 
+from analysis.error_analysis import PatternType
+
 
 class LearningPattern(str, Enum):
     """Observable patterns eligible for learning."""
@@ -14,6 +16,11 @@ class LearningPattern(str, Enum):
     LARGE_MAE = "LARGE_MAE"
     LOW_MFE = "LOW_MFE"
     COST_DRAG = "COST_DRAG"
+    REGIME_LOSS_CLUSTER = PatternType.REGIME_LOSS_CLUSTER.value
+    LOW_RVOL_SIDEWAYS_BREAKOUT = PatternType.LOW_RVOL_SIDEWAYS_BREAKOUT.value
+    HIGH_CONFIDENCE_FALSE_SIGNAL = PatternType.HIGH_CONFIDENCE_FALSE_SIGNAL.value
+    OPENING_WINDOW_LOSS = PatternType.OPENING_WINDOW_LOSS.value
+    CONSECUTIVE_LOSS_STREAK = PatternType.CONSECUTIVE_LOSS_STREAK.value
 
 
 @dataclass(frozen=True, slots=True)
@@ -30,6 +37,10 @@ class LearningExperience:
     occurrence_rate: float
     confidence: float
     source_trade_ids: tuple[str, ...]
+    conditions: tuple[str, ...] = ()
+    average_net_pnl: float = 0.0
+    total_net_pnl: float = 0.0
+    detail: str = ""
 
     def __post_init__(self) -> None:
         if self.evidence_count < 1:
