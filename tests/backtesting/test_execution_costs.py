@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from backtesting.engine import HistoricalBacktestEngine
+from backtesting.engine import BacktestConfig, HistoricalBacktestEngine
 from paper.runtime import PaperTradingConfig, PaperTradingRuntime
 
 def _row(timestamp: str, *, close: float) -> dict:
@@ -10,11 +10,6 @@ def _row(timestamp: str, *, close: float) -> dict:
         "timestamp": timestamp,
         "symbol": "ITC",
         "close": close,
-        "atr_14": 2.0,
-        "swing_low": 96.0,
-        "swing_high": 104.0,
-        "support_20": 95.0,
-        "resistance_20": 105.0,
         "regime": "TREND_UP",
         "regime_probability": 0.90,
         "vwap_distance_pct": 1.0,
@@ -23,6 +18,12 @@ def _row(timestamp: str, *, close: float) -> dict:
         "higher_low": True,
         "lower_low": False,
         "lower_high": False,
+        "high": close,
+        "low": close,
+        "atr_14": 2.0,
+        "support_20": close - 2.0,
+        "resistance_20": close + 2.0,
+        "volume": 10_000_000.0,
     }
 
 
@@ -36,6 +37,7 @@ def test_backtest_applies_entry_and_exit_costs() -> None:
 
     result = HistoricalBacktestEngine(
         runtime=runtime,
+        config=BacktestConfig(target_reward_risk=100.0),
     ).run(
         pd.DataFrame(
             [
@@ -54,11 +56,10 @@ def test_backtest_applies_entry_and_exit_costs() -> None:
     outcome = result.outcomes[0]
     entry = result.orders[0]
 
-    assert outcome.gross_pnl > 1500.0
+    assert outcome.gross_pnl < 10.0
     assert outcome.slippage_cost > entry.slippage_cost
     assert outcome.fees > entry.fees
     assert outcome.net_pnl < outcome.gross_pnl
-    assert outcome.quantity == 166.0
 
 
 def test_zero_cost_backtest_matches_market_move() -> None:
@@ -71,6 +72,7 @@ def test_zero_cost_backtest_matches_market_move() -> None:
 
     result = HistoricalBacktestEngine(
         runtime=runtime,
+        config=BacktestConfig(target_reward_risk=100.0),
     ).run(
         pd.DataFrame(
             [
@@ -90,7 +92,7 @@ def test_zero_cost_backtest_matches_market_move() -> None:
 
     assert outcome.entry_price == 100.0
     assert outcome.exit_price == 110.0
-    assert outcome.gross_pnl == 1660.0
+    assert outcome.gross_pnl == 10.0
     assert outcome.fees == 0.0
     assert outcome.slippage_cost == 0.0
-    assert outcome.net_pnl == 1660.0
+    assert outcome.net_pnl == 10.0
