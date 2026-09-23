@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import numpy as np
 import pandas as pd
@@ -16,7 +16,8 @@ class MultiHorizonReturnForecaster:
     """Independent model per horizon with explicit horizon isolation."""
 
     horizons_minutes: tuple[int, ...]
-    config: ReturnForecastConfig = ReturnForecastConfig()
+    config: ReturnForecastConfig = field(default_factory=ReturnForecastConfig)
+    _models: dict[int, ReturnForecastModel] = field(default_factory=dict, init=False, repr=False)
 
     def __post_init__(self) -> None:
         if not self.horizons_minutes:
@@ -34,7 +35,7 @@ class MultiHorizonReturnForecaster:
         missing = set(self.horizons_minutes) - set(targets)
         if missing:
             raise ValueError(f"missing targets for horizons: {sorted(missing)}")
-        self._models = {}
+        self._models.clear()
         for horizon in self.horizons_minutes:
             model = ReturnForecastModel(self.config)
             model.fit(X, targets[horizon])
@@ -49,7 +50,7 @@ class MultiHorizonReturnForecaster:
         symbol: str,
         provenance: PredictionProvenance,
     ) -> MultiHorizonForecast:
-        if not hasattr(self, "_models"):
+        if not self._models:
             raise RuntimeError("MultiHorizonReturnForecaster must be fitted before prediction")
         forecasts = tuple(
             ReturnForecast(
