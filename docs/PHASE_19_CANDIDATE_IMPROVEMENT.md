@@ -154,3 +154,26 @@ A candidate must not merely be described as an experiment change; the bound expe
 5. runs the result through `ExperimentRunner`, which verifies the returned `ExperimentRecord` belongs to the same frozen definition.
 
 The authoritative baseline object is never mutated, and Phase 19 does not modify Risk, Execution, model registry state, or live enablement.
+
+## Verification checkpoint — 2026-09-24
+
+The Phase-19 audit added explicit regression coverage for:
+
+- all 11 whitelisted StrategyConfig fields being materialized without mutating the authoritative baseline;
+- rejection of Risk, Execution, Safety, and model-weight change surfaces;
+- deterministic StrategyConfig, candidate, and binding fingerprints;
+- candidate lineage back to the exact LearningExperience and source trade IDs;
+- candidate-to-experiment and experiment-record identity checks;
+- malformed or forbidden direct CandidateExperimentBinding construction;
+- the candidate execution boundary exposing StrategyConfig only, with no RiskDecision or ExecutionAuthorization input;
+- validation/execution leaving candidate status at PROPOSED.
+
+A repository regression was also found outside Phase 19: the main branch contained
+Prediction Bot inference/tests that referenced ml.prediction.contracts and
+ml.prediction.storage while those files had not yet landed on main. The
+missing Prediction Bot modules were restored from the existing completed
+Prediction branch rather than reimplementing different contracts. This was a
+regression-repair dependency required for a clean repository CI gate.
+
+Phase 19 remains research-only. No candidate path reaches order authorization,
+broker execution, live enablement, or automatic promotion.
