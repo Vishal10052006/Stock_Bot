@@ -59,7 +59,7 @@ def test_phase9_source_limitation_report_is_explicit() -> None:
     assert sector["observed_coverage_pct"] == 0.0
     assert sector["timeframe_minutes"] == 5
     assert sector["source"] == "Upstox"
-    assert "not fabricated" in sector["handling"]
+    assert "missing values are preserved and never fabricated" in sector["handling"]
 
     retest = report["retest_distance_pct"]
     assert retest["semantic_missingness"] is True
