@@ -42,9 +42,15 @@ class BrokerReconciler:
 
     def reconcile(
         self,
-        local: tuple[BrokerPosition, ...],
-        broker: tuple[BrokerPosition, ...],
+        local: tuple[BrokerPosition, ...] | None,
+        broker: tuple[BrokerPosition, ...] | None,
     ) -> ReconciliationReport:
+        if local is None or broker is None:
+            return ReconciliationReport(
+                status=ReconciliationStatus.BLOCKED,
+                mismatches=("local and broker snapshots are both required",),
+            )
+
         local_map = self._normalize(local)
         broker_map = self._normalize(broker)
         symbols = sorted(set(local_map) | set(broker_map))
