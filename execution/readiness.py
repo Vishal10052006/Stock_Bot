@@ -71,7 +71,7 @@ class ReadinessEvidence:
         source: str,
     ) -> "ReadinessEvidence":
         """Bind readiness provenance to an existing fingerprinted artifact."""
-        if not isinstance(artifact, object) or not hasattr(artifact, "fingerprint"):
+        if not hasattr(artifact, "fingerprint"):
             raise TypeError("artifact must expose a fingerprint property")
         artifact_fingerprint = getattr(artifact, "fingerprint")
         if not isinstance(artifact_fingerprint, str):
