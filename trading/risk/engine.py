@@ -306,7 +306,7 @@ class RiskEngine:
                 value,
                 "Daily loss limit reached.",
                 daily_pnl,
-                RiskReasonCode.DAILY_LOSS_LIMIT,
+                RiskReasonCode.MAX_DRAWDOWN_LIMIT,
             )
 
         if value.trades_today >= self.config.max_trades_per_day:
