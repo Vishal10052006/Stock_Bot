@@ -34,5 +34,4 @@ __all__ = [
     "SafetyBlock",
     "SafetyDecision",
     "SafetyState",
-    "build_research_readiness_evidence",
 ]
