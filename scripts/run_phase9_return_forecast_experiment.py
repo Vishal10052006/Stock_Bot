@@ -230,12 +230,20 @@ def main() -> None:
         "symbol",
         "future_timestamp",
         "future_return",
+        "horizon_bars",
     }
     missing = required_targets.difference(targets.columns)
     if missing:
         raise ValueError(f"targets missing required columns: {sorted(missing)}")
 
     target_horizon_bars = LabelingConfig().horizon_bars
+
+    horizon_values = targets["horizon_bars"].dropna().astype(int).unique()
+    if len(horizon_values) != 1:
+        raise ValueError("target artifact must contain exactly one horizon_bars value")
+    target_horizon_bars = int(horizon_values[0])
+    if target_horizon_bars < 1:
+        raise ValueError("target horizon_bars must be >= 1")
 
     feature_columns = [
         column for column in FEATURE_COLUMNS if column in dataset.columns
@@ -250,6 +258,7 @@ def main() -> None:
                 "symbol",
                 "future_timestamp",
                 "future_return",
+                "horizon_bars",
             ]
         ],
         on=["timestamp", "symbol"],
@@ -299,8 +308,7 @@ def main() -> None:
             "target_column": "future_return",
             "target_definition": (
                 "close-to-close return from decision timestamp to the "
-                f"{target_horizon_bars}th strictly-future 5-minute candle "
-                "when built with the canonical LabelingConfig horizon"
+                f"{target_horizon_bars}th strictly-future 5-minute candle"
             ),
             "external_test_used_for_model_selection": False,
         },
