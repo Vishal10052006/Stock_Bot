@@ -344,7 +344,7 @@ class TradeErrorAnalyzer:
         rate = len(evidence) / len(population) if population else 0.0
         if rate < self.config.minimum_pattern_occurrence_rate:
             return None
-        ids = tuple(sorted(record.journal_id for record in evidence))
+        ids = tuple(sorted(record.trade_id for record in evidence))
         return PatternFinding(
             pattern_type=pattern_type,
             conditions=tuple(conditions),
