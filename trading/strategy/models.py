@@ -14,16 +14,12 @@ import pandas as pd
 
 
 class StrategyDirection(str, Enum):
-    """Allowed strategy decisions."""
-
     LONG = "LONG"
     SHORT = "SHORT"
     NO_TRADE = "NO_TRADE"
 
 
 class NoTradeReason(str, Enum):
-    """Stable taxonomy for strategy-level non-trade outcomes."""
-
     INVALID_INPUT = "INVALID_INPUT"
     MISSING_CONTEXT = "MISSING_CONTEXT"
     STALE_PREDICTION = "STALE_PREDICTION"
@@ -41,8 +37,6 @@ class NoTradeReason(str, Enum):
 
 @dataclass(frozen=True, slots=True)
 class BaselineStrategyConfig:
-    """Configuration for BaselineStrategy v1.0."""
-
     minimum_rvol: float = 1.0
     minimum_regime_probability: float = 0.50
     strategy_version: str = "v1.0"
@@ -51,27 +45,16 @@ class BaselineStrategyConfig:
         if self.minimum_rvol <= 0:
             raise ValueError("minimum_rvol must be positive")
         if not 0.0 <= self.minimum_regime_probability <= 1.0:
-            raise ValueError(
-                "minimum_regime_probability must be between 0 and 1"
-            )
+            raise ValueError("minimum_regime_probability must be between 0 and 1")
         if not self.strategy_version.strip():
             raise ValueError("strategy_version must not be empty")
 
 
 @dataclass(frozen=True, slots=True)
 class StrategyConfig:
-    """Versioned configuration for the full Strategy Engine.
-
-    Prediction and economic thresholds are disabled by default so the frozen
-    Phase 8 baseline remains reproducible until those policies are validated
-    with temporal experiments.
-    """
-
     strategy_id: str = "baseline_trend_v1"
     strategy_version: str = "STRAT-v1.0"
-    baseline: BaselineStrategyConfig = field(
-        default_factory=BaselineStrategyConfig
-    )
+    baseline: BaselineStrategyConfig = field(default_factory=BaselineStrategyConfig)
     prediction_min_probability: float = 0.0
     prediction_min_margin: float = 0.0
     prediction_max_age_seconds: int = 300
@@ -107,11 +90,7 @@ class StrategyConfig:
 
 @dataclass(frozen=True, slots=True)
 class StrategyDecision:
-    """Auditable output consumed by Risk.
-
-    The object intentionally carries no final quantity, broker order,
-    execution authorization, or portfolio-risk decision.
-    """
+    """Auditable strategy decision including exact decision-time features."""
 
     timestamp: pd.Timestamp
     symbol: str
@@ -140,6 +119,7 @@ class StrategyDecision:
     feature_version: str | None = None
     cost_model_version: str | None = None
     provenance: Mapping[str, Any] = field(default_factory=dict)
+    features: Mapping[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         timestamp = pd.Timestamp(self.timestamp)
@@ -151,50 +131,24 @@ class StrategyDecision:
             raise ValueError("strategy_version must not be empty")
         if not self.rationale.strip():
             raise ValueError("rationale must not be empty")
-        if self.direction is StrategyDirection.NO_TRADE:
-            # Preserve the NO_TRADE invariant while remaining compatible
-            # with legacy callers that did not yet supply a reason.
-            if self.primary_reason is None:
-                object.__setattr__(
-                    self,
-                    "primary_reason",
-                    NoTradeReason.STRATEGY_CONDITION_FAILED,
-                )
-        elif self.primary_reason is not None:
-            raise ValueError(
-                "TRADE decisions must not carry a NO_TRADE primary_reason"
-            )
-        if self.prediction_probability is not None and not (
-            0.0 <= self.prediction_probability <= 1.0
-        ):
+        if self.direction is StrategyDirection.NO_TRADE and self.primary_reason is None:
+            object.__setattr__(self, "primary_reason", NoTradeReason.STRATEGY_CONDITION_FAILED)
+        elif self.direction is not StrategyDirection.NO_TRADE and self.primary_reason is not None:
+            raise ValueError("TRADE decisions must not carry a NO_TRADE primary_reason")
+        if self.prediction_probability is not None and not 0.0 <= self.prediction_probability <= 1.0:
             raise ValueError("prediction_probability must be in [0, 1]")
-        if self.regime_probability is not None and not (
-            0.0 <= self.regime_probability <= 1.0
-        ):
+        if self.regime_probability is not None and not 0.0 <= self.regime_probability <= 1.0:
             raise ValueError("regime_probability must be in [0, 1]")
 
         object.__setattr__(self, "timestamp", timestamp)
-        object.__setattr__(
-            self,
-            "symbol",
-            self.symbol.strip().upper(),
-        )
-        object.__setattr__(
-            self,
-            "secondary_reasons",
-            tuple(self.secondary_reasons),
-        )
-        object.__setattr__(
-            self,
-            "provenance",
-            dict(self.provenance),
-        )
+        object.__setattr__(self, "symbol", self.symbol.strip().upper())
+        object.__setattr__(self, "secondary_reasons", tuple(self.secondary_reasons))
+        object.__setattr__(self, "provenance", dict(self.provenance))
+        object.__setattr__(self, "features", dict(self.features))
 
 
 @dataclass(frozen=True, slots=True)
 class StrategyInput:
-    """Canonical boundary for one strategy evaluation."""
-
     timestamp: pd.Timestamp
     symbol: str
     decision_features: Mapping[str, Any]
@@ -218,23 +172,13 @@ class StrategyInput:
             raise ValueError("strategy input symbol must not be empty")
         if not isinstance(self.decision_features, Mapping):
             raise TypeError("decision_features must be a mapping")
-        if self.regime_probability is not None and not (
-            0.0 <= self.regime_probability <= 1.0
-        ):
+        if self.regime_probability is not None and not 0.0 <= self.regime_probability <= 1.0:
             raise ValueError("regime_probability must be in [0, 1]")
         if self.cost_fraction is not None and self.cost_fraction < 0:
             raise ValueError("cost_fraction must be non-negative")
         if self.slippage_bps is not None and self.slippage_bps < 0:
             raise ValueError("slippage_bps must be non-negative")
         object.__setattr__(self, "timestamp", timestamp)
-        object.__setattr__(
-            self,
-            "symbol",
-            self.symbol.strip().upper(),
-        )
-        object.__setattr__(
-            self,
-            "decision_features",
-            dict(self.decision_features),
-        )
+        object.__setattr__(self, "symbol", self.symbol.strip().upper())
+        object.__setattr__(self, "decision_features", dict(self.decision_features))
         object.__setattr__(self, "versions", dict(self.versions))

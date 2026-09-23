@@ -1,31 +1,25 @@
-"""Build PIT sector-index context for one Phase 9 research date.
-
-This helper keeps sector membership resolution separate from market-data
-acquisition and fetches only sector indices explicitly mapped to the supplied
-Phase 9 symbols.
-"""
+"""Build PIT sector-index context for one Phase 9 research date."""
 
 from __future__ import annotations
 
 from datetime import date, datetime, time, timedelta
 from pathlib import Path
 from typing import Sequence
+from zoneinfo import ZoneInfo
+import os
 
 import pandas as pd
 
-from market.data.context import (
-    build_sector_context,
-    load_sector_mappings_csv,
-)
-from market.data.context.sector_membership import (
-    PointInTimeSectorMembershipProvider,
-)
-from market.data.historical.adapters import YFinanceHistoricalIndexMarketDataProvider
+from market.data.context import build_sector_context, load_sector_mappings_csv
+from market.data.context.sector_membership import PointInTimeSectorMembershipProvider
+from market.data.historical.adapters.upstox import UpstoxHistoricalMarketDataProvider
+from market.data.ingestion.providers.upstox.instrument_mapper import UpstoxInstrumentMapper
 
-
-MAPPING_PATH = Path(
-    "data/reference/nse/sector_membership/sector_membership.csv"
-)
+MAPPING_PATH = Path("data/reference/nse/sector_membership/sector_membership.csv")
+IST = ZoneInfo("Asia/Kolkata")
+SECTOR_INSTRUMENTS = {
+    "NIFTY_IT": "NSE_INDEX|Nifty IT",
+}
 
 
 def build_phase9_sector_context_for_date(
@@ -34,10 +28,15 @@ def build_phase9_sector_context_for_date(
     as_of: date,
     lookback_days: int = 15,
     timeframe_minutes: int = 5,
+    access_token: str | None = None,
 ) -> pd.DataFrame:
-    """Fetch only PIT-mapped sector indices for one research date."""
+    """Fetch PIT-mapped sector indices using the canonical Upstox adapter."""
     if lookback_days <= 0:
         raise ValueError("lookback_days must be positive")
+
+    access_token = (access_token or os.getenv("UPSTOX_ACCESS_TOKEN", "")).strip()
+    if not access_token:
+        raise ValueError("UPSTOX access_token is required")
 
     mappings = load_sector_mappings_csv(MAPPING_PATH)
     membership = PointInTimeSectorMembershipProvider(mappings)
@@ -68,18 +67,29 @@ def build_phase9_sector_context_for_date(
             ]
         )
 
-    provider = YFinanceHistoricalIndexMarketDataProvider(
-        period="5d",
-        auto_adjust=False,
+    instrument_mapping = {
+        symbol: SECTOR_INSTRUMENTS[symbol]
+        for symbol in sector_symbols
+        if symbol in SECTOR_INSTRUMENTS
+    }
+    if len(instrument_mapping) != len(sector_symbols):
+        missing = sorted(set(sector_symbols).difference(instrument_mapping))
+        raise ValueError(f"missing Upstox sector instrument mappings: {missing}")
+
+    provider = UpstoxHistoricalMarketDataProvider(
+        access_token=access_token,
+        instrument_mapper=UpstoxInstrumentMapper(instrument_mapping),
     )
 
     start = datetime.combine(
         as_of - timedelta(days=lookback_days),
         time.min,
+        tzinfo=IST,
     )
     end = datetime.combine(
         as_of + timedelta(days=1),
         time.min,
+        tzinfo=IST,
     )
 
     return build_sector_context(

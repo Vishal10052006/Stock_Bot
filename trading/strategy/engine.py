@@ -139,6 +139,7 @@ class StrategyEngine:
                 "strategy_version": self.config.strategy_version,
                 "candidate_policy_version": self.config.candidate_policy_version,
             },
+            features=strategy_input.decision_features,
         )
         return decision, StrategyTrace(tuple(stages + ["FINAL_DECISION"]), ())
 
