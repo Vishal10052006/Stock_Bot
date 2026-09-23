@@ -7,6 +7,7 @@ from experiments.paper_quality import assess_paper_evidence
 from experiments.monitoring import MonitoringReport
 from trading.risk.engine import RiskConfig
 
+from backtesting.engine import BacktestResult
 from backtesting.oos import OOSReport
 from backtesting.walk_forward import WalkForwardTradingReport, WalkForwardWindow
 
