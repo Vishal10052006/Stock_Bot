@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from math import isfinite
 from typing import Callable
 
 import pandas as pd
@@ -31,6 +32,24 @@ class WalkForwardTradingReport:
     windows: tuple[WalkForwardWindow, ...]
     results: tuple[object, ...]
 
+    def __post_init__(self) -> None:
+        validate_walk_forward_report(self)
+
+    @property
+    def summary(self) -> dict[str, float]:
+        if not self.results:
+            return {"fold_count": 0.0, "positive_fold_fraction": 0.0, "total_trades": 0.0, "total_net_pnl": 0.0, "average_expectancy": 0.0, "worst_drawdown": 0.0}
+        rows = []
+        for result in self.results:
+            fields = ("trade_count", "net_pnl", "expectancy", "maximum_drawdown")
+            if not all(hasattr(result, field) for field in fields):
+                return {"fold_count": float(len(self.results))}
+            values = tuple(getattr(result, field) for field in fields)
+            if not all(isinstance(v, (int, float)) and isfinite(float(v)) for v in values):
+                raise ValueError("walk-forward result metrics must be finite")
+            rows.append(values)
+        return {"fold_count": float(len(rows)), "positive_fold_fraction": sum(row[1] > 0 for row in rows) / len(rows), "total_trades": float(sum(row[0] for row in rows)), "total_net_pnl": float(sum(row[1] for row in rows)), "average_expectancy": float(sum(row[2] for row in rows) / len(rows)), "worst_drawdown": float(max(row[3] for row in rows))}
+
     @property
     def fingerprint(self) -> str:
         """Return a deterministic identity for the complete WF artifact."""
@@ -41,6 +60,31 @@ class WalkForwardTradingReport:
                 "results": self.results,
             }
         )
+
+
+def validate_walk_forward_report(report: "WalkForwardTradingReport") -> None:
+    """Validate temporal and structural invariants of a WF report."""
+    if not isinstance(report, WalkForwardTradingReport):
+        raise TypeError("report must be WalkForwardTradingReport")
+    if not report.windows:
+        raise ValueError("walk-forward report must contain at least one window")
+    if len(report.windows) != len(report.results):
+        raise ValueError("walk-forward report must contain one result per window")
+    previous_test_end = None
+    for expected_fold, window in enumerate(report.windows, start=1):
+        if window.fold_id != expected_fold:
+            raise ValueError("walk-forward fold ids must be contiguous")
+        if window.train_start > window.train_end or window.train_end >= window.test_start:
+            raise ValueError(f"fold {window.fold_id} has invalid training/test boundary")
+        if window.test_start > window.test_end:
+            raise ValueError(f"fold {window.fold_id} has invalid test interval")
+        if window.train_rows <= 0 or window.test_rows <= 0:
+            raise ValueError(f"fold {window.fold_id} contains an empty partition")
+        if window.purged_rows < 0:
+            raise ValueError(f"fold {window.fold_id} has negative purge count")
+        if previous_test_end is not None and window.test_start <= previous_test_end:
+            raise ValueError("walk-forward test windows overlap")
+        previous_test_end = window.test_end
 
 
 def generate_windows(
@@ -60,8 +104,16 @@ def generate_windows(
 
     if not isinstance(data, pd.DataFrame):
         raise TypeError("data must be a pandas DataFrame")
-    if "timestamp" not in data.columns:
-        raise ValueError("data must contain a timestamp column")
+    required_columns = {"timestamp", "symbol"}
+    missing = required_columns.difference(data.columns)
+    if missing:
+        raise ValueError(f"data missing required columns: {sorted(missing)}")
+    if data.empty:
+        raise ValueError("data must not be empty")
+    if data["symbol"].isna().any():
+        raise ValueError("symbol values must not be missing")
+    if data.duplicated(subset=["symbol", "timestamp"], keep=False).any():
+        raise ValueError("data contains duplicate symbol/timestamp decision rows")
     if folds < 1:
         raise ValueError("folds must be at least 1")
     if not 0 < train_ratio < 1:
