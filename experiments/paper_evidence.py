@@ -243,6 +243,22 @@ class PaperEvidenceCollector:
         self._operational_error_count += int(error)
         self._stale_event_count += int(stale)
 
+    def record_operational_summary(
+        self,
+        *,
+        events: int,
+        errors: int = 0,
+        stale_events: int = 0,
+    ) -> None:
+        """Record pre-aggregated operational observations."""
+        if events < 0 or errors < 0 or stale_events < 0:
+            raise ValueError("operational counts must be non-negative")
+        if errors > events or stale_events > events:
+            raise ValueError("error/stale counts cannot exceed events")
+        self._operational_event_count += events
+        self._operational_error_count += errors
+        self._stale_event_count += stale_events
+
     def snapshot(self) -> PaperEvidenceSnapshot:
         """Freeze all observations into a deterministic evidence snapshot."""
         evidence_version, dataset_version, code_version = self._identity
@@ -316,16 +332,10 @@ def collect_paper_decision_run(
             calibration_outcome=calibration_outcomes.get(index),
         )
 
-    for _ in range(operational_events):
-        collector.record_operational_event(
-            error=False,
-            stale=False,
-        )
-
-    # Preserve the supplied aggregate operational flags without creating
-    # synthetic market observations.
-    if operational_errors or stale_events:
-        collector._operational_error_count += operational_errors
-        collector._stale_event_count += stale_events
+    collector.record_operational_summary(
+        events=operational_events,
+        errors=operational_errors,
+        stale_events=stale_events,
+    )
 
     return collector.snapshot()
