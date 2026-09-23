@@ -12,7 +12,6 @@ from dataclasses import dataclass
 from enum import Enum
 import hashlib
 import json
-from math import isfinite
 
 
 class CandidateStatus(str, Enum):
@@ -108,3 +107,32 @@ class CandidateValidation:
     candidate_fingerprint: str
     reasons: tuple[str, ...] = ()
 
+
+@dataclass(frozen=True, slots=True)
+class CandidateExperimentBinding:
+    """Immutable proof that a candidate is bound to one frozen experiment."""
+
+    candidate_fingerprint: str
+    experiment_definition_fingerprint: str
+    parameter_changes: tuple[tuple[str, str], ...]
+
+    def __post_init__(self) -> None:
+        if not self.candidate_fingerprint.strip():
+            raise ValueError("candidate_fingerprint must be non-empty")
+        if not self.experiment_definition_fingerprint.strip():
+            raise ValueError("experiment_definition_fingerprint must be non-empty")
+        if not self.parameter_changes:
+            raise ValueError("parameter_changes must not be empty")
+
+    @property
+    def fingerprint(self) -> str:
+        canonical = json.dumps(
+            {
+                "candidate_fingerprint": self.candidate_fingerprint,
+                "experiment_definition_fingerprint": self.experiment_definition_fingerprint,
+                "parameter_changes": list(self.parameter_changes),
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
