@@ -258,3 +258,36 @@ def test_frozen_hard_limits_have_stable_reason_codes(
     assert assessment.decision.status.value == "REJECTED"
     assert assessment.decision.reason_code is reason_code
     assert assessment.position_size is None
+
+
+def test_available_cash_can_resize_when_explicitly_enabled() -> None:
+    """Cash constraints can reduce risk-first size without increasing risk."""
+    engine = RiskEngine(RiskConfig(allow_resize=True))
+
+    assessment = engine.evaluate(
+        make_input(
+            available_cash=6_200.0,
+        )
+    )
+
+    assert assessment.decision.status.value == "APPROVED"
+    assert assessment.decision.action is RiskAction.RESIZE
+    assert assessment.position_size == 62.0
+    assert assessment.requested_position_size == 125.0
+
+
+def test_optional_drawdown_limit_has_distinct_reason_code() -> None:
+    """A configured total-drawdown cap is independently auditable."""
+    engine = RiskEngine(
+        RiskConfig(max_drawdown_fraction=0.10)
+    )
+
+    assessment = engine.evaluate(
+        make_input(
+            peak_equity=100_000.0,
+            available_equity=90_000.0,
+        )
+    )
+
+    assert assessment.decision.status.value == "REJECTED"
+    assert assessment.decision.reason_code is RiskReasonCode.MAX_DRAWDOWN_LIMIT
