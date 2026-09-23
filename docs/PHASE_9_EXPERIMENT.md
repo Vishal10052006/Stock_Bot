@@ -28,3 +28,19 @@ Every significant Prediction Bot experiment must record:
 - next_experiment
 
 The external test partition stays untouched for P9 model selection and calibration.
+
+
+## S21 reproducibility binding
+
+The experiment-definition layer is now paired with an `ExperimentRecord`.
+A completed record stores measured observations, label distribution, baseline/model
+results, stratified results, effective-sample notes, limitations, interpretation,
+decision, root cause, lesson, and next experiment.
+
+Each record carries the SHA-256 fingerprint of its exact
+`ExperimentDefinition`. This binds results to the frozen research specification
+without implying that any particular decision is scientifically validated.
+
+The record contract does not itself run a backtest, OOS evaluation, or
+walk-forward evaluation. Those execution stages remain separate and must feed
+their measured outputs into the record.
