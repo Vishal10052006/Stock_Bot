@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime, timezone
 
 import pandas as pd
 
 import scripts.phase9_sector_context as sector_script
+from market.data.historical.models import HistoricalDataRequest
 
 
 def test_phase9_sector_context_uses_upstox_and_timezone_aware_window(monkeypatch):
@@ -52,15 +53,13 @@ def test_phase9_sector_context_uses_upstox_and_timezone_aware_window(monkeypatch
     assert captured["symbols"] == ["NIFTY_IT"]
     assert captured["timeframe_minutes"] == 5
     assert captured["provider"].provenance(
-        type(
-            "Request",
-            (),
-            {
-                "symbol": "NIFTY_IT",
-                "exchange": "NSE",
-                "timeframe_minutes": 5,
-            },
-        )()
+        HistoricalDataRequest(
+            symbol="NIFTY_IT",
+            exchange="NSE",
+            timeframe_minutes=5,
+            start=datetime(2026, 7, 1, tzinfo=timezone.utc),
+            end=datetime(2026, 7, 15, tzinfo=timezone.utc),
+        )
     )["instrument_key"] == "NSE_INDEX|Nifty IT"
     assert captured["start"].tzinfo is not None
     assert captured["end"].tzinfo is not None
