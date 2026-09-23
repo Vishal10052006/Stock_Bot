@@ -60,3 +60,33 @@ def test_walk_forward_evaluator_receives_future_test_only() -> None:
     assert len(report.results) == len(
         report.windows
     )
+
+
+def test_walk_forward_records_purged_rows() -> None:
+    windows = generate_windows(
+        _data(),
+        folds=3,
+        purge_minutes=10,
+    )
+
+    assert all(window.purged_rows >= 1 for window in windows)
+    assert all(window.train_end < window.test_start for window in windows)
+
+
+def test_walk_forward_rejects_test_mutation() -> None:
+    def evaluator(train: pd.DataFrame, test: pd.DataFrame):
+        test.loc[:, "value"] = -1
+        return None
+
+    import pytest
+
+    with pytest.raises(
+        RuntimeError,
+        match="mutated test partition",
+    ):
+        evaluate_walk_forward(
+            _data(),
+            folds=3,
+            purge_minutes=5,
+            evaluator=evaluator,
+        )
