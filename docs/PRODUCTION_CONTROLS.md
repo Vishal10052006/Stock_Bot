@@ -65,3 +65,5 @@ The validator checks completeness and internal count consistency. It deliberatel
 does not apply a profitability threshold, rank strategies, or convert paper
 results into live authorization. Paper evidence remains one input to the separate
 live-readiness checklist.
+
+The `PaperEvidenceCollector` and `collect_paper_decision_run` adapter can derive signal, fill, slippage, and regime observations directly from a chronological paper decision run. Latency, false-signal outcomes, equity observations, and calibration outcomes remain explicit inputs because they cannot be inferred safely without additional timestamps/outcomes. This prevents synthetic evidence from being created by the reporting layer.
