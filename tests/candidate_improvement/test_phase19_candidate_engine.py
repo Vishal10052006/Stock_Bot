@@ -5,7 +5,7 @@ from candidate_improvement import (
     CandidateImprovementEngine,
     CandidateStatus,
 )
-from experiments import ExperimentDefinition
+from experiments import ExperimentDefinition, ExperimentRecord
 from learning import ErrorClass, LearningExperience, LearningPattern
 
 
@@ -58,6 +58,15 @@ def _candidate() -> tuple[object, ExperimentDefinition]:
         candidate_id="CAND-001",
     )
     return candidate, definition
+
+
+def _record(definition: ExperimentDefinition) -> ExperimentRecord:
+    return ExperimentRecord.from_definition(
+        definition,
+        observations=10,
+        interpretation="Structural test record.",
+        decision="INCONCLUSIVE",
+    )
 
 
 def test_candidate_is_evidence_bound_and_immutable() -> None:
@@ -119,6 +128,55 @@ def test_candidate_binds_to_exact_frozen_experiment() -> None:
     assert binding.experiment_definition_fingerprint == definition.fingerprint()
     assert binding.parameter_changes == candidate.parameter_changes
     assert candidate.status is CandidateStatus.PROPOSED
+
+
+def test_candidate_execution_routes_through_experiment_runner() -> None:
+    candidate, definition = _candidate()
+    calls: list[str] = []
+
+    def executor(received: ExperimentDefinition) -> ExperimentRecord:
+        calls.append(received.fingerprint())
+        return _record(received)
+
+    result = CandidateImprovementEngine.execute_bound_experiment(
+        candidate,
+        definition,
+        executor,
+    )
+
+    assert result.binding.candidate_fingerprint == candidate.fingerprint
+    assert result.execution.definition.fingerprint() == definition.fingerprint()
+    assert result.execution.record.definition_fingerprint == definition.fingerprint()
+    assert calls == [definition.fingerprint()]
+    assert candidate.status is CandidateStatus.PROPOSED
+
+
+def test_candidate_execution_rejects_wrong_record_identity() -> None:
+    candidate, definition = _candidate()
+    different_definition = _definition()
+    different_definition = ExperimentDefinition(
+        experiment_id="EXP-P19-WRONG",
+        research_question=different_definition.research_question,
+        hypothesis=different_definition.hypothesis,
+        failure_criterion=different_definition.failure_criterion,
+        dataset_version=different_definition.dataset_version,
+        code_version=different_definition.code_version,
+        period_start=different_definition.period_start,
+        period_end=different_definition.period_end,
+        symbols=different_definition.symbols,
+        method=different_definition.method,
+        allowed_change=different_definition.allowed_change,
+    )
+
+    def executor(_: ExperimentDefinition) -> ExperimentRecord:
+        return _record(different_definition)
+
+    with pytest.raises(ValueError, match="record fingerprint"):
+        CandidateImprovementEngine.execute_bound_experiment(
+            candidate,
+            definition,
+            executor,
+        )
 
 
 def test_candidate_binding_rejects_definition_fingerprint_mismatch() -> None:
