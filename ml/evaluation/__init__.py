@@ -23,6 +23,11 @@ from .models import (
     EvaluationConfig,
     EvaluationResult,
 )
+from .return_forecast import (
+    evaluate_prediction_intervals,
+    evaluate_return_forecasts,
+    evaluate_return_forecasts_by_column,
+)
 from .stratified import StratifiedEvaluation, evaluate_by_column
 
 __all__ = [
@@ -41,4 +46,7 @@ __all__ = [
     "expected_calibration_error",
     "multiclass_brier_score",
     "evaluate_training_result",
+    "evaluate_return_forecasts",
+    "evaluate_return_forecasts_by_column",
+    "evaluate_prediction_intervals",
 ]
