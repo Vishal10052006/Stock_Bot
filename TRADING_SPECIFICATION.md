@@ -626,3 +626,19 @@ LOCKED
 Next dependent phase:
 
 Phase 2 — Historical Market Data Pipeline
+
+
+---
+
+## Implementation completion notes
+
+The repository now contains explicit control boundaries for the remaining
+production-safety requirements:
+
+- independent execution safety / kill-switch evaluation;
+- broker-position reconciliation contracts;
+- a fail-closed live-readiness checklist covering the required §26 gates.
+
+These boundaries do not enable live trading. Broker connectivity and current
+exchange/broker/regulatory verification remain external prerequisites and must
+be supplied with current evidence before any live activation is considered.
