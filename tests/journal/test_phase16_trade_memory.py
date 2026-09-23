@@ -89,8 +89,8 @@ def test_phase16_no_trade_is_first_class_and_has_failure_reason():
     assert record.failure_reason == "REGIME_NOT_ELIGIBLE"
 
 
-def test_phase16_store_allows_linked_decision_and_outcome():
-    journal = TradeJournal(TradeJournalStore("/tmp/phase16-test.jsonl"))
+def test_phase16_store_allows_linked_decision_and_outcome(tmp_path):
+    journal = TradeJournal(TradeJournalStore(tmp_path / "journal.jsonl"))
     decision = journal.record_decision(
         _decision(),
         risk_assessment=_Assessment(),
