@@ -52,10 +52,17 @@ class CandidateImprovementEngine:
                 raise ValueError(f"forbidden candidate change field: {key}")
             normalized.append((key, self._serialize_value(value)))
 
-        expected_experiment = experiment_definition.fingerprint()
-        if expected_experiment != experiment_definition.fingerprint():
-            raise ValueError("experiment definition fingerprint mismatch")
+        allowed_by_experiment = set(experiment_definition.allowed_change)
+        if not allowed_by_experiment:
+            raise ValueError("experiment definition must declare allowed_change")
+        undeclared = set(parameter_changes) - allowed_by_experiment
+        if undeclared:
+            raise ValueError(
+                "candidate changes are not declared by experiment: "
+                + ", ".join(sorted(undeclared))
+            )
 
+        expected_experiment = experiment_definition.fingerprint()
         learning_fingerprint = self._learning_fingerprint(experience)
 
         hypothesis = (
