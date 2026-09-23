@@ -474,3 +474,32 @@ def test_binding_rejects_forbidden_or_malformed_identity() -> None:
             baseline_strategy_fingerprint="c" * 64,
             parameter_changes=(("risk.risk_per_trade", "0.005"),),
         )
+
+
+@pytest.mark.parametrize(
+    "bad_changes",
+    [
+        None,
+        [("baseline.minimum_rvol", 1.1)],
+    ],
+)
+def test_candidate_propose_requires_mapping_parameter_changes(bad_changes) -> None:
+    with pytest.raises(TypeError, match="mapping"):
+        CandidateImprovementEngine().propose(
+            _experience(),
+            baseline_strategy_fingerprint="a" * 64,
+            parameter_changes=bad_changes,
+            experiment_definition=_definition(),
+            candidate_id="CAND-TYPE",
+        )
+
+
+def test_candidate_propose_rejects_non_string_baseline_fingerprint() -> None:
+    with pytest.raises(ValueError, match="baseline_strategy_fingerprint"):
+        CandidateImprovementEngine().propose(
+            _experience(),
+            baseline_strategy_fingerprint=123,  # type: ignore[arg-type]
+            parameter_changes={"baseline.minimum_rvol": 1.1},
+            experiment_definition=_definition(),
+            candidate_id="CAND-TYPE-2",
+        )
