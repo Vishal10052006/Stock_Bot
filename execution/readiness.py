@@ -55,6 +55,41 @@ class ReadinessEvidence:
     def fingerprint(self) -> str:
         return hashlib.sha256(self.canonical_json().encode("utf-8")).hexdigest()
 
+    @classmethod
+    def from_lineage(
+        cls,
+        lineage: object,
+        *,
+        gate: str,
+        validated_at: datetime,
+    ) -> "ReadinessEvidence":
+        """Bind readiness provenance to an existing experiment lineage record.
+
+        The adapter intentionally uses attribute contracts instead of importing
+        experiments.lineage at runtime, avoiding the execution/experiments
+        import cycle.
+        """
+        required = (
+            "dataset_version",
+            "code_version",
+            "computed_id",
+        )
+        if not all(hasattr(lineage, name) for name in required):
+            raise TypeError("lineage does not satisfy the lineage provenance contract")
+
+        lineage_id = getattr(lineage, "lineage_id", "") or lineage.computed_id()
+        if not isinstance(lineage_id, str) or not lineage_id.strip():
+            raise ValueError("lineage must provide a non-empty lineage id")
+
+        return cls(
+            gate=gate,
+            artifact_fingerprint=lineage_id,
+            dataset_version=lineage.dataset_version,
+            code_version=lineage.code_version,
+            validated_at=validated_at,
+            source=f"lineage:{lineage_id}",
+        )
+
 
 @dataclass(frozen=True, slots=True)
 class LiveReadinessInput:
