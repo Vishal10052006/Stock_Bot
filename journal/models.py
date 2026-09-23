@@ -147,8 +147,11 @@ class TradeDecisionRecord:
                 if decision.primary_reason is not None
                 else "NO_TRADE"
             )
-        elif risk_decision is not None and getattr(risk_decision, "status", None).value != "APPROVED":
-            failure_reason = getattr(risk_decision, "reason", None)
+        elif risk_decision is not None:
+            risk_status = getattr(risk_decision, "status", None)
+            risk_status = getattr(risk_status, "value", risk_status)
+            if risk_status != "APPROVED":
+                failure_reason = getattr(risk_decision, "reason", None)
 
         payload = {
             "timestamp": decision.timestamp,
