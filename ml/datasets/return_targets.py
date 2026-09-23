@@ -115,6 +115,7 @@ def build_fixed_horizon_return_targets(
                     "future_timestamp": future_row["timestamp"],
                     "future_close": future_close,
                     "future_return": future_close / decision_close - 1.0,
+                    "horizon_bars": horizon_bars,
                 }
             )
 
@@ -127,5 +128,6 @@ def build_fixed_horizon_return_targets(
             "future_timestamp",
             "future_close",
             "future_return",
+            "horizon_bars",
         ],
     ).sort_values(["timestamp", "symbol"], kind="stable").reset_index(drop=True)
