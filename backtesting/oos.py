@@ -21,7 +21,7 @@ class OOSReport:
     train_end: pd.Timestamp
     validation_end: pd.Timestamp
     test_start: pd.Timestamp
-    predictions: pd.DataFrame
+    predictions: pd.Series
     test_data: pd.DataFrame
 
 
@@ -36,8 +36,10 @@ def evaluate_oos(
 ) -> OOSReport:
     """Evaluate a frozen predictor on the untouched temporal test set.
 
-    `predictor(train, test)` receives the training partition and the
-    untouched test partition. It must not mutate either partition.
+    The predictor receives a copy of train+validation as its fitting
+    context and a separate copy of the test partition for inference.
+    The test partition is never concatenated into the predictor's
+    training input by this boundary.
     """
 
     if not isinstance(dataset, TrainingDataset):
@@ -51,16 +53,22 @@ def evaluate_oos(
         config=config,
     )
 
-    train = split.train.data.copy()
-    validation = split.validation.data.copy()
-    test = split.test.data.copy()
+    train = split.train.data.copy(deep=True)
+    validation = split.validation.data.copy(deep=True)
+    test = split.test.data.copy(deep=True)
+
+    training_context = pd.concat(
+        [train, validation],
+        ignore_index=True,
+    )
+
+    # Keep an immutable-by-contract snapshot so a predictor cannot
+    # mutate the evaluation partition without the boundary detecting it.
+    test_snapshot = test.copy(deep=True)
 
     predictions = predictor(
-        pd.concat(
-            [train, validation],
-            ignore_index=True,
-        ),
-        test.copy(),
+        training_context,
+        test.copy(deep=True),
     )
 
     if not isinstance(predictions, pd.Series):
@@ -71,6 +79,17 @@ def evaluate_oos(
             "predictor must return exactly one prediction per test row"
         )
 
+    if not test.equals(test_snapshot):
+        raise RuntimeError(
+            "predictor mutated the out-of-sample test partition"
+        )
+
+    if not training_context.empty and not test.empty:
+        if training_context["timestamp"].max() >= test["timestamp"].min():
+            raise RuntimeError(
+                "OOS leakage detected: training context reaches test period"
+            )
+
     return OOSReport(
         train_rows=len(train),
         validation_rows=len(validation),
@@ -78,6 +97,6 @@ def evaluate_oos(
         train_end=split.train_end,
         validation_end=split.validation_end,
         test_start=split.test_start,
-        predictions=predictions.reset_index(drop=True),
-        test_data=test.reset_index(drop=True),
+        predictions=predictions.reset_index(drop=True).copy(),
+        test_data=test.reset_index(drop=True).copy(),
     )
