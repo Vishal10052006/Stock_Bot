@@ -121,6 +121,7 @@ class CandidateImprovementEngine:
         return CandidateExperimentBinding(
             candidate_fingerprint=candidate.fingerprint,
             experiment_definition_fingerprint=definition_fingerprint,
+            baseline_strategy_fingerprint=candidate.baseline_strategy_fingerprint,
             parameter_changes=candidate.parameter_changes,
         )
 
@@ -232,16 +233,30 @@ class CandidateImprovementEngine:
         cls,
         candidate: CandidateImprovementProposal,
         experiment_definition: ExperimentDefinition,
-        executor: Callable[[ExperimentDefinition], ExperimentRecord],
+        baseline_config: StrategyConfig,
+        executor: Callable[[ExperimentDefinition, StrategyConfig], ExperimentRecord],
     ) -> CandidateExperimentExecution:
-        """Execute a bound candidate through the existing ExperimentRunner.
+        """Execute a candidate using its materialized research strategy config.
 
-        The candidate is not applied by this method. The supplied executor owns
-        experiment-specific research configuration and must return an immutable
-        ExperimentRecord bound to the same definition.
+        The baseline is fingerprint-checked, the candidate is materialized into
+        a new immutable StrategyConfig, and only that research config is passed
+        to the executor. The authoritative baseline is never mutated. The
+        executor cannot receive Risk or Execution configuration through this
+        boundary.
         """
         binding = cls.bind_to_experiment(candidate, experiment_definition)
-        execution: ExperimentExecution = ExperimentRunner(experiment_definition).run(executor)
+        research_config = cls.materialize_strategy_config(
+            candidate,
+            baseline_config,
+            expected_baseline_fingerprint=binding.baseline_strategy_fingerprint,
+        )
+
+        def bound_executor(definition: ExperimentDefinition) -> ExperimentRecord:
+            return executor(definition, research_config)
+
+        execution: ExperimentExecution = ExperimentRunner(experiment_definition).run(
+            bound_executor
+        )
         return CandidateExperimentExecution(binding=binding, execution=execution)
 
     @staticmethod
