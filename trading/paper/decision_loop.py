@@ -172,7 +172,22 @@ class PaperDecisionLoop:
                 risk_enabled=self.risk_enabled,
             )
             risk = assessment.decision
-            authorization = authorize_risk_decision(risk)
+            authorization = authorize_risk_decision(
+                risk,
+                approved_quantity=(
+                    float(assessment.position_size)
+                    if assessment.position_size is not None
+                    else 0.0
+                ),
+                approved_notional=(
+                    float(assessment.entry_price) * float(assessment.position_size)
+                    if assessment.entry_price is not None and assessment.position_size is not None
+                    else 0.0
+                ),
+                risk_decision_id=(
+                    f"{risk.timestamp.isoformat()}:{risk.symbol}:{risk.risk_version}"
+                ),
+            )
 
             order = None
             if authorization.status.value == "AUTHORIZED":

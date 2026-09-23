@@ -1,8 +1,9 @@
-"""AB-28 execution safety boundary.
+"""Risk-approved execution boundary.
 
-This module accepts only an approved RiskDecision. It does not contact a
-broker; it produces an immutable execution authorization/intention object.
-The existing worker ExecutionEngine remains separate.
+This module remains broker-free. It converts a deterministic RiskDecision
+plus the Risk Engine's approved quantity into an immutable authorization.
+The broker/runtime layer consumes that authorization; this module never
+places broker orders.
 """
 from __future__ import annotations
 
@@ -16,13 +17,15 @@ from trading.strategy.models import StrategyDirection
 
 
 class ExecutionAuthorizationStatus(str, Enum):
+    """Execution authorization outcomes."""
+
     AUTHORIZED = "AUTHORIZED"
     BLOCKED = "BLOCKED"
 
 
 @dataclass(frozen=True, slots=True)
 class ExecutionAuthorization:
-    """Final pre-broker authorization contract."""
+    """Immutable downstream authorization including approved exposure."""
 
     timestamp: pd.Timestamp
     symbol: str
@@ -30,37 +33,66 @@ class ExecutionAuthorization:
     status: ExecutionAuthorizationStatus
     reason: str
     risk_version: str
-    execution_version: str = "v1.0"
+    approved_quantity: float = 0.0
+    approved_notional: float = 0.0
+    risk_decision_id: str = ""
+    restrictions: tuple[str, ...] = ()
+    execution_version: str = "risk-aware-v2.0"
 
     def __post_init__(self) -> None:
         if pd.Timestamp(self.timestamp).tzinfo is None:
             raise ValueError("execution timestamp must be timezone-aware")
-        if not self.symbol:
+        if not self.symbol.strip():
             raise ValueError("execution symbol must not be empty")
+        if self.approved_quantity < 0 or self.approved_notional < 0:
+            raise ValueError("approved exposure must be non-negative")
 
 
 def authorize_risk_decision(
     risk_decision: RiskDecision,
+    *,
+    approved_quantity: float = 0.0,
+    approved_notional: float | None = None,
+    risk_decision_id: str = "",
+    restrictions: tuple[str, ...] = (),
 ) -> ExecutionAuthorization:
-    """Allow execution only from an approved RiskDecision."""
+    """Authorize only an approved RiskDecision and preserve approved size.
+
+    The Risk Engine owns sizing. Execution receives the exact quantity selected
+    by Risk; it must never reconstruct or enlarge that quantity.
+    """
     if not isinstance(risk_decision, RiskDecision):
         raise TypeError("risk_decision must be a RiskDecision")
+    if approved_quantity < 0:
+        raise ValueError("approved_quantity must be non-negative")
+    if approved_notional is not None and approved_notional < 0:
+        raise ValueError("approved_notional must be non-negative")
 
-    if risk_decision.status is not RiskDecisionStatus.APPROVED:
-        return ExecutionAuthorization(
-            timestamp=risk_decision.timestamp,
-            symbol=risk_decision.symbol,
-            direction=risk_decision.strategy_direction,
-            status=ExecutionAuthorizationStatus.BLOCKED,
-            reason="Execution blocked because RiskDecision is not APPROVED.",
-            risk_version=risk_decision.risk_version,
-        )
+    blocked = risk_decision.status is not RiskDecisionStatus.APPROVED
+    quantity = 0.0 if blocked else float(approved_quantity)
+    notional = 0.0 if blocked else (
+        float(approved_notional)
+        if approved_notional is not None
+        else 0.0
+    )
 
     return ExecutionAuthorization(
         timestamp=risk_decision.timestamp,
         symbol=risk_decision.symbol,
         direction=risk_decision.strategy_direction,
-        status=ExecutionAuthorizationStatus.AUTHORIZED,
-        reason="RiskDecision is APPROVED for execution routing.",
+        status=(
+            ExecutionAuthorizationStatus.BLOCKED
+            if blocked
+            else ExecutionAuthorizationStatus.AUTHORIZED
+        ),
+        reason=(
+            "Execution blocked because RiskDecision is not APPROVED."
+            if blocked
+            else "RiskDecision authorizes the exact Risk Engine approved exposure."
+        ),
         risk_version=risk_decision.risk_version,
+        approved_quantity=quantity,
+        approved_notional=notional,
+        risk_decision_id=risk_decision_id,
+        restrictions=restrictions,
     )
