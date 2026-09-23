@@ -204,3 +204,20 @@ readiness provenance
 
 The chain establishes reproducible identity and artifact association. It does
 not infer model quality, profitability, robustness, or live authorization.
+
+### Lineage-bound research readiness adapter
+
+`execution.research_readiness.build_research_readiness_evidence(...)` now provides the
+explicit bridge from one `ExperimentLineageExecution` to research readiness
+provenance. Baseline and model gates use the experiment lineage identity;
+OOS and walk-forward gates use the exact artifact fingerprints recorded in
+that lineage; an explicitly supplied historical backtest can likewise satisfy
+the backtest evidence kind.
+
+The adapter verifies the lineage identity and rejects artifact substitution or
+fingerprint mismatch. Dataset and code versions are taken from lineage rather
+than independently supplied by the caller. Missing backtest evidence is an
+explicit error unless the caller intentionally disables that artifact binding.
+
+This is a provenance adapter only. It does not set readiness gates to true,
+evaluate performance, or enable live execution.
