@@ -169,3 +169,48 @@ The boundary:
 The OOS contract is validation infrastructure, not evidence that a model is profitable or superior.
 Performance conclusions require frozen experiment inputs, measured outputs, and the later
 evaluation/validation stages.
+
+
+### S24 walk-forward validation status
+
+The S24 walk-forward boundary is implemented through `backtesting.walk_forward`.
+It uses chronological expanding training windows, disjoint future test blocks, an explicit
+purge interval before each test block, and fail-closed empty-partition checks.
+
+The evaluator receives copies of the train/test partitions. Test-partition mutation is
+detected, and training/test chronology is checked for every fold. Each window records
+its actual test start, test end, train/test row counts, and purged-row count.
+
+This is validation infrastructure only; it does not establish model superiority or
+future trading performance.
+
+### S25 failure-analysis status
+
+The S25 boundary is implemented through `experiments.failure_analysis`.
+It reports structural evidence gaps such as invalid measurements, missing result sections,
+zero observations, inconclusive decisions, recorded limitations, and missing learning
+metadata. It does not invent market causes or select a replacement strategy.
+
+### S26 monitoring status
+
+The S26 boundary is implemented through `experiments.monitoring`.
+It evaluates operational error rate, stale-event rate, and optional prediction-distribution
+drift against explicit thresholds. Alerts are observational only and cannot mutate models,
+strategy configuration, risk controls, or execution authority.
+
+### S27 lineage status
+
+The S27 boundary is implemented through `experiments.lineage`.
+A lineage record binds the exact experiment-definition fingerprint to the measured record
+fingerprint, dataset version, code version, artifact fingerprints, and optional parent
+lineage IDs. The lineage identifier is deterministic and content-derived.
+
+### S28 controlled self-learning status
+
+The S28 boundary is implemented through `experiments.self_learning`.
+Learning changes are immutable proposals. A proposal must reference the exact source
+experiment, use only fields explicitly listed in `ExperimentDefinition.allowed_change`,
+and pass measurement-integrity checks before it can enter another validation experiment.
+
+A valid proposal returns `VALIDATION_REQUIRED`; it never mutates frozen configuration and
+there is no automatic promotion path in this boundary.
