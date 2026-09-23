@@ -105,3 +105,6 @@ A learning experience is evidence for a future controlled improvement process.
     Later model approval
 
 This separation prevents a single losing trade from directly changing production behavior.
+
+
+Validation status: pending CI on the final Phase-18 head.
