@@ -57,3 +57,14 @@ def test_multi_horizon_forecaster_keeps_horizons_distinct() -> None:
     assert tuple(item.horizon_minutes for item in result.forecasts) == (15, 60)
     assert all(np.isfinite(item.expected_return) for item in result.forecasts)
     assert all(item.uncertainty is not None for item in result.forecasts)
+
+
+def test_multi_horizon_requires_fit() -> None:
+    forecaster = MultiHorizonReturnForecaster((15, 60))
+    with pytest.raises(RuntimeError, match="fitted"):
+        forecaster.predict(
+            np.ones((1, 2)),
+            timestamp=pd.Timestamp("2026-09-23T09:15:00+05:30"),
+            symbol="RELIANCE",
+            provenance=_provenance(),
+        )
