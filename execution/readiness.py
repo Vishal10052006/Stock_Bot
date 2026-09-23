@@ -111,6 +111,7 @@ class LiveReadinessGate:
         gates: LiveReadinessInput,
         *,
         evidence: tuple[ReadinessEvidence, ...] = (),
+        require_provenance: bool = False,
         paper_evidence_quality: PaperEvidenceQualityReport | None = None,
     ) -> LiveReadinessReport:
         if not isinstance(gates, LiveReadinessInput):
@@ -129,10 +130,13 @@ class LiveReadinessGate:
                 )
             if not valid:
                 failed.append("paper_evidence_quality_validated")
-        evidence_by_gate = {item.gate: item for item in evidence}
-        for field in self._FIELDS:
-            if getattr(gates, field) and field not in evidence_by_gate:
-                failed.append(f"{field}_provenance")
+        if not isinstance(require_provenance, bool):
+            raise TypeError("require_provenance must be a bool")
+        if require_provenance:
+            evidence_by_gate = {item.gate: item for item in evidence}
+            for field in self._FIELDS:
+                if getattr(gates, field) and field not in evidence_by_gate:
+                    failed.append(f"{field}_provenance")
         failed = tuple(failed)
         return LiveReadinessReport(
             ready=not failed,
