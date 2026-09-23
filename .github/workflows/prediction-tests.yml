@@ -29,4 +29,7 @@ jobs:
             tests/test_prediction_robustness.py \
             tests/test_boosting_models.py \
             tests/test_return_forecast.py \
-            tests/test_return_forecast_evaluation.py
+            tests/test_return_forecast_evaluation.py \
+            tests/test_prediction_feature_drift.py \
+            tests/test_prediction_storage.py \
+            tests/datasets/test_return_targets.py
