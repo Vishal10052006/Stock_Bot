@@ -77,9 +77,18 @@ class ReadinessEvidence:
         if not all(hasattr(lineage, name) for name in required):
             raise TypeError("lineage does not satisfy the lineage provenance contract")
 
-        lineage_id = getattr(lineage, "lineage_id", "") or lineage.computed_id()
-        if not isinstance(lineage_id, str) or not lineage_id.strip():
-            raise ValueError("lineage must provide a non-empty lineage id")
+        computed_id = lineage.computed_id()
+        if (
+            not isinstance(computed_id, str)
+            or len(computed_id) != 64
+            or any(char not in "0123456789abcdef" for char in computed_id.lower())
+        ):
+            raise ValueError("lineage.computed_id() must return a SHA-256 hex digest")
+
+        lineage_id = getattr(lineage, "lineage_id", "")
+        if lineage_id and lineage_id != computed_id:
+            raise ValueError("lineage_id does not match lineage.computed_id()")
+        lineage_id = computed_id
 
         return cls(
             gate=gate,
