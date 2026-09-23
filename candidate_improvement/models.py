@@ -12,6 +12,10 @@ from dataclasses import dataclass
 from enum import Enum
 import hashlib
 import json
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from experiments.runner import ExperimentExecution
 
 
 class CandidateStatus(str, Enum):
@@ -131,6 +135,31 @@ class CandidateExperimentBinding:
                 "candidate_fingerprint": self.candidate_fingerprint,
                 "experiment_definition_fingerprint": self.experiment_definition_fingerprint,
                 "parameter_changes": list(self.parameter_changes),
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+@dataclass(frozen=True, slots=True)
+class CandidateExperimentExecution:
+    """Immutable candidate binding paired with the existing experiment result."""
+
+    binding: CandidateExperimentBinding
+    execution: "ExperimentExecution"
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.execution, object):
+            raise TypeError("execution must be an ExperimentExecution")
+
+    @property
+    def fingerprint(self) -> str:
+        canonical = json.dumps(
+            {
+                "binding": self.binding.fingerprint,
+                "execution_record": self.execution.record.fingerprint,
+                "experiment_definition": self.execution.definition.fingerprint(),
             },
             sort_keys=True,
             separators=(",", ":"),
