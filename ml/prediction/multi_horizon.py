@@ -42,6 +42,28 @@ class MultiHorizonReturnForecaster:
             self._models[horizon] = model
         return self
 
+    def calibrate(
+        self,
+        X_calibration: np.ndarray,
+        targets: dict[int, pd.Series | np.ndarray],
+        *,
+        confidence: float = 0.90,
+    ) -> "MultiHorizonReturnForecaster":
+        """Calibrate each horizon independently on a later chronological holdout."""
+        if not self._models:
+            raise RuntimeError("MultiHorizonReturnForecaster must be fitted before calibration")
+        missing = set(self.horizons_minutes) - set(targets)
+        if missing:
+            raise ValueError(f"missing calibration targets for horizons: {sorted(missing)}")
+
+        for horizon in self.horizons_minutes:
+            self._models[horizon].calibrate(
+                X_calibration,
+                targets[horizon],
+                confidence=confidence,
+            )
+        return self
+
     def predict(
         self,
         X: np.ndarray,
@@ -52,15 +74,28 @@ class MultiHorizonReturnForecaster:
     ) -> MultiHorizonForecast:
         if not self._models:
             raise RuntimeError("MultiHorizonReturnForecaster must be fitted before prediction")
-        forecasts = tuple(
-            ReturnForecast(
-                timestamp=timestamp,
-                symbol=symbol,
-                horizon_minutes=horizon,
-                expected_return=float(self._models[horizon].predict(X[:1])[0]),
-                uncertainty=self._models[horizon].residual_std,
-                provenance=provenance,
+        forecasts = []
+        for horizon in self.horizons_minutes:
+            model = self._models[horizon]
+            expected_return = float(model.predict(X[:1])[0])
+            interval_lower = interval_upper = interval_confidence = None
+            if model.is_calibrated:
+                lower, upper = model.predict_interval(X[:1])
+                interval_lower = float(lower[0])
+                interval_upper = float(upper[0])
+                interval_confidence = model.conformal_confidence
+
+            forecasts.append(
+                ReturnForecast(
+                    timestamp=timestamp,
+                    symbol=symbol,
+                    horizon_minutes=horizon,
+                    expected_return=expected_return,
+                    uncertainty=model.residual_std,
+                    provenance=provenance,
+                    interval_lower=interval_lower,
+                    interval_upper=interval_upper,
+                    interval_confidence=interval_confidence,
+                )
             )
-            for horizon in self.horizons_minutes
-        )
-        return MultiHorizonForecast(forecasts=forecasts)
+        return MultiHorizonForecast(forecasts=tuple(forecasts))
