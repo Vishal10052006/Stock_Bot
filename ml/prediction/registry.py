@@ -59,6 +59,7 @@ class PredictionModelRegistry:
             feature_version=record.feature_version,
             dataset_version=record.dataset_version,
             code_version=record.code_version,
+            target_version=record.target_version,
             training_period_start=record.training_period_start,
             training_period_end=record.training_period_end,
             validation_period_start=record.validation_period_start,
