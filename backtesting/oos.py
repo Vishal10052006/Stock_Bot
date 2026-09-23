@@ -9,6 +9,7 @@ import pandas as pd
 
 from ml.datasets.models import TrainingDataset
 from ml.datasets.splitting import TemporalSplit, TemporalSplitConfig, temporal_split
+from utils.fingerprint import artifact_fingerprint
 
 
 @dataclass(frozen=True, slots=True)
@@ -23,6 +24,23 @@ class OOSReport:
     test_start: pd.Timestamp
     predictions: pd.Series
     test_data: pd.DataFrame
+
+    @property
+    def fingerprint(self) -> str:
+        """Return a deterministic identity for the complete OOS artifact."""
+        return artifact_fingerprint(
+            {
+                "artifact_type": "OOSReport",
+                "train_rows": self.train_rows,
+                "validation_rows": self.validation_rows,
+                "test_rows": self.test_rows,
+                "train_end": self.train_end,
+                "validation_end": self.validation_end,
+                "test_start": self.test_start,
+                "predictions": self.predictions,
+                "test_data": self.test_data,
+            }
+        )
 
 
 def evaluate_oos(
