@@ -38,6 +38,66 @@ def test_return_forecast_rejects_invalid_targets() -> None:
         ReturnForecastModel().fit(X, y)
 
 
+def test_return_forecast_conformal_calibration_uses_held_out_data() -> None:
+    X_train = np.arange(60, dtype=float).reshape(30, 2)
+    y_train = 0.001 * X_train[:, 0] - 0.002 * X_train[:, 1]
+
+    X_cal = np.arange(60, 100, dtype=float).reshape(20, 2)
+    y_cal = 0.001 * X_cal[:, 0] - 0.002 * X_cal[:, 1] + 0.01
+
+    model = ReturnForecastModel(ReturnForecastConfig(model_family="ridge"))
+    model.fit(X_train, y_train)
+
+    assert not model.is_calibrated
+    with pytest.raises(RuntimeError, match="conformal-calibrated"):
+        model.predict_interval(X_cal)
+
+    model.calibrate(X_cal, y_cal, confidence=0.90)
+
+    assert model.is_calibrated
+    assert model.conformal_confidence == 0.90
+    assert model.conformal_radius >= 0.0
+
+    lower, upper = model.predict_interval(X_cal[:3])
+    predictions = model.predict(X_cal[:3])
+    assert np.all(lower <= predictions)
+    assert np.all(predictions <= upper)
+
+
+def test_return_forecast_calibration_validates_confidence_and_feature_count() -> None:
+    X = np.ones((5, 2))
+    y = np.arange(5, dtype=float)
+    model = ReturnForecastModel().fit(X, y)
+
+    with pytest.raises(ValueError, match="confidence"):
+        model.calibrate(X, y, confidence=1.0)
+
+    with pytest.raises(ValueError, match="feature count"):
+        model.calibrate(np.ones((3, 3)), np.ones(3))
+
+
+def test_predict_frame_exposes_calibrated_interval() -> None:
+    X = np.arange(40, dtype=float).reshape(20, 2)
+    y = 0.001 * X[:, 0] - 0.002 * X[:, 1]
+    model = ReturnForecastModel().fit(X, y)
+    model.calibrate(X[-5:], y[-5:])
+
+    frame = model.predict_frame(
+        X[:3],
+        timestamp=pd.Series(pd.date_range("2026-09-23", periods=3, freq="5min", tz="UTC")),
+        symbol=pd.Series(["RELIANCE"] * 3),
+        horizon_minutes=15,
+    )
+
+    assert {
+        "prediction_interval_lower",
+        "prediction_interval_upper",
+        "interval_confidence",
+    }.issubset(frame.columns)
+    assert np.isfinite(frame["prediction_interval_lower"]).all()
+    assert np.isfinite(frame["prediction_interval_upper"]).all()
+
+
 def test_multi_horizon_forecaster_keeps_horizons_distinct() -> None:
     X = np.arange(60, dtype=float).reshape(30, 2)
     targets = {
