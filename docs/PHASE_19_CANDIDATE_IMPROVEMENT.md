@@ -26,6 +26,9 @@ Backtest / OOS / Walk-forward / Paper
 Controlled approval
 ```
 
+This matches the project roadmap requirement that a candidate must pass
+Backtest → OOS → Walk-forward → Paper before it can become an approved model.
+
 ## Candidate contract
 
 Each `CandidateImprovementProposal` records:
@@ -65,6 +68,25 @@ The candidate's parameter-change keys must **exactly match** the frozen
 `ExperimentDefinition.allowed_change` keys. This is enforced both when the
 candidate is proposed and when it is later bound to the experiment.
 
+## Candidate → research StrategyConfig
+
+`CandidateImprovementEngine.materialize_strategy_config(...)` provides the
+controlled bridge from a candidate to a research-only immutable
+`StrategyConfig`.
+
+It:
+
+1. verifies the candidate is still `PROPOSED`;
+2. verifies the candidate's baseline fingerprint matches the supplied baseline;
+3. applies only the Phase-19 whitelist fields;
+4. uses `dataclasses.replace`, so the baseline object is never mutated;
+5. returns only a `StrategyConfig` — never Risk or Execution configuration.
+
+The helper also supports an explicit expected baseline fingerprint, allowing the
+experiment caller to fail closed if the baseline identity changed.
+
+No authoritative production strategy is silently replaced by this operation.
+
 ## Candidate → experiment binding
 
 `CandidateImprovementEngine.bind_to_experiment(...)` creates an immutable
@@ -76,9 +98,10 @@ candidate is proposed and when it is later bound to the experiment.
 3. the candidate change-key set exactly equals
    `ExperimentDefinition.allowed_change`.
 
-Binding is structural only. It does not execute the experiment, instantiate or
-mutate an authoritative StrategyConfig, bypass OOS/walk-forward validation, or
-authorize execution.
+`execute_bound_experiment(...)` then routes the frozen definition through the
+existing `ExperimentRunner`. The supplied executor owns experiment-specific
+research configuration and must return an `ExperimentRecord` bound to the same
+definition.
 
 ## Safety properties
 
