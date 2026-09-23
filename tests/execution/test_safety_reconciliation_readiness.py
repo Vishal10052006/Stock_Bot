@@ -230,14 +230,35 @@ def test_readiness_accepts_complete_gate_provenance() -> None:
         reconciliation_validated=True,
         compliance_verified_current=True,
     )
+    evidence_kinds = {
+        "historical_data_validated": "validation",
+        "indicators_validated": "validation",
+        "features_leakage_safe": "audit",
+        "labels_validated": "validation",
+        "baseline_validated": "experiment_lineage",
+        "model_validated": "experiment_lineage",
+        "realistic_backtest_validated": "backtest",
+        "leakage_audit_passed": "audit",
+        "oos_validated": "oos",
+        "walk_forward_validated": "walk_forward",
+        "paper_evidence_validated": "paper_evidence",
+        "risk_controls_validated": "risk",
+        "monitoring_validated": "monitoring",
+        "kill_switch_validated": "safety",
+        "broker_integration_validated": "broker",
+        "reconciliation_validated": "reconciliation",
+        "compliance_verified_current": "compliance",
+    }
+
     evidence = tuple(
         ReadinessEvidence(
             gate=field,
-            artifact_fingerprint=f"artifact-{field}",
+            artifact_fingerprint="a" * 64,
             dataset_version="dataset-v1",
             code_version="code-v1",
             validated_at=pd.Timestamp("2026-09-23T10:00:00Z").to_pydatetime(),
             source="test",
+            evidence_kind=evidence_kinds[field],
         )
         for field in LiveReadinessGate._FIELDS
     )
@@ -271,10 +292,12 @@ def test_readiness_evidence_can_bind_existing_lineage() -> None:
     assert evidence.artifact_fingerprint == lineage.computed_id()
     assert evidence.dataset_version == "dataset-v1"
     assert evidence.code_version == "code-v1"
-    assert evidence.source == f"lineage:{'c' * 64}"
+    assert evidence.source == f"lineage:{lineage.computed_id()}"
 
 
 def test_readiness_rejects_tampered_lineage_id() -> None:
+    from experiments.lineage import LineageRecord
+
     lineage = LineageRecord(
         experiment_id="EXP-1",
         definition_fingerprint="a" * 64,
@@ -382,7 +405,7 @@ def _provenance_evidence(gate: str) -> ReadinessEvidence:
         "broker_integration_validated": "broker",
         "reconciliation_validated": "reconciliation",
         "compliance_verified_current": "compliance",
-    }[gate]
+    }.get(gate, "validation")
     return ReadinessEvidence(
         gate=gate,
         artifact_fingerprint="a" * 64,
