@@ -251,8 +251,8 @@ def test_backtest_uses_full_risk_engine_for_actionable_signal() -> None:
     result = HistoricalBacktestEngine().run(rows)
 
     assert isinstance(result.steps[0].risk, RiskDecision)
-    assert result.steps[0].risk.risk_policy_version == "risk_v1.0"
-    assert result.steps[1].risk.risk_policy_version == "risk_v1.0"
+    assert result.steps[0].risk.risk_version == "RISK-v1.0"
+    assert result.steps[1].risk.risk_version == "RISK-v1.0"
     assert result.orders[0].quantity == 250.0
 
 
