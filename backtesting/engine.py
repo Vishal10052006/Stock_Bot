@@ -32,6 +32,7 @@ from trading.signals.candidate import build_candidate
 from trading.signals.models import CandidateConfig, CandidateDirection
 from trading.strategy.engine import StrategyEngine
 from trading.risk.pipeline import evaluate_strategy_candidate_risk
+from utils.fingerprint import artifact_fingerprint
 from trading.strategy.models import (
     BaselineStrategyConfig,
     StrategyDecision,
