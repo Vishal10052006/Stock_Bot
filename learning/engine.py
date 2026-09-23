@@ -83,8 +83,9 @@ class LearningEngine:
         outcomes = tuple(records)
         decision_map = {item.trade_id: item for item in tuple(decisions or ())}
 
+        # Learning evidence is keyed by the canonical Phase-16 trade identity.
         rewards = {
-            record.journal_id: self.reward(record, decision_map.get(record.trade_id))
+            record.trade_id: self.reward(record, decision_map.get(record.trade_id))
             for record in outcomes
         }
 
@@ -127,10 +128,11 @@ class LearningEngine:
             if mapped is None:
                 continue
             pattern, error_class = mapped
+            source_trade_ids = set(finding.source_trade_ids)
             linked_records = {
-                record.journal_id: record
+                record.trade_id: record
                 for record in outcomes
-                if record.journal_id in set(finding.source_trade_ids)
+                if record.trade_id in source_trade_ids
             }
             if not linked_records:
                 continue
@@ -145,6 +147,10 @@ class LearningEngine:
                 population_count=finding.population_count,
                 rewards=rewards,
                 rationale=finding.detail,
+                conditions=finding.conditions,
+                average_net_pnl=finding.average_net_pnl,
+                total_net_pnl=finding.total_net_pnl,
+                detail=finding.detail,
             )
 
         return LearningReport(
@@ -164,6 +170,10 @@ class LearningEngine:
         population_count,
         rewards,
         rationale,
+        conditions=(),
+        average_net_pnl=0.0,
+        total_net_pnl=0.0,
+        detail="",
     ) -> None:
         unique_ids = tuple(sorted(ids))
         evidence_count = len(unique_ids)
@@ -199,6 +209,10 @@ class LearningEngine:
                 total_reward=sum(reward_values),
                 source_trade_ids=unique_ids,
                 rationale=rationale,
+                conditions=tuple(conditions),
+                average_net_pnl=average_net_pnl,
+                total_net_pnl=total_net_pnl,
+                detail=detail or rationale,
             )
         )
 
