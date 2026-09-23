@@ -67,3 +67,20 @@ results into live authorization. Paper evidence remains one input to the separat
 live-readiness checklist.
 
 The `PaperEvidenceCollector` and `collect_paper_decision_run` adapter can derive signal, fill, slippage, and regime observations directly from a chronological paper decision run. Latency, false-signal outcomes, equity observations, and calibration outcomes remain explicit inputs because they cannot be inferred safely without additional timestamps/outcomes. This prevents synthetic evidence from being created by the reporting layer.
+
+
+## Persistent paper-evidence journal
+
+`experiments.paper_journal` adds a deterministic, append-only JSONL boundary for
+paper-evidence records. A record binds the frozen evidence fingerprint to its
+paper period, source run identity, and record version; its `run_id` is derived
+from those immutable inputs.
+
+`PaperEvidenceJournal` never rewrites existing records. Duplicate run identities
+are rejected, and every loaded line is reconstructed through the immutable
+record contract so a tampered period, source identity, or evidence payload is
+detected instead of being silently accepted.
+
+The journal provides reproducibility and auditability only. It does not infer
+missing observations, alter evidence, rank paper runs, or authorize live
+execution.
