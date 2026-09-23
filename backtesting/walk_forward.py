@@ -7,6 +7,8 @@ from typing import Callable
 
 import pandas as pd
 
+from utils.fingerprint import artifact_fingerprint
+
 
 @dataclass(frozen=True, slots=True)
 class WalkForwardWindow:
@@ -28,6 +30,17 @@ class WalkForwardTradingReport:
 
     windows: tuple[WalkForwardWindow, ...]
     results: tuple[object, ...]
+
+    @property
+    def fingerprint(self) -> str:
+        """Return a deterministic identity for the complete WF artifact."""
+        return artifact_fingerprint(
+            {
+                "artifact_type": "WalkForwardTradingReport",
+                "windows": self.windows,
+                "results": self.results,
+            }
+        )
 
 
 def generate_windows(
