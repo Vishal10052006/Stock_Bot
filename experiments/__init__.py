@@ -2,7 +2,12 @@
 
 from .definition import ExperimentDefinition
 from .evaluation import EvaluationReport, evaluate_experiment_record
-from .executor import ExperimentExecutionInputs, execute_validation_experiment
+from .executor import (
+    ExperimentExecutionInputs,
+    ExperimentLineageExecution,
+    execute_validation_experiment,
+    execute_validation_experiment_with_lineage,
+)
 from .failure_analysis import FailureAnalysisReport, FailureFinding, analyze_experiment_failure
 from .lineage import LineageRecord, build_lineage
 from .monitoring import MonitoringPolicy, MonitoringReport, MonitoringSnapshot, evaluate_monitoring
@@ -44,6 +49,7 @@ __all__ = [
     "ExperimentDefinition",
     "ExperimentExecution",
     "ExperimentExecutionInputs",
+    "ExperimentLineageExecution",
     "ExperimentRecord",
     "ExperimentRunner",
     "evaluate_experiment_record",
@@ -53,5 +59,6 @@ __all__ = [
     "validate_paper_evidence",
     "assess_paper_evidence",
     "execute_validation_experiment",
+    "execute_validation_experiment_with_lineage",
     "validate_learning_proposal",
 ]
