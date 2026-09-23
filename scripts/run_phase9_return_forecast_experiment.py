@@ -41,7 +41,6 @@ from ml.models.return_forecast import (  # noqa: E402
     ReturnForecastConfig,
     ReturnForecastModel,
 )
-from ml.labeling.models import LabelingConfig  # noqa: E402
 
 
 def _chronological_split(
@@ -235,8 +234,6 @@ def main() -> None:
     missing = required_targets.difference(targets.columns)
     if missing:
         raise ValueError(f"targets missing required columns: {sorted(missing)}")
-
-    target_horizon_bars = LabelingConfig().horizon_bars
 
     horizon_values = targets["horizon_bars"].dropna().astype(int).unique()
     if len(horizon_values) != 1:
