@@ -68,6 +68,10 @@ class LearningEngine:
             record.journal_id
             for record in records
         }
+        trade_ids = {
+            record.trade_id
+            for record in records
+        }
 
         # Only findings belonging to the supplied population are eligible.
         findings = tuple(
@@ -192,7 +196,7 @@ class LearningEngine:
         experiences.extend(
             self._learn_from_patterns(
                 analysis.pattern_findings,
-                record_ids,
+                trade_ids,
             )
         )
 
