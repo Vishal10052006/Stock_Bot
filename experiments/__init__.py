@@ -2,8 +2,7 @@
 
 from .definition import ExperimentDefinition
 from .evaluation import EvaluationReport, evaluate_experiment_record
-from .executor import ExperimentExecutionInputs, execute_validation_experiment
-from .failure_analysis import FailureAnalysisReport, FailureFinding, analyze_experiment_failure
+from .executor import (\n    ExperimentExecutionInputs,\n    ExperimentLineageExecution,\n    execute_validation_experiment,\n    execute_validation_experiment_with_lineage,\n)\nfrom .failure_analysis import FailureAnalysisReport, FailureFinding, analyze_experiment_failure
 from .lineage import LineageRecord, build_lineage
 from .monitoring import MonitoringPolicy, MonitoringReport, MonitoringSnapshot, evaluate_monitoring
 from .paper_quality import PaperEvidenceQualityReport, assess_paper_evidence
