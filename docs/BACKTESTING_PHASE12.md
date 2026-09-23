@@ -95,5 +95,15 @@ compatibility paths.
 
 ## Validation status
 
-The Phase 12 implementation is in draft PR #26 and must pass the dedicated
-backtesting suite plus the repository regression before merge.
+The Phase 12 implementation is maintained on the `phase-12/backtesting-v1-final`
+branch and is proposed in PR #30. It is built on the finalized Phase 11 Risk
+Engine already merged to `main`.
+
+Validation requires:
+- the dedicated Phase 12 suite;
+- the full Phase 11 Risk suite;
+- repository regression;
+- causal/leakage review.
+
+The backtester does not carry a duplicate Risk Engine implementation. Risk
+policy and position sizing remain owned by `trading/risk`.
