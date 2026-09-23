@@ -1,6 +1,6 @@
 # STOCK BOT — Phase 19 Candidate Improvement Engine
 
-**Status:** IMPLEMENTED AS CONTROLLED RESEARCH PROPOSALS  
+**Status:** COMPLETE — CONTROLLED RESEARCH PROPOSALS  
 **Module:** `candidate_improvement/`
 
 ## Objective
@@ -177,3 +177,17 @@ regression-repair dependency required for a clean repository CI gate.
 
 Phase 19 remains research-only. No candidate path reaches order authorization,
 broker execution, live enablement, or automatic promotion.
+
+## Final completion gate
+
+Verified on 2026-09-24 against main commit `ebeea11deee57ff2853a290534ea87a2cf5de530`.
+
+- Phase-19 dedicated tests pass.
+- Market Bot regression pass.
+- Phase-9 contract validation pass.
+- Full repository regression pass in GitHub Actions run #416.
+- Candidate changes are materialized into a new research-only `StrategyConfig`.
+- The authoritative baseline remains fingerprint-stable and unmutated.
+- Candidate, learning evidence, experiment definition, baseline strategy, and experiment record identities are explicitly bound and validated.
+- Risk, Safety, Execution, broker, and live-enable controls remain outside the Phase-19 boundary.
+- Candidate validation/execution does not promote or enable the candidate.
