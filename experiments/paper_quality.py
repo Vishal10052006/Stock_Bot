@@ -7,6 +7,8 @@ does not rank runs, infer profitability, or authorize live execution.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import hashlib
+import json
 from typing import Iterable
 
 from .paper_evidence import validate_paper_evidence
@@ -35,6 +37,34 @@ class PaperEvidenceQualityReport:
     code_versions: tuple[str, ...]
     evidence_versions: tuple[str, ...]
     issues: tuple[str, ...]
+
+    @property
+    @property
+    def fingerprint(self) -> str:
+        payload = {
+            "record_count": self.record_count,
+            "valid_record_count": self.valid_record_count,
+            "invalid_record_count": self.invalid_record_count,
+            "totals": {
+                "signals": self.total_signals,
+                "fills": self.total_fills,
+                "slippage": self.total_slippage_observations,
+                "latency": self.total_latency_observations,
+                "false_signals": self.total_false_signals,
+                "drawdown": self.total_drawdown_observations,
+                "regime": self.total_regime_observations,
+                "calibration": self.total_calibration_observations,
+                "operational_events": self.total_operational_events,
+                "operational_errors": self.total_operational_errors,
+                "stale_events": self.total_stale_events,
+            },
+            "dataset_versions": self.dataset_versions,
+            "code_versions": self.code_versions,
+            "evidence_versions": self.evidence_versions,
+            "issues": self.issues,
+        }
+        canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+        return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
     @property
     def valid(self) -> bool:
