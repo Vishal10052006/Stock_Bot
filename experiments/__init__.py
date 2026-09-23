@@ -6,6 +6,7 @@ from .executor import ExperimentExecutionInputs, execute_validation_experiment
 from .failure_analysis import FailureAnalysisReport, FailureFinding, analyze_experiment_failure
 from .lineage import LineageRecord, build_lineage
 from .monitoring import MonitoringPolicy, MonitoringReport, MonitoringSnapshot, evaluate_monitoring
+from .paper_journal import PaperEvidenceJournal, PaperEvidenceRecord
 from .paper_evidence import (
     PaperEvidenceCollector,
     PaperEvidenceReport,
@@ -31,6 +32,8 @@ __all__ = [
     "PaperEvidenceReport",
     "collect_paper_decision_run",
     "PaperEvidenceSnapshot",
+    "PaperEvidenceJournal",
+    "PaperEvidenceRecord",
     "ExperimentDefinition",
     "ExperimentExecution",
     "ExperimentExecutionInputs",
