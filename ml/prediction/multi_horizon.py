@@ -11,7 +11,7 @@ from ml.models.return_forecast import ReturnForecastConfig, ReturnForecastModel
 from ml.prediction.contracts import MultiHorizonForecast, PredictionProvenance, ReturnForecast
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True)
 class MultiHorizonReturnForecaster:
     """Independent model per horizon with explicit horizon isolation."""
 
