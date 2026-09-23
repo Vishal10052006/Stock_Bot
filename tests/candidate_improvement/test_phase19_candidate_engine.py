@@ -361,7 +361,7 @@ def test_all_whitelisted_strategy_parameters_materialize(
         "execution.order_type",
         "execution.quantity",
         "safety.live_execution_enabled",
-            "model.weights",
+        "model.weights",
     ],
 )
 def test_candidate_rejects_non_strategy_control_surfaces(forbidden_field: str) -> None:
