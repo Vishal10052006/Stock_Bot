@@ -1,7 +1,8 @@
-"""AB-47 learning package."""
+"""AB-47/Phase-18 outcome-based learning package."""
 
 from .engine import LearningEngine
 from .models import (
+    ErrorClass,
     LearningConfig,
     LearningExperience,
     LearningPattern,
@@ -9,6 +10,7 @@ from .models import (
 )
 
 __all__ = [
+    "ErrorClass",
     "LearningConfig",
     "LearningEngine",
     "LearningExperience",
