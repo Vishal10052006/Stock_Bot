@@ -213,7 +213,14 @@ class TradeErrorAnalyzer:
         records: tuple[TradeJournalRecord, ...],
         decisions: tuple[TradeDecisionRecord, ...],
     ) -> tuple[PatternFinding, ...]:
-        decisions_by_id = {item.trade_id: item for item in decisions}
+        decision_ids = [item.trade_id for item in decisions]
+        if len(decision_ids) != len(set(decision_ids)):
+            raise ValueError("decision trade_id values must be unique")
+
+        decisions_by_id = {
+            item.trade_id: item
+            for item in decisions
+        }
         linked = [
             (record, decisions_by_id[record.trade_id])
             for record in records
