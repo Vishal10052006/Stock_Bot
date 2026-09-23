@@ -4,6 +4,8 @@ import pytest
 from experiments.paper_evidence import PaperEvidenceSnapshot
 from experiments.paper_journal import PaperEvidenceRecord
 from experiments.paper_quality import assess_paper_evidence
+from experiments.monitoring import MonitoringReport
+from trading.risk.engine import RiskConfig
 
 from execution.reconciliation import (
     BrokerPosition,
@@ -287,6 +289,77 @@ def test_readiness_rejects_tampered_lineage_id() -> None:
             lineage,
             gate="oos_validated",
             validated_at=pd.Timestamp("2026-09-23T10:00:00Z").to_pydatetime(),
+        )
+
+
+def test_readiness_evidence_binds_existing_artifact_fingerprint() -> None:
+    artifacts = (
+        (
+            _valid_paper_quality(),
+            "paper_evidence_validated",
+            "paper_evidence",
+        ),
+        (
+            MonitoringReport(
+                error_rate=0.01,
+                stale_rate=0.01,
+                prediction_psi=0.05,
+                alerts=(),
+            ),
+            "monitoring_validated",
+            "monitoring",
+        ),
+        (
+            BrokerReconciler().reconcile(
+                (BrokerPosition("ITC", 10, 100.0),),
+                (BrokerPosition("ITC", 10, 100.0),),
+            ),
+            "reconciliation_validated",
+            "reconciliation",
+        ),
+        (
+            IndependentSafetyGate().evaluate(
+                SafetyState(live_execution_enabled=False)
+            ),
+            "kill_switch_validated",
+            "safety",
+        ),
+        (
+            RiskConfig(),
+            "risk_controls_validated",
+            "risk",
+        ),
+    )
+
+    for artifact, gate, kind in artifacts:
+        evidence = ReadinessEvidence.from_artifact(
+            artifact,
+            gate=gate,
+            evidence_kind=kind,
+            dataset_version="dataset-v1",
+            code_version="code-v1",
+            validated_at=pd.Timestamp("2026-09-23T10:00:00Z").to_pydatetime(),
+            source="test",
+        )
+        assert evidence.artifact_fingerprint == artifact.fingerprint
+        assert evidence.evidence_kind == kind
+
+
+def test_readiness_artifact_binding_rejects_wrong_kind() -> None:
+    with pytest.raises(ValueError, match="invalid evidence_kind"):
+        ReadinessEvidence.from_artifact(
+            MonitoringReport(
+                error_rate=0.01,
+                stale_rate=0.01,
+                prediction_psi=0.05,
+                alerts=(),
+            ),
+            gate="monitoring_validated",
+            evidence_kind="risk",
+            dataset_version="dataset-v1",
+            code_version="code-v1",
+            validated_at=pd.Timestamp("2026-09-23T10:00:00Z").to_pydatetime(),
+            source="test",
         )
 
 
