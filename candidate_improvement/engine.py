@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 import hashlib
 import json
 from typing import Callable, Mapping
@@ -10,6 +11,7 @@ from experiments.definition import ExperimentDefinition
 from experiments.record import ExperimentRecord
 from experiments.runner import ExperimentExecution, ExperimentRunner
 from learning.models import LearningExperience
+from trading.strategy.models import BaselineStrategyConfig, StrategyConfig
 
 from .models import (
     ALLOWED_CHANGE_FIELDS,
@@ -99,11 +101,7 @@ class CandidateImprovementEngine:
         candidate: CandidateImprovementProposal,
         experiment_definition: ExperimentDefinition,
     ) -> CandidateExperimentBinding:
-        """Bind a candidate only to the exact frozen definition it declares.
-
-        Binding is structural only: no experiment is executed, no StrategyConfig
-        is mutated, and the candidate remains PROPOSED.
-        """
+        """Bind a candidate only to the exact frozen definition it declares."""
         if not isinstance(candidate, CandidateImprovementProposal):
             raise TypeError("candidate must be a CandidateImprovementProposal")
         if not isinstance(experiment_definition, ExperimentDefinition):
@@ -126,6 +124,109 @@ class CandidateImprovementEngine:
             parameter_changes=candidate.parameter_changes,
         )
 
+    @staticmethod
+    def materialize_strategy_config(
+        candidate: CandidateImprovementProposal,
+        baseline_config: StrategyConfig,
+        *,
+        expected_baseline_fingerprint: str | None = None,
+    ) -> StrategyConfig:
+        """Create an immutable research-only StrategyConfig from a candidate.
+
+        This is a pure constructor boundary. It never changes the supplied
+        baseline object and never returns Risk/Execution configuration.
+        """
+        if not isinstance(candidate, CandidateImprovementProposal):
+            raise TypeError("candidate must be a CandidateImprovementProposal")
+        if not isinstance(baseline_config, StrategyConfig):
+            raise TypeError("baseline_config must be a StrategyConfig")
+        if candidate.status is not CandidateStatus.PROPOSED:
+            raise ValueError("candidate must be PROPOSED before materialization")
+
+        actual_fingerprint = CandidateImprovementEngine.strategy_config_fingerprint(
+            baseline_config
+        )
+        if (
+            expected_baseline_fingerprint is not None
+            and actual_fingerprint != expected_baseline_fingerprint
+        ):
+            raise ValueError("baseline strategy fingerprint mismatch")
+        if candidate.baseline_strategy_fingerprint != actual_fingerprint:
+            raise ValueError("candidate is bound to a different baseline strategy")
+
+        config = baseline_config
+        for key, serialized_value in candidate.parameter_changes:
+            value = json.loads(serialized_value)
+            if key == "baseline.minimum_rvol":
+                config = replace(
+                    config,
+                    baseline=replace(config.baseline, minimum_rvol=float(value)),
+                )
+            elif key == "baseline.minimum_regime_probability":
+                config = replace(
+                    config,
+                    baseline=replace(
+                        config.baseline,
+                        minimum_regime_probability=float(value),
+                    ),
+                )
+            elif key == "prediction_min_probability":
+                config = replace(config, prediction_min_probability=float(value))
+            elif key == "prediction_min_margin":
+                config = replace(config, prediction_min_margin=float(value))
+            elif key == "prediction_max_age_seconds":
+                config = replace(config, prediction_max_age_seconds=int(value))
+            elif key == "expected_value_threshold":
+                config = replace(config, expected_value_threshold=float(value))
+            elif key == "max_cost_fraction":
+                config = replace(config, max_cost_fraction=float(value))
+            elif key == "allowed_regimes":
+                if not isinstance(value, (list, tuple)) or not value:
+                    raise ValueError("allowed_regimes candidate value must be a non-empty sequence")
+                config = replace(config, allowed_regimes=tuple(str(item) for item in value))
+            elif key == "require_prediction_direction_alignment":
+                config = replace(
+                    config,
+                    require_prediction_direction_alignment=bool(value),
+                )
+            elif key == "require_analysis_alignment":
+                config = replace(config, require_analysis_alignment=bool(value))
+            elif key == "require_liquidity_when_present":
+                config = replace(config, require_liquidity_when_present=bool(value))
+            else:
+                raise ValueError(f"unsupported candidate change field: {key}")
+
+        return config
+
+    @staticmethod
+    def strategy_config_fingerprint(config: StrategyConfig) -> str:
+        """Return deterministic identity for a StrategyConfig research baseline."""
+        if not isinstance(config, StrategyConfig):
+            raise TypeError("config must be a StrategyConfig")
+        payload = {
+            "strategy_id": config.strategy_id,
+            "strategy_version": config.strategy_version,
+            "baseline": {
+                "minimum_rvol": config.baseline.minimum_rvol,
+                "minimum_regime_probability": config.baseline.minimum_regime_probability,
+                "strategy_version": config.baseline.strategy_version,
+            },
+            "prediction_min_probability": config.prediction_min_probability,
+            "prediction_min_margin": config.prediction_min_margin,
+            "prediction_max_age_seconds": config.prediction_max_age_seconds,
+            "expected_value_threshold": config.expected_value_threshold,
+            "max_cost_fraction": config.max_cost_fraction,
+            "allowed_regimes": list(config.allowed_regimes),
+            "require_prediction_direction_alignment": config.require_prediction_direction_alignment,
+            "require_analysis_alignment": config.require_analysis_alignment,
+            "require_liquidity_when_present": config.require_liquidity_when_present,
+            "cost_model_version": config.cost_model_version,
+            "candidate_policy_version": config.candidate_policy_version,
+        }
+        return hashlib.sha256(
+            json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        ).hexdigest()
+
     @classmethod
     def execute_bound_experiment(
         cls,
@@ -136,16 +237,12 @@ class CandidateImprovementEngine:
         """Execute a bound candidate through the existing ExperimentRunner.
 
         The candidate is not applied by this method. The supplied executor owns
-        experiment-specific strategy construction and must return an immutable
-        ExperimentRecord bound to the same definition. This preserves the
-        existing experiment runner's identity and validation boundaries.
+        experiment-specific research configuration and must return an immutable
+        ExperimentRecord bound to the same definition.
         """
         binding = cls.bind_to_experiment(candidate, experiment_definition)
         execution: ExperimentExecution = ExperimentRunner(experiment_definition).run(executor)
-        return CandidateExperimentExecution(
-            binding=binding,
-            execution=execution,
-        )
+        return CandidateExperimentExecution(binding=binding, execution=execution)
 
     @staticmethod
     def validate(
