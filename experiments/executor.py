@@ -107,7 +107,9 @@ def execute_backtest(
     """Execute the authoritative historical backtest and calculate metrics."""
     if not isinstance(rows, pd.DataFrame):
         raise TypeError("rows must be a pandas DataFrame")
-    engine = HistoricalBacktestEngine(config=config)
+    engine = HistoricalBacktestEngine(
+        config=config or BacktestConfig()
+    )
     result = engine.run(rows)
     return result, calculate_metrics(result.outcomes)
 
