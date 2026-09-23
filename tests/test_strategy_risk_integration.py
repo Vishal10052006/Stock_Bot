@@ -99,7 +99,6 @@ def test_paper_run_has_deterministic_identity_and_persists_evidence(tmp_path) ->
         fill_timestamps={0: pd.Timestamp("2026-09-21 10:00:01", tz="UTC")},
         false_signals={0: False, 1: True},
         equity_observations={0: 100_000.0},
-        calibration_outcomes={0: 1.0},
         operational_events=2,
         evidence_version="PAPER-EVIDENCE-v1",
         dataset_version="paper-test-v1",
