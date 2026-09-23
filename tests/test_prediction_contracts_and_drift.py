@@ -51,6 +51,45 @@ def test_return_forecast_rejects_invalid_horizon() -> None:
         )
 
 
+def test_return_forecast_requires_complete_interval() -> None:
+    base = dict(
+        timestamp=pd.Timestamp("2026-09-23 10:00:00+05:30"),
+        symbol="RELIANCE",
+        horizon_minutes=15,
+        expected_return=0.01,
+        uncertainty=0.02,
+        provenance=_provenance(),
+    )
+    with pytest.raises(ValueError, match="provided together"):
+        ReturnForecast(interval_lower=0.0, **base)
+
+
+def test_return_forecast_requires_expected_return_inside_interval() -> None:
+    base = dict(
+        timestamp=pd.Timestamp("2026-09-23 10:00:00+05:30"),
+        symbol="RELIANCE",
+        horizon_minutes=15,
+        expected_return=0.10,
+        uncertainty=0.02,
+        provenance=_provenance(),
+    )
+    with pytest.raises(ValueError, match="inside"):
+        ReturnForecast(interval_lower=-0.01, interval_upper=0.05, **base)
+
+
+def test_interval_confidence_requires_interval() -> None:
+    base = dict(
+        timestamp=pd.Timestamp("2026-09-23 10:00:00+05:30"),
+        symbol="RELIANCE",
+        horizon_minutes=15,
+        expected_return=0.01,
+        uncertainty=0.02,
+        provenance=_provenance(),
+    )
+    with pytest.raises(ValueError, match="prediction interval"):
+        ReturnForecast(interval_confidence=0.90, **base)
+
+
 def test_multi_horizon_requires_unique_horizons() -> None:
     base = dict(
         timestamp=pd.Timestamp("2026-09-23 10:00:00+05:30"),
