@@ -2,8 +2,8 @@
 
 **Audit date:** 2026-09-23  
 **Audited branch:** `main`  
-**Audited commit:** `b31efa62c7dd83f08b999bd1896135cd897bff8c`  
-**Latest verified CI:** GitHub Actions run #351 (`35893229488`) — SUCCESS
+**Audited commit:** `b309263de75731ffd2199326899d2dca7fe3d0e8`  
+**Latest verified CI:** GitHub Actions run #357 (`35896181976`) — SUCCESS for the Phase-17 test expansion
 
 ## 1. Executive status
 
@@ -201,7 +201,7 @@ Phase 16 explicitly does not authorize live broker execution.
 
 ## 8. Error analysis status
 
-The repository already contains an AB-46 observable trade-error analysis layer.
+The repository contains an AB-46 Phase-17 observable trade-error analysis layer.
 
 Current capabilities include:
 
@@ -211,11 +211,19 @@ Current capabilities include:
 - cost-drag detection;
 - deterministic per-symbol aggregates.
 
-This is useful structural error analysis, but the full roadmap Phase 17 objective requires richer pattern discovery from enough linked decision/outcome observations, such as regime/time/feature-conditioned failure patterns. Those require actual journal data and should not be fabricated from empty or insufficient samples.
+Phase 17 now includes linked decision/outcome pattern discovery for regime clusters, low-RVOL sideways breakouts, high-confidence false signals, opening-window outcomes, and post-consecutive-loss outcomes. Duplicate decision links fail closed and unlinked outcomes are excluded from contextual pattern discovery.
 
-Therefore Phase 17 should be treated as **partially implemented / evidence-dependent**, not declared empirically complete.
+The implementation is **structurally complete as an observational analyzer**. Real-world findings remain evidence-dependent: synthetic tests verify mechanics only and do not establish that any discovered pattern exists in the strategy.
 
-## 9. Live-readiness gates
+## 9. Phase 18 — Learning Engine
+
+The AB-47 Learning Engine now consumes Phase-17 evidence and converts accepted observations into immutable learning experiences. Learning experiences preserve source trade IDs, condition sets, occurrence rates, evidence confidence, and aggregate observed net P&L for Phase-17 pattern findings.
+
+The learning layer remains non-authoritative: it does not retrain models, mutate StrategyEngine/RiskEngine configuration, promote candidates, or enable execution. Learning evidence is an input to the controlled candidate-improvement workflow, not an automatic adaptation mechanism.
+
+The older generic reinforcement implementation remains isolated from the trading execution path; it is not treated as a source of market outcomes.
+
+## 10. Live-readiness gates
 
 The fail-closed readiness checklist covers the specification's required gates:
 
@@ -247,7 +255,7 @@ When provenance is required, each true gate must carry:
 
 A structurally complete readiness object is still not live authorization.
 
-## 10. Broker/live execution audit
+## 11. Broker/live execution audit
 
 The current repository has no enabled live broker order-submission path.
 
@@ -275,7 +283,7 @@ No search in the repository identified an enabled `place_order`, `submit_order`,
 
 This is a deliberate safety property, not a missing emergency fix.
 
-## 11. Roadmap position
+## 12. Roadmap position
 
 The supplied STOCK BOT roadmap defines later phases for:
 
@@ -302,7 +310,7 @@ In particular:
 - Phase 23 monitoring requires real operational streams/measurements.
 - Phase 17–20 need sufficient linked trade data and controlled validation before any automatic improvement authority is granted.
 
-## 12. Final classification
+## 13. Final classification
 
 | Area | Status |
 |---|---|
@@ -328,7 +336,7 @@ In particular:
 | Paper-trading sufficiency | **Requires actual observations** |
 | Controlled live deployment | **Not authorized** |
 
-## 13. Non-negotiable conclusion
+## 14. Non-negotiable conclusion
 
 The correct state of STOCK BOT is:
 
