@@ -1,4 +1,3 @@
-import math
 """Structural validator for paper-trading evidence required by the frozen specification.
 
 This module validates evidence completeness and internal consistency only. It does
@@ -10,6 +9,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 import hashlib
 import json
+import math
+
+import pandas as pd
 
 @dataclass(frozen=True, slots=True)
 class PaperEvidenceSnapshot:
