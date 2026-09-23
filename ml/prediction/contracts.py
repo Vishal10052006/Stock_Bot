@@ -11,7 +11,9 @@ changing the Strategy Engine contract.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Mapping
+import hashlib
+import json
+from typing import Any, Mapping
 
 import pandas as pd
 
@@ -44,6 +46,47 @@ class PredictionProvenance:
 
 
 @dataclass(frozen=True, slots=True)
+class PredictionLineage:
+    """Immutable traceability record for the exact decision-time inputs."""
+
+    source_type: str
+    source_version: str
+    input_timestamp: pd.Timestamp
+    input_symbol: str
+    feature_names: tuple[str, ...]
+    feature_hash: str
+    context_hash: str | None = None
+
+    def __post_init__(self) -> None:
+        timestamp = pd.Timestamp(self.input_timestamp)
+        if timestamp.tzinfo is None:
+            raise ValueError("input_timestamp must be timezone-aware")
+        if not str(self.source_type).strip() or not str(self.source_version).strip():
+            raise ValueError("source_type and source_version must not be empty")
+        if not str(self.input_symbol).strip():
+            raise ValueError("input_symbol must not be empty")
+        if not self.feature_names:
+            raise ValueError("feature_names must not be empty")
+        if len(set(self.feature_names)) != len(self.feature_names):
+            raise ValueError("feature_names must be unique")
+        if len(self.feature_hash) != 64 or any(
+            character not in "0123456789abcdef" for character in self.feature_hash
+        ):
+            raise ValueError("feature_hash must be a SHA-256 hex digest")
+        if self.context_hash is not None and (
+            len(self.context_hash) != 64
+            or any(character not in "0123456789abcdef" for character in self.context_hash)
+        ):
+            raise ValueError("context_hash must be a SHA-256 hex digest")
+
+
+def hash_prediction_inputs(values: Mapping[str, Any]) -> str:
+    """Create a deterministic SHA-256 hash of decision-time input values."""
+    payload = json.dumps(dict(values), sort_keys=True, default=str, separators=(",", ":"))
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+@dataclass(frozen=True, slots=True)
 class ClassificationPrediction:
     """Calibrated event probabilities for the canonical Phase 9 outcomes."""
 
@@ -51,6 +94,7 @@ class ClassificationPrediction:
     symbol: str
     probabilities: Mapping[str, float]
     provenance: PredictionProvenance
+    lineage: PredictionLineage | None = None
     uncertainty: float | None = None
 
     def __post_init__(self) -> None:
@@ -69,6 +113,12 @@ class ClassificationPrediction:
             raise ValueError("probabilities must be finite and lie in [0, 1]")
         if abs(sum(values.values()) - 1.0) > 1e-8:
             raise ValueError("probabilities must sum to 1")
+
+        if self.lineage is not None:
+            if self.lineage.input_symbol != str(self.symbol).strip().upper():
+                raise ValueError("lineage symbol must match prediction symbol")
+            if pd.Timestamp(self.lineage.input_timestamp) != timestamp:
+                raise ValueError("lineage timestamp must match prediction timestamp")
 
         if self.uncertainty is not None:
             uncertainty = float(self.uncertainty)
