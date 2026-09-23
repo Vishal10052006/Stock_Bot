@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-import pandas as pd\nimport pytest
+import pandas as pd
+import pytest
 
 from backtesting.engine import HistoricalBacktestEngine
 from paper.runtime import PaperTradingConfig, PaperTradingRuntime
