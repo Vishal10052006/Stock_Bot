@@ -29,6 +29,7 @@ class ExperimentExecutionInputs:
 
     oos_dataset: Any
     oos_predictor: Callable[[pd.DataFrame, pd.DataFrame], pd.Series]
+    oos_config: Any | None = None
     walk_forward_data: pd.DataFrame
     walk_forward_evaluator: Callable[[pd.DataFrame, pd.DataFrame], object]
     folds: int = 3
@@ -151,6 +152,7 @@ def execute_validation_experiment(
 
     oos_report = evaluate_oos(
         inputs.oos_dataset,
+        config=inputs.oos_config,
         predictor=inputs.oos_predictor,
     )
 
