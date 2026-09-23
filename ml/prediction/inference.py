@@ -61,8 +61,15 @@ class PredictionInferenceService:
             raise ValueError("predictor returned an unexpected row count")
 
         predictions: list[ClassificationPrediction] = []
-        for index, row in result.iterrows():
-            feature_row = request.features.iloc[index].to_dict()
+        for position, (_, row) in enumerate(result.iterrows()):
+            request_row = request.identifiers.iloc[position]
+            if (
+                pd.Timestamp(row["timestamp"]) != pd.Timestamp(request_row["timestamp"])
+                or str(row["symbol"]).strip().upper()
+                != str(request_row["symbol"]).strip().upper()
+            ):
+                raise ValueError("predictor identifiers do not match the inference request")
+            feature_row = request.features.iloc[position].to_dict()
             lineage = PredictionLineage(
                 source_type="prediction_inference_request",
                 source_version=self.api_version,
