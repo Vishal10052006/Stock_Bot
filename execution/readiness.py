@@ -7,8 +7,10 @@ It never enables live execution and never contacts a broker.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
-from experiments.paper_quality import PaperEvidenceQualityReport
+if TYPE_CHECKING:
+    from experiments.paper_quality import PaperEvidenceQualityReport
 
 
 @dataclass(frozen=True, slots=True)
@@ -76,11 +78,12 @@ class LiveReadinessGate:
             if not getattr(gates, field)
         ]
         if paper_evidence_quality is not None:
-            if not isinstance(paper_evidence_quality, PaperEvidenceQualityReport):
+            valid = getattr(paper_evidence_quality, "valid", None)
+            if not isinstance(valid, bool):
                 raise TypeError(
-                    "paper_evidence_quality must be a PaperEvidenceQualityReport"
+                    "paper_evidence_quality must expose a boolean valid property"
                 )
-            if not paper_evidence_quality.valid:
+            if not valid:
                 failed.append("paper_evidence_quality_validated")
         failed = tuple(failed)
         return LiveReadinessReport(
