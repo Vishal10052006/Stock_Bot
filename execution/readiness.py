@@ -7,10 +7,53 @@ It never enables live execution and never contacts a broker.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
+import hashlib
+import json
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from experiments.paper_quality import PaperEvidenceQualityReport
+
+
+@dataclass(frozen=True, slots=True)
+class ReadinessEvidence:
+    """Immutable provenance record for one readiness gate."""
+
+    gate: str
+    artifact_fingerprint: str
+    dataset_version: str
+    code_version: str
+    validated_at: datetime
+    source: str
+
+    def __post_init__(self) -> None:
+        for name in (
+            "gate",
+            "artifact_fingerprint",
+            "dataset_version",
+            "code_version",
+            "source",
+        ):
+            if not getattr(self, name).strip():
+                raise ValueError(f"{name} must be non-empty")
+        if self.validated_at.tzinfo is None:
+            raise ValueError("validated_at must be timezone-aware")
+
+    def canonical_json(self) -> str:
+        payload = {
+            "gate": self.gate,
+            "artifact_fingerprint": self.artifact_fingerprint,
+            "dataset_version": self.dataset_version,
+            "code_version": self.code_version,
+            "validated_at": self.validated_at.isoformat(),
+            "source": self.source,
+        }
+        return json.dumps(payload, sort_keys=True, separators=(",", ":"))
+
+    @property
+    def fingerprint(self) -> str:
+        return hashlib.sha256(self.canonical_json().encode("utf-8")).hexdigest()
 
 
 @dataclass(frozen=True, slots=True)
@@ -67,6 +110,7 @@ class LiveReadinessGate:
         self,
         gates: LiveReadinessInput,
         *,
+        evidence: tuple[ReadinessEvidence, ...] = (),
         paper_evidence_quality: PaperEvidenceQualityReport | None = None,
     ) -> LiveReadinessReport:
         if not isinstance(gates, LiveReadinessInput):
@@ -85,6 +129,10 @@ class LiveReadinessGate:
                 )
             if not valid:
                 failed.append("paper_evidence_quality_validated")
+        evidence_by_gate = {item.gate: item for item in evidence}
+        for field in self._FIELDS:
+            if getattr(gates, field) and field not in evidence_by_gate:
+                failed.append(f"{field}_provenance")
         failed = tuple(failed)
         return LiveReadinessReport(
             ready=not failed,
