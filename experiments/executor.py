@@ -17,6 +17,19 @@ from backtesting.walk_forward import (
 )
 from .definition import ExperimentDefinition
 from .record import ExperimentRecord
+from .lineage import LineageRecord, build_lineage
+
+
+@dataclass(frozen=True, slots=True)
+class ExperimentLineageExecution:
+    """Immutable execution bundle with research artifacts and their lineage."""
+
+    record: ExperimentRecord
+    lineage: LineageRecord
+    oos_report: OOSReport
+    walk_forward_report: WalkForwardTradingReport
+    backtest_result: BacktestResult | None
+    backtest_metrics: BacktestMetrics | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -116,32 +129,18 @@ def execute_backtest(
     return result, calculate_metrics(result.outcomes)
 
 
-def execute_validation_experiment(
+def execute_validation_experiment_with_lineage(
     definition: ExperimentDefinition,
     inputs: ExperimentExecutionInputs,
-) -> ExperimentRecord:
-    """Execute the explicit OOS and walk-forward validation boundaries.
-
-    The function does not select models, thresholds, or decision outcomes.
-    It records only the structural outputs available from the supplied
-    validation contracts. A research-specific caller can add measured
-    metrics to an ExperimentRecord in a later, explicit evaluation stage.
-    """
+) -> ExperimentLineageExecution:
+    """Execute validation boundaries and bind all produced artifacts to lineage."""
 
     if not isinstance(definition, ExperimentDefinition):
-        raise TypeError(
-            "definition must be an ExperimentDefinition"
-        )
-
+        raise TypeError("definition must be an ExperimentDefinition")
     if not isinstance(inputs, ExperimentExecutionInputs):
-        raise TypeError(
-            "inputs must be an ExperimentExecutionInputs"
-        )
-
+        raise TypeError("inputs must be an ExperimentExecutionInputs")
     if not isinstance(inputs.walk_forward_data, pd.DataFrame):
-        raise TypeError(
-            "walk_forward_data must be a pandas DataFrame"
-        )
+        raise TypeError("walk_forward_data must be a pandas DataFrame")
 
     backtest_result: BacktestResult | None = None
     backtest_metrics: BacktestMetrics | None = None
@@ -156,7 +155,6 @@ def execute_validation_experiment(
         config=inputs.oos_config,
         predictor=inputs.oos_predictor,
     )
-
     walk_forward_report = evaluate_walk_forward(
         inputs.walk_forward_data,
         folds=inputs.folds,
@@ -169,25 +167,18 @@ def execute_validation_experiment(
         + sum(window.test_rows for window in walk_forward_report.windows)
     )
 
-    return ExperimentRecord.from_definition(
+    record = ExperimentRecord.from_definition(
         definition,
         observations=observations,
         baseline_results={
             "oos": _oos_summary(oos_report),
             **(
-                {
-                    "backtest": _backtest_summary(
-                        backtest_result,
-                        backtest_metrics,
-                    )
-                }
+                {"backtest": _backtest_summary(backtest_result, backtest_metrics)}
                 if backtest_result is not None and backtest_metrics is not None
                 else {}
             ),
         },
-        model_results={
-            "walk_forward": _walk_forward_summary(walk_forward_report),
-        },
+        model_results={"walk_forward": _walk_forward_summary(walk_forward_report)},
         interpretation=(
             "Validation boundaries executed successfully. "
             "No performance conclusion is inferred by this adapter."
@@ -198,3 +189,32 @@ def execute_validation_experiment(
             "Backtest execution is optional and must be supplied explicitly.",
         ),
     )
+
+    artifacts = {
+        "oos": oos_report.fingerprint,
+        "walk_forward": walk_forward_report.fingerprint,
+    }
+    if backtest_result is not None:
+        artifacts["backtest"] = backtest_result.fingerprint
+
+    lineage = build_lineage(
+        definition,
+        record,
+        artifact_fingerprints=artifacts,
+    )
+    return ExperimentLineageExecution(
+        record=record,
+        lineage=lineage,
+        oos_report=oos_report,
+        walk_forward_report=walk_forward_report,
+        backtest_result=backtest_result,
+        backtest_metrics=backtest_metrics,
+    )
+
+
+def execute_validation_experiment(
+    definition: ExperimentDefinition,
+    inputs: ExperimentExecutionInputs,
+) -> ExperimentRecord:
+    """Execute validation boundaries and return the immutable experiment record."""
+    return execute_validation_experiment_with_lineage(definition, inputs).record
