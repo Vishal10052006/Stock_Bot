@@ -1,3 +1,4 @@
+import pandas as pd
 import pytest
 
 from experiments.paper_evidence import PaperEvidenceSnapshot
