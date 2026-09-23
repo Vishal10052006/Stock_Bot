@@ -156,3 +156,23 @@ fingerprint and the gate-specific evidence kind before creating readiness
 provenance. This remains evidence construction only: it does not mark a gate
 true, and it does not enable live execution.
 
+
+
+### Research-artifact provenance
+
+The OOS, walk-forward, and historical backtest report boundaries now expose
+deterministic SHA-256 artifact fingerprints. These identities can be bound
+directly to the corresponding oos, walk_forward, and backtest readiness evidence
+kinds through ReadinessEvidence.from_artifact(...).
+
+The fingerprint covers the report's measured/structural payload rather than
+claiming that the underlying result is profitable or live-ready. OOS includes
+its temporal metadata, predictions, and test data; walk-forward includes its
+windows and evaluator results; historical backtest includes its decision steps
+and completed trade outcomes. ExperimentRecord and LineageRecord remain the
+research-level immutable record and lineage boundaries.
+
+This establishes artifact identity and traceability only. It does not establish
+out-of-sample performance, walk-forward robustness, profitability, or regulatory
+readiness; those claims require the corresponding measured evidence and
+external verification.
