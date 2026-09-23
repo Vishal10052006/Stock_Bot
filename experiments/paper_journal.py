@@ -15,7 +15,7 @@ from typing import Iterable
 
 import pandas as pd
 
-from .paper_evidence import PaperEvidenceSnapshot
+from .paper_evidence import PaperEvidenceSnapshot, collect_paper_decision_run
 
 
 @dataclass(frozen=True, slots=True)
@@ -195,3 +195,53 @@ def iter_evidence_fingerprints(
 ) -> tuple[str, ...]:
     """Return deterministic fingerprints for an iterable of validated records."""
     return tuple(record.fingerprint for record in records)
+
+
+def persist_paper_decision_run(
+    run: object,
+    *,
+    journal: PaperEvidenceJournal,
+    source_run_id: str,
+    fill_timestamps: dict[int, object] | None = None,
+    false_signals: dict[int, bool] | None = None,
+    equity_observations: dict[int, float] | None = None,
+    calibration_outcomes: dict[int, float] | None = None,
+    operational_events: int = 0,
+    operational_errors: int = 0,
+    stale_events: int = 0,
+    evidence_version: str,
+    dataset_version: str,
+    code_version: str,
+) -> PaperEvidenceRecord:
+    """Collect and persist one PaperDecisionRun without inventing evidence."""
+    steps = getattr(run, "steps", None)
+    if steps is None:
+        raise TypeError("run must expose a steps sequence")
+    if not steps:
+        raise ValueError("cannot persist an empty paper decision run")
+
+    timestamps = [pd.Timestamp(getattr(step.strategy, "timestamp")) for step in steps]
+    if any(timestamp.tzinfo is None for timestamp in timestamps):
+        raise ValueError("paper decision timestamps must be timezone-aware")
+
+    evidence = collect_paper_decision_run(
+        run,
+        fill_timestamps=fill_timestamps,
+        false_signals=false_signals,
+        equity_observations=equity_observations,
+        calibration_outcomes=calibration_outcomes,
+        operational_events=operational_events,
+        operational_errors=operational_errors,
+        stale_events=stale_events,
+        evidence_version=evidence_version,
+        dataset_version=dataset_version,
+        code_version=code_version,
+    )
+    record = PaperEvidenceRecord.create(
+        evidence=evidence,
+        period_start=min(timestamps),
+        period_end=max(timestamps),
+        source_run_id=source_run_id,
+    )
+    journal.append(record)
+    return record
