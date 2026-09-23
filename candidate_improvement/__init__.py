@@ -4,6 +4,7 @@ from .engine import CandidateImprovementEngine
 from .models import (
     ALLOWED_CHANGE_FIELDS,
     CandidateChangeField,
+    CandidateExperimentBinding,
     CandidateImprovementProposal,
     CandidateStatus,
     CandidateValidation,
@@ -12,6 +13,7 @@ from .models import (
 __all__ = [
     "ALLOWED_CHANGE_FIELDS",
     "CandidateChangeField",
+    "CandidateExperimentBinding",
     "CandidateImprovementEngine",
     "CandidateImprovementProposal",
     "CandidateStatus",
