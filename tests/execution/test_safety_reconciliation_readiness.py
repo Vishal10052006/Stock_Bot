@@ -482,3 +482,80 @@ def test_readiness_evidence_requires_timezone() -> None:
             validated_at=pd.Timestamp("2026-09-23T10:00:00").to_pydatetime(),
             source="test",
         )
+
+
+def test_readiness_binds_research_artifact_fingerprints() -> None:
+    timestamp = pd.Timestamp("2026-09-23T10:00:00Z")
+    oos = OOSReport(
+        train_rows=10,
+        validation_rows=5,
+        test_rows=5,
+        train_end=timestamp - pd.Timedelta(minutes=20),
+        validation_end=timestamp - pd.Timedelta(minutes=10),
+        test_start=timestamp,
+        predictions=pd.Series(["LONG_SUCCESS"]),
+        test_data=pd.DataFrame(
+            {
+                "timestamp": [timestamp],
+                "feature": [1.0],
+            }
+        ),
+    )
+    walk_forward = WalkForwardTradingReport(
+        windows=(
+            WalkForwardWindow(
+                fold_id=1,
+                train_start=timestamp - pd.Timedelta(hours=2),
+                train_end=timestamp - pd.Timedelta(hours=1),
+                test_start=timestamp - pd.Timedelta(minutes=30),
+                test_end=timestamp,
+                train_rows=10,
+                test_rows=5,
+                purged_rows=1,
+            ),
+        ),
+        results=(5,),
+    )
+    backtest = BacktestResult(steps=(), outcomes=())
+
+    for artifact, gate, kind in (
+        (oos, "oos_validated", "oos"),
+        (walk_forward, "walk_forward_validated", "walk_forward"),
+        (backtest, "realistic_backtest_validated", "backtest"),
+    ):
+        evidence = ReadinessEvidence.from_artifact(
+            artifact,
+            gate=gate,
+            evidence_kind=kind,
+            dataset_version="dataset-v1",
+            code_version="code-v1",
+            validated_at=timestamp.to_pydatetime(),
+            source="research-test",
+        )
+        assert evidence.artifact_fingerprint == artifact.fingerprint
+        assert len(evidence.artifact_fingerprint) == 64
+
+
+def test_research_artifact_fingerprints_are_deterministic() -> None:
+    timestamp = pd.Timestamp("2026-09-23T10:00:00Z")
+    first = WalkForwardTradingReport(
+        windows=(
+            WalkForwardWindow(
+                fold_id=1,
+                train_start=timestamp - pd.Timedelta(hours=2),
+                train_end=timestamp - pd.Timedelta(hours=1),
+                test_start=timestamp - pd.Timedelta(minutes=30),
+                test_end=timestamp,
+                train_rows=10,
+                test_rows=5,
+                purged_rows=1,
+            ),
+        ),
+        results=(5,),
+    )
+    second = WalkForwardTradingReport(
+        windows=first.windows,
+        results=first.results,
+    )
+
+    assert first.fingerprint == second.fingerprint
