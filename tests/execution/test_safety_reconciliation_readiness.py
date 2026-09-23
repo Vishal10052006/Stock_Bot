@@ -9,7 +9,7 @@ from execution.reconciliation import (
     BrokerReconciler,
     ReconciliationStatus,
 )
-from execution.readiness import LiveReadinessGate, LiveReadinessInput
+from execution.readiness import LiveReadinessGate, LiveReadinessInput, ReadinessEvidence
 from execution.safety import (
     IndependentSafetyGate,
     SafetyBlock,
@@ -178,3 +178,83 @@ def test_readiness_blocks_invalid_paper_quality() -> None:
 
     assert not report.ready
     assert "paper_evidence_quality_validated" in report.failed_gates
+
+
+
+def test_readiness_provenance_fails_closed_when_required() -> None:
+    gates = LiveReadinessInput(
+        historical_data_validated=True,
+        indicators_validated=True,
+        features_leakage_safe=True,
+        labels_validated=True,
+        baseline_validated=True,
+        model_validated=True,
+        realistic_backtest_validated=True,
+        leakage_audit_passed=True,
+        oos_validated=True,
+        walk_forward_validated=True,
+        paper_evidence_validated=True,
+        risk_controls_validated=True,
+        monitoring_validated=True,
+        kill_switch_validated=True,
+        broker_integration_validated=True,
+        reconciliation_validated=True,
+        compliance_verified_current=True,
+    )
+    report = LiveReadinessGate().evaluate(gates, require_provenance=True)
+
+    assert not report.ready
+    assert "historical_data_validated_provenance" in report.failed_gates
+
+
+def test_readiness_accepts_complete_gate_provenance() -> None:
+    gates = LiveReadinessInput(
+        historical_data_validated=True,
+        indicators_validated=True,
+        features_leakage_safe=True,
+        labels_validated=True,
+        baseline_validated=True,
+        model_validated=True,
+        realistic_backtest_validated=True,
+        leakage_audit_passed=True,
+        oos_validated=True,
+        walk_forward_validated=True,
+        paper_evidence_validated=True,
+        risk_controls_validated=True,
+        monitoring_validated=True,
+        kill_switch_validated=True,
+        broker_integration_validated=True,
+        reconciliation_validated=True,
+        compliance_verified_current=True,
+    )
+    evidence = tuple(
+        ReadinessEvidence(
+            gate=field,
+            artifact_fingerprint=f"artifact-{field}",
+            dataset_version="dataset-v1",
+            code_version="code-v1",
+            validated_at=pd.Timestamp("2026-09-23T10:00:00Z").to_pydatetime(),
+            source="test",
+        )
+        for field in LiveReadinessGate._FIELDS
+    )
+    report = LiveReadinessGate().evaluate(
+        gates,
+        evidence=evidence,
+        require_provenance=True,
+    )
+
+    assert report.ready
+    assert len({item.fingerprint for item in evidence}) == len(evidence)
+
+
+def test_readiness_evidence_requires_timezone() -> None:
+    with pytest.raises(ValueError, match="timezone-aware"):
+        ReadinessEvidence(
+            gate="historical_data_validated",
+            artifact_fingerprint="artifact",
+            dataset_version="dataset-v1",
+            code_version="code-v1",
+            validated_at=pd.Timestamp("2026-09-23T10:00:00").to_pydatetime(),
+            source="test",
+        )
