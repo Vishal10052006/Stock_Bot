@@ -1,6 +1,5 @@
 import pandas as pd
 import pytest
-import pandas as pd
 
 from experiments.paper_evidence import PaperEvidenceSnapshot
 from experiments.paper_journal import PaperEvidenceRecord
@@ -232,7 +231,7 @@ def test_readiness_accepts_complete_gate_provenance() -> None:
     evidence = tuple(
         ReadinessEvidence(
             gate=field,
-            artifact_fingerprint=f"artifact-{field}",
+            artifact_fingerprint="a" * 64,
             dataset_version="dataset-v1",
             code_version="code-v1",
             validated_at=pd.Timestamp("2026-09-23T10:00:00Z").to_pydatetime(),
