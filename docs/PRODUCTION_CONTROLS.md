@@ -102,3 +102,9 @@ The report is intentionally not a performance evaluator: it does not rank paper 
 `LiveReadinessGate.evaluate(...)` can now accept a `PaperEvidenceQualityReport`. When supplied, an invalid or empty quality report adds the explicit `paper_evidence_quality_validated` failure gate. This connects structural paper-evidence quality to readiness without treating paper quality as a profitability judgment.
 
 The existing `paper_evidence_validated` gate remains an explicit caller-supplied gate. The quality report is an additional evidence-integrity check; passing it does not enable live execution and does not replace OOS, walk-forward, risk, broker, reconciliation, or current compliance evidence.
+
+## Readiness evidence provenance
+
+`ReadinessEvidence` provides an immutable provenance record for a readiness gate: gate name, artifact fingerprint, dataset version, code version, timezone-aware validation timestamp, and source. Its canonical payload has a deterministic SHA-256 fingerprint.
+
+`LiveReadinessGate.evaluate(..., require_provenance=True)` can require provenance for every readiness gate that is `True`. Missing provenance then fails closed with a `<gate>_provenance` failure. The default remains backward-compatible until provenance is explicitly required; this does not itself enable live execution.
