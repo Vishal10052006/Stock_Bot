@@ -381,6 +381,7 @@ class RiskEngine:
         )
 
         requested_quantity = sizing.quantity
+        cash_resized = False
 
         # Available cash is an optional account-level constraint. It can only
         # reduce risk-first size; it never increases it.
@@ -398,6 +399,7 @@ class RiskEngine:
                         RiskReasonCode.INVALID_RISK_STATE,
                     )
                 requested_quantity = cash_quantity
+                cash_resized = True
 
         if requested_quantity <= 0:
             return self._reject(
@@ -454,7 +456,7 @@ class RiskEngine:
             self.config.quantity_step,
         )
 
-        resized = quantity < requested_quantity
+        resized = cash_resized or quantity < requested_quantity
         if quantity <= 0:
             return self._reject(
                 value,
@@ -589,7 +591,7 @@ class RiskEngine:
             risk_budget=sizing.risk_budget,
             stop_distance=stop_distance,
             position_size=quantity,
-            requested_position_size=requested_quantity,
+            requested_position_size=sizing.quantity,
             gross_exposure_after=gross_after,
             daily_pnl=daily_pnl,
             volatility_factor=vol_factor,
