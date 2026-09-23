@@ -108,3 +108,14 @@ The existing `paper_evidence_validated` gate remains an explicit caller-supplied
 `ReadinessEvidence` provides an immutable provenance record for a readiness gate: gate name, artifact fingerprint, dataset version, code version, timezone-aware validation timestamp, and source. Its canonical payload has a deterministic SHA-256 fingerprint.
 
 `LiveReadinessGate.evaluate(..., require_provenance=True)` can require provenance for every readiness gate that is `True`. Missing provenance then fails closed with a `<gate>_provenance` failure. The default remains backward-compatible until provenance is explicitly required; this does not itself enable live execution.
+
+### Lineage-backed readiness provenance
+
+ReadinessEvidence.from_lineage(...) can bind a readiness gate directly to an
+existing S27 LineageRecord. The resulting evidence uses the lineage identity
+as the artifact fingerprint and preserves the lineage dataset/code versions,
+with a lineage:<id> source. This avoids creating a second synthetic artifact
+identity for an experiment that already has deterministic lineage.
+
+The adapter uses the lineage attribute contract without a runtime import from
+experiments.lineage, preserving the execution/experiments dependency boundary.
