@@ -95,6 +95,11 @@ class BacktestResult:
     outcomes: tuple[TradeOutcome, ...]
 
     @property
+    def fingerprint(self) -> str:
+        """Return a deterministic identity for the complete backtest artifact."""
+        return artifact_fingerprint(self)
+
+    @property
     def orders(self) -> tuple[PaperOrder, ...]:
         return tuple(step.order for step in self.steps if step.order is not None)
 
