@@ -61,8 +61,24 @@ Only the following StrategyConfig surfaces may be proposed:
 Risk controls, execution controls, broker behavior, model weights, safety
 controls, and live-enable state are outside the Phase-19 candidate surface.
 
-The candidate must also declare the same change keys in
-`ExperimentDefinition.allowed_change`. Undeclared changes are rejected.
+The candidate's parameter-change keys must **exactly match** the frozen
+`ExperimentDefinition.allowed_change` keys. This is enforced both when the
+candidate is proposed and when it is later bound to the experiment.
+
+## Candidate → experiment binding
+
+`CandidateImprovementEngine.bind_to_experiment(...)` creates an immutable
+`CandidateExperimentBinding` only when:
+
+1. the candidate is still `PROPOSED`;
+2. the supplied experiment-definition fingerprint exactly matches the
+   fingerprint recorded by the candidate;
+3. the candidate change-key set exactly equals
+   `ExperimentDefinition.allowed_change`.
+
+Binding is structural only. It does not execute the experiment, instantiate or
+mutate an authoritative StrategyConfig, bypass OOS/walk-forward validation, or
+authorize execution.
 
 ## Safety properties
 
