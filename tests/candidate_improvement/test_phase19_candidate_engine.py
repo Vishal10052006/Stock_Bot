@@ -1,4 +1,6 @@
 import pytest
+import hashlib
+from dataclasses import replace
 
 from candidate_improvement import (
     CandidateExperimentBinding,
