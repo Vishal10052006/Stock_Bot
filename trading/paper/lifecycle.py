@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
+import math
 
 import pandas as pd
 
@@ -45,10 +46,30 @@ class TradeOutcome:
             raise ValueError("trade timestamps must be timezone-aware")
         if self.exit_time < self.entry_time:
             raise ValueError("exit_time must not precede entry_time")
+        numeric_fields = (
+            ("entry_price", self.entry_price),
+            ("exit_price", self.exit_price),
+            ("quantity", self.quantity),
+            ("gross_pnl", self.gross_pnl),
+            ("fees", self.fees),
+            ("slippage_cost", self.slippage_cost),
+            ("net_pnl", self.net_pnl),
+            ("holding_minutes", self.holding_minutes),
+            ("mae", self.mae),
+            ("mfe", self.mfe),
+        )
+        for name, value in numeric_fields:
+            if not math.isfinite(float(value)):
+                raise ValueError(f"{name} must be finite")
         if self.entry_price <= 0 or self.exit_price <= 0:
             raise ValueError("trade prices must be positive")
         if self.quantity <= 0:
             raise ValueError("trade quantity must be positive")
+        if self.fees < 0 or self.slippage_cost < 0:
+            raise ValueError("fees and slippage_cost must be non-negative")
+        expected_net = self.gross_pnl - self.fees - self.slippage_cost
+        if not math.isclose(self.net_pnl, expected_net, rel_tol=0.0, abs_tol=1e-12):
+            raise ValueError("net_pnl must equal gross_pnl minus fees and slippage_cost")
         if self.mae > 0 or self.mfe < 0:
             raise ValueError("MAE must be <= 0 and MFE must be >= 0")
 
@@ -90,8 +111,8 @@ class PaperTradeLifecycle:
         symbol = symbol.upper()
         if symbol not in self._open:
             raise KeyError(f"no open trade for {symbol}")
-        if price <= 0:
-            raise ValueError("mark price must be positive")
+        if not math.isfinite(float(price)) or price <= 0:
+            raise ValueError("mark price must be positive and finite")
 
         timestamp = pd.Timestamp(timestamp)
         if timestamp.tzinfo is None:
@@ -126,10 +147,20 @@ class PaperTradeLifecycle:
         symbol = symbol.upper()
         if symbol not in self._open:
             raise KeyError(f"no open trade for {symbol}")
-        if price <= 0 or quantity <= 0:
-            raise ValueError("price and quantity must be positive")
-        if exit_fees < 0 or exit_slippage_cost < 0:
-            raise ValueError("exit costs must be non-negative")
+        if (
+            not math.isfinite(float(price))
+            or not math.isfinite(float(quantity))
+            or price <= 0
+            or quantity <= 0
+        ):
+            raise ValueError("price and quantity must be positive and finite")
+        if (
+            not math.isfinite(float(exit_fees))
+            or not math.isfinite(float(exit_slippage_cost))
+            or exit_fees < 0
+            or exit_slippage_cost < 0
+        ):
+            raise ValueError("exit costs must be finite and non-negative")
 
         timestamp = pd.Timestamp(timestamp)
         if timestamp.tzinfo is None:
