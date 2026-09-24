@@ -21,6 +21,8 @@ def _authorization(
         status=ExecutionAuthorizationStatus.AUTHORIZED,
         reason="test",
         risk_version="test",
+        approved_quantity=10.0,
+        approved_notional=1000.0,
     )
 
 
@@ -146,3 +148,38 @@ def test_larger_reversal_from_short_opens_residual_long_position() -> None:
     assert position.quantity == 5.0
     assert position.average_price == 90.0
     assert position.realized_pnl == 100.0
+
+
+def test_authorized_paper_runtime_uses_risk_approved_quantity_by_default() -> None:
+    runtime = PaperTradingRuntime(
+        config=PaperTradingConfig(slippage_bps=0.0, fee_bps=0.0)
+    )
+
+    order = runtime.submit(
+        _authorization(
+            StrategyDirection.LONG,
+            "2026-01-01 09:15:00+05:30",
+        ),
+        price=100.0,
+    )
+
+    assert order.quantity == 10.0
+    assert runtime.position("ITC").quantity == 10.0
+
+
+def test_authorized_paper_runtime_rejects_quantity_tampering() -> None:
+    runtime = PaperTradingRuntime(
+        config=PaperTradingConfig(slippage_bps=0.0, fee_bps=0.0)
+    )
+
+    import pytest
+
+    with pytest.raises(ValueError, match="exactly equal"):
+        runtime.submit(
+            _authorization(
+                StrategyDirection.LONG,
+                "2026-01-01 09:15:00+05:30",
+            ),
+            price=100.0,
+            quantity=11.0,
+        )
