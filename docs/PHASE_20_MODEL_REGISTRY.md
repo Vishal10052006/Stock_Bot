@@ -1,6 +1,6 @@
 # STOCK BOT — Phase 20 Model Registry
 
-**Status:** IN PROGRESS — registry implementation and CI validation  
+**Status:** COMPLETE — immutable registry and CI validation  
 **Module:** `ml/model_registry.py`
 
 ## Objective
@@ -120,7 +120,7 @@ paper-validated, or live-ready.
 Those claims require actual evidence from the downstream validation and paper
 pipeline.
 
-## Completion gate
+## Final completion gate
 
 Phase 20 is complete only after:
 
@@ -134,3 +134,15 @@ Phase 20 is complete only after:
 - full repository CI passes;
 - documentation is updated;
 - no execution/live path is introduced.
+
+
+## Verified completion
+
+Verified on 2026-09-24 against GitHub Actions run #424.
+
+- Market Bot tests: PASS
+- Phase 9 contract validation: PASS
+- Full repository regression: **1473 passed**
+- Registry-specific lifecycle, identity, artifact, approval, retirement, history,
+  and immutability tests: PASS
+- No broker, Risk, Safety, or live-execution authority was introduced.
