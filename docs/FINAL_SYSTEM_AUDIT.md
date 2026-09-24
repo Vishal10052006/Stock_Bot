@@ -365,7 +365,10 @@ The remaining software-side deployment gaps identified during final audit were c
 - Upstox sandbox adapter now requires explicit instrument resolution rather than treating a trading symbol as an instrument token;
 - integer and instrument lot-size validation at the provider boundary;
 - broker-order identity retention for refresh/cancel;
-- fail-closed refresh when broker order identity is unavailable;
+- restart-safe Upstox order recovery through provider Order History tag lookup when the injected client supports it;
+- strict provider numeric validation and instrument tick-size validation;
+- explicit rejection of multi-child/sliced broker responses until the canonical execution contract supports aggregation;
+- fail-closed refresh when broker order identity or restart reconciliation is unavailable;
 - Phase 26 controlled-deployment governance remains permanently blocked by the separate live lock, even when supplied checklist evidence is complete.
 
 The remaining work is evidence acquisition, not permission to bypass the lock.
