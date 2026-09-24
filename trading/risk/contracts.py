@@ -114,9 +114,24 @@ class RiskPositionContext:
 
     @property
     def opens_position(self) -> bool:
-        """Whether this transition creates a new directional position."""
+        """Whether this transition creates directional exposure."""
         return self.transition in {
             RiskPositionTransition.OPEN,
+            RiskPositionTransition.INCREASE,
+            RiskPositionTransition.REVERSE,
+        }
+
+    @property
+    def creates_position_slot(self) -> bool:
+        """Whether this transition increases the number of open symbols."""
+        return self.transition is RiskPositionTransition.OPEN
+
+    @property
+    def consumes_trade_entry(self) -> bool:
+        """Whether this transition counts against the daily entry budget."""
+        return self.transition in {
+            RiskPositionTransition.OPEN,
+            RiskPositionTransition.INCREASE,
             RiskPositionTransition.REVERSE,
         }
 
