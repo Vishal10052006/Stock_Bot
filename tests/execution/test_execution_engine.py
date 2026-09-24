@@ -542,9 +542,10 @@ def test_malformed_submission_state_is_journaled_unknown_before_error():
     assert engine.get_order(request.client_order_id).status is OrderStatus.UNKNOWN
     assert engine.events[-1].to_status is OrderStatus.UNKNOWN
 
-    with pytest.raises(ValueError, match="FILLED"):
-        engine.submit(request)
+    retry = engine.submit(request)
 
+    assert retry.snapshot.status is OrderStatus.UNKNOWN
+    assert not retry.accepted
     assert len(engine.journal) == 1
 
 
