@@ -1,9 +1,4 @@
-"""Controlled self-learning contract primitives.
-
-The package is intentionally separate from trading execution.  It provides
-versioned evidence, experiment, dataset, candidate, validation, promotion,
-rollback, and orchestration contracts without granting order authority.
-"""
+"""Controlled self-learning package exports."""
 
 from .contracts import (
     CandidateLifecycle,
@@ -19,16 +14,18 @@ from .contracts import (
     PromotionState,
     ValidationSummary,
 )
-from .store import AppendOnlyLearningStore
-from .dataset import build_dataset_version
-from .validation import validate_candidate
+from .dataset import build_dataset_version, dataframe_fingerprint
 from .promotion import PromotionController
-from .orchestrator import SelfLearningOrchestrator
+from .retraining import RetrainingResult, retrain_candidate
+from .store import AppendOnlyLearningStore, DuplicateArtifactError
+from .validation import ValidationPolicy, validate_candidate
+from .orchestrator import LearningRunResult, SelfLearningOrchestrator
 
 __all__ = [
     "AppendOnlyLearningStore",
     "CandidateLifecycle",
     "DatasetVersion",
+    "DuplicateArtifactError",
     "ExperienceBundle",
     "ExperimentLifecycle",
     "ExperimentSpec",
@@ -39,8 +36,13 @@ __all__ = [
     "PromotionController",
     "PromotionDecision",
     "PromotionState",
+    "RetrainingResult",
+    "LearningRunResult",
     "SelfLearningOrchestrator",
+    "ValidationPolicy",
     "ValidationSummary",
     "build_dataset_version",
+    "dataframe_fingerprint",
+    "retrain_candidate",
     "validate_candidate",
 ]
