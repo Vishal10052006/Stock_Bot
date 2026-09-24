@@ -39,5 +39,5 @@ def test_trade_intent_rejects_invalid_side() -> None:
 
 
 def test_limits_reject_fraction_above_one() -> None:
-    with pytest.raises(ValueError, match=r"in \\(0, 1\\]"):
+    with pytest.raises(ValueError, match="in (0, 1]"):
         PortfolioLimits(max_gross_exposure_fraction=1.1)
