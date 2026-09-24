@@ -15,6 +15,7 @@ from market.bot.liquidity import LiquidityEngine
 from market.bot.strength import MarketStrengthEngine
 from market.bot.transitions import RegimeTransitionEngine
 from market.bot.trend import TrendEngine
+from monitoring.runtime import MonitoringRuntime
 
 
 def _benchmark(n: int = 100) -> pd.DataFrame:
@@ -448,3 +449,15 @@ def test_downstream_adapters_fail_closed_on_unavailable_context():
                 decision_timestamp=timestamp,
                 max_age=timedelta(minutes=1),
             )
+
+
+def test_market_bot_emits_monitoring_telemetry() -> None:
+    runtime = MonitoringRuntime()
+    context = MarketBot(MarketBotConfig(benchmark="NIFTY")).build(
+        benchmark_data=_benchmark(100),
+        monitoring=runtime,
+    )
+    dashboard = runtime.dashboard()
+    assert context.benchmark == "NIFTY"
+    assert any(item["name"] == "market.quality" for item in dashboard["metrics"])
+    assert any(item["component"] == "market_bot" for item in dashboard["health"])
