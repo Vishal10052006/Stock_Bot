@@ -454,18 +454,6 @@ class RiskEngine:
             quantity_step=self.config.quantity_step,
         )
 
-        if release_only:
-            requested_quantity = transition_sizing.order_quantity
-            if requested_quantity <= 0:
-                return self._reject(
-                    value,
-                    "Position transition produces no releasable quantity.",
-                    daily_pnl,
-                    RiskReasonCode.ZERO_POSITION_SIZE,
-                )
-        else:
-            requested_quantity = sizing.quantity
-
         # Portfolio is the source of trade intent. Risk may reduce that intent
         # when a hard risk budget requires it, but it must never increase the
         # requested opening quantity. This preserves the Portfolio -> Risk
@@ -478,6 +466,21 @@ class RiskEngine:
             )
             else None
         )
+
+        if release_only:
+            requested_quantity = transition_sizing.order_quantity
+            if requested_quantity <= 0:
+                return self._reject(
+                    value,
+                    "Position transition produces no releasable quantity.",
+                    daily_pnl,
+                    RiskReasonCode.ZERO_POSITION_SIZE,
+                )
+        elif requested_opening_quantity is not None:
+            requested_quantity = min(sizing.quantity, requested_opening_quantity)
+        else:
+            requested_quantity = sizing.quantity
+
         risk_sized_opening_quantity = (
             min(sizing.quantity, requested_opening_quantity)
             if requested_opening_quantity is not None
