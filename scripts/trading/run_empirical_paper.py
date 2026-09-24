@@ -89,6 +89,18 @@ def _load_sidecar(path: str | Path | None) -> dict[str, Any]:
     return payload
 
 
+def _validate_non_negative_counts(
+    operational_events: int | None,
+    operational_errors: int,
+    stale_events: int,
+) -> None:
+    _validate_non_negative_counts(
+        operational_events,
+        operational_errors,
+        stale_events,
+    )
+
+
 def _indexed_map(payload: dict[str, Any], name: str) -> dict[int, object]:
     value = payload.get(name, {})
     if value is None:
