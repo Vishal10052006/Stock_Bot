@@ -16,6 +16,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import Enum
 import hashlib
+import math
 import json
 import time
 from typing import Protocol
@@ -83,8 +84,8 @@ class OrderRequest:
             raise ValueError("client_order_id must not be empty")
         if not self.symbol.strip():
             raise ValueError("symbol must not be empty")
-        if self.quantity <= 0:
-            raise ValueError("quantity must be positive")
+        if not math.isfinite(self.quantity) or self.quantity <= 0:
+            raise ValueError("quantity must be positive and finite")
         if self.order_type is OrderType.LIMIT and (self.limit_price is None or self.limit_price <= 0):
             raise ValueError("LIMIT orders require a positive limit_price")
         if self.order_type is OrderType.MARKET and self.limit_price is not None:
@@ -110,8 +111,8 @@ class Fill:
             raise ValueError("fill timestamp must be timezone-aware")
         if not self.fill_id.strip() or not self.client_order_id.strip():
             raise ValueError("fill identifiers must not be empty")
-        if self.quantity <= 0 or self.price <= 0:
-            raise ValueError("fill quantity and price must be positive")
+        if not math.isfinite(self.quantity) or not math.isfinite(self.price) or self.quantity <= 0 or self.price <= 0:
+            raise ValueError("fill quantity and price must be positive and finite")
         if self.fee < 0:
             raise ValueError("fill fee must be non-negative")
         object.__setattr__(self, "timestamp", ts)
@@ -137,12 +138,12 @@ class OrderSnapshot:
             raise ValueError("updated_at must be timezone-aware")
         if not self.broker_order_id.strip() or not self.client_order_id.strip():
             raise ValueError("order identifiers must not be empty")
-        if self.requested_quantity <= 0:
-            raise ValueError("requested_quantity must be positive")
+        if not math.isfinite(self.requested_quantity) or self.requested_quantity <= 0:
+            raise ValueError("requested_quantity must be positive and finite")
         if self.filled_quantity < 0 or self.filled_quantity > self.requested_quantity + 1e-12:
             raise ValueError("filled_quantity must be within requested quantity")
-        if self.average_fill_price is not None and self.average_fill_price <= 0:
-            raise ValueError("average_fill_price must be positive")
+        if self.average_fill_price is not None and (not math.isfinite(self.average_fill_price) or self.average_fill_price <= 0):
+            raise ValueError("average_fill_price must be positive and finite")
         object.__setattr__(self, "updated_at", ts)
         object.__setattr__(self, "fills", tuple(self.fills))
 
@@ -158,8 +159,10 @@ class PositionSnapshot:
     def __post_init__(self) -> None:
         if not self.symbol.strip():
             raise ValueError("symbol must not be empty")
-        if self.average_price < 0:
-            raise ValueError("average_price must be non-negative")
+        if not math.isfinite(self.quantity):
+            raise ValueError("quantity must be finite")
+        if not math.isfinite(self.average_price) or self.average_price < 0:
+            raise ValueError("average_price must be non-negative and finite")
         # Signed quantity: positive=long, negative=short. This is required
         # because NSE research/paper trading supports both directions.
         object.__setattr__(self, "symbol", self.symbol.strip().upper())
@@ -286,6 +289,9 @@ class OrderStateMachine:
             OrderStatus.UNKNOWN,
         },
         OrderStatus.CANCEL_PENDING: {OrderStatus.CANCELLED, OrderStatus.FILLED, OrderStatus.UNKNOWN},
+        # A broker can report FILLED after local cancellation if the fill raced
+        # the cancellation request. Authoritative refresh wins.
+        OrderStatus.CANCELLED: {OrderStatus.FILLED, OrderStatus.UNKNOWN},
         # UNKNOWN is intentionally recoverable in both directions:
         # broker state can disappear after a terminal local observation, and
         # an unavailable broker can later return an authoritative state.
@@ -439,7 +445,7 @@ class ExecutionEngine:
             raise ValueError("broker response client_order_id mismatch")
         if snapshot.requested_quantity != order.quantity:
             raise ValueError("broker response quantity mismatch")
-        if snapshot.filled_quantity < 0 or snapshot.filled_quantity > order.quantity + 1e-12:
+        if not math.isfinite(snapshot.filled_quantity) or snapshot.filled_quantity < 0 or snapshot.filled_quantity > order.quantity + 1e-12:
             raise ValueError("broker response filled quantity exceeds requested quantity")
         fill_total = 0.0
         for fill in snapshot.fills:
