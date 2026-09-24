@@ -113,8 +113,8 @@ class Fill:
             raise ValueError("fill identifiers must not be empty")
         if not math.isfinite(self.quantity) or not math.isfinite(self.price) or self.quantity <= 0 or self.price <= 0:
             raise ValueError("fill quantity and price must be positive and finite")
-        if self.fee < 0:
-            raise ValueError("fill fee must be non-negative")
+        if not math.isfinite(self.fee) or self.fee < 0:
+            raise ValueError("fill fee must be non-negative and finite")
         object.__setattr__(self, "timestamp", ts)
 
 
@@ -144,6 +144,8 @@ class OrderSnapshot:
             raise ValueError("filled_quantity must be within requested quantity")
         if self.average_fill_price is not None and (not math.isfinite(self.average_fill_price) or self.average_fill_price <= 0):
             raise ValueError("average_fill_price must be positive and finite")
+        if self.filled_quantity > 0 and self.average_fill_price is None:
+            raise ValueError("filled orders must provide average_fill_price")
         object.__setattr__(self, "updated_at", ts)
         object.__setattr__(self, "fills", tuple(self.fills))
 
@@ -161,8 +163,8 @@ class PositionSnapshot:
             raise ValueError("symbol must not be empty")
         if not math.isfinite(self.quantity):
             raise ValueError("quantity must be finite")
-        if not math.isfinite(self.average_price) or self.average_price < 0:
-            raise ValueError("average_price must be non-negative and finite")
+        if not math.isfinite(self.average_price) or self.average_price <= 0:
+            raise ValueError("average_price must be positive and finite")
         # Signed quantity: positive=long, negative=short. This is required
         # because NSE research/paper trading supports both directions.
         object.__setattr__(self, "symbol", self.symbol.strip().upper())
