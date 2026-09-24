@@ -264,10 +264,9 @@ def test_source_fingerprint_matches_actual_dataset() -> None:
     version = _provenance(dataset)
 
     assert dataframe_fingerprint(dataset.data) in version.source_fingerprints
-    assert len(_default_artifact_serializer(
-        retrain_candidate(
-            dataset,
-            dataset_version=version,
-            experiment=_experiment(),
-        ).result.model
-    )) > 0
+    retrained = retrain_candidate(
+        dataset,
+        dataset_version=version,
+        experiment=_experiment(),
+    )
+    assert len(_default_artifact_serializer(retrained.result)) > 0
