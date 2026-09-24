@@ -6,7 +6,7 @@ The production trading execution boundary is implemented in `execution/engine.py
 The existing `execution/execution_engine.py` worker adapter is intentionally
 preserved because it serves a different legacy worker-execution responsibility.
 
-## EXEC-1 → EXEC-12
+## EXEC-1 → EXEC-15
 
 1. **Contracts** — immutable order, fill, snapshot, position, and result models.
 2. **Validation** — execution requires an explicit `ExecutionAuthorization`.
@@ -21,6 +21,14 @@ preserved because it serves a different legacy worker-execution responsibility.
 11. **Execution journal** — immutable in-process order snapshots and lifecycle events.
 12. **Validation tests** — unit/integration coverage for authorization, lifecycle,
     fills, shorts, reconciliation, cancellation, idempotency and metrics.
+13. **Latency telemetry** — submission round-trip latency is retained per client order
+    and included in execution metrics.
+14. **Routing boundary** — deterministic multi-broker route selection evaluates
+    explicit broker health, liquidity, slippage, fees and latency without changing
+    Risk-approved quantity or submitting an order.
+15. **Recovery hardening** — UNKNOWN is unresolved state, cancellation ambiguity
+    is fail-closed, malformed broker state is rejected, and duplicate submission
+    is prevented by deterministic client-order identity.
 
 ## Hard boundaries
 
@@ -33,6 +41,22 @@ Execution does not calculate a larger position size than Risk approved.
 Live broker execution remains locked. The Upstox adapter is deliberately
 fail-closed until the broker integration is separately validated against the
 current provider contract and the complete live-readiness gates pass.
+
+## Routing and execution composition
+
+execution.routing.SmartOrderRouter is a broker-neutral selection layer. It does
+not submit orders and cannot change approved quantity. A route is eligible only
+when it is healthy, within configured slippage/latency limits, and has enough
+available quantity when full-fill routing is required. Among eligible routes the
+router selects the deterministic minimum of weighted slippage, fee, and latency
+cost, with broker-name tie breaking. The selected adapter must then be passed
+into
+the normal Execution Engine boundary.
+
+This is intentionally a routing policy rather than a live market-making or
+order-splitting system. Multi-broker live deployment remains locked until each
+provider's current API, authentication, order semantics, rate limits, and
+operational controls are independently validated.
 
 ## Current adapters
 
@@ -98,7 +122,8 @@ from CANCEL_PENDING to UNKNOWN because cancellation outcome is not known.
 
 UNKNOWN orders are unresolved rather than accepted in execution
 metrics, keeping `ExecutionResult.accepted` and aggregate accepted-order
-counts semantically aligned.
+counts semantically aligned. Submission round-trip latency is retained by
+client order ID and contributes to `ExecutionMetrics.average_latency_ms`.
 
 ## Paper-runtime accounting boundary
 
