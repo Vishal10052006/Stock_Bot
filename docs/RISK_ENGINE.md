@@ -112,10 +112,7 @@ REDUCE and FLATTEN do not consume a new open-position slot or trigger the
 duplicate-symbol veto. OPEN still remains subject to both controls, while
 REVERSE is treated as a transition that creates a new directional position.
 
-This phase establishes the Risk-side contract and hard-gate semantics. It does
-not yet change risk-first sizing or exposure arithmetic for reductions,
-flattening, or reversals; those economics must be integrated with explicit
-quantity semantics and dedicated tests before execution integration.
+Risk economics now handle all three non-open transition classes explicitly. REDUCE and FLATTEN use the signed transition order quantity as exposure-release operations. REVERSE closes the existing signed position in full and risk-sizes only the newly opened directional quantity; the resulting broker order is the close quantity plus the new opening quantity. Gross exposure is calculated from the projected signed position rather than by blindly adding the full broker order value.
 
 ## Hard vetoes
 
