@@ -805,7 +805,7 @@ class RiskEngine:
             ),
             resized=resized,
             approved_quantity=quantity,
-            approved_notional=proposed_value,
+            approved_notional=entry * quantity,
         )
 
         return RiskAssessment(
