@@ -21,6 +21,7 @@ from .integration import MonitoringIntegration, MonitoringIntegrationReport
 from .pipeline import MonitoringPipeline
 from .performance import PerformanceMonitoringSnapshot
 from .regime import RegimeMonitoringSnapshot
+from .models import ModelMonitoringSnapshot
 
 
 @dataclass(frozen=True, slots=True)
@@ -85,6 +86,25 @@ class MonitoringRuntime:
         before_alerts = len(self.engine.snapshot().alerts)
         self.pipeline.evaluate_model(snapshot)
         return self._result("model", before_metrics, before_alerts)
+
+    def observe_prediction(self, telemetry: Any) -> RuntimeTelemetryResult:
+        """Observe one prediction event without granting model or trade authority."""
+        before_metrics = len(self.engine.snapshot().metrics)
+        before_alerts = len(self.engine.snapshot().alerts)
+        probabilities = (
+            float(telemetry.long_probability),
+            float(telemetry.short_probability),
+            float(telemetry.no_edge_probability),
+        )
+        self.pipeline.evaluate_model(
+            ModelMonitoringSnapshot(
+                model_version=str(telemetry.model_version),
+                prediction_count=1,
+                current_probabilities=probabilities,
+            )
+        )
+        self.pipeline.record_metric("model.prediction_max_probability", max(probabilities))
+        return self._result("prediction", before_metrics, before_alerts)
 
     def observe_strategy(self, snapshot: Any) -> RuntimeTelemetryResult:
         before_metrics = len(self.engine.snapshot().metrics)
