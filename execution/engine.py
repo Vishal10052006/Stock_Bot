@@ -326,6 +326,7 @@ class ExecutionEngine:
         self._fills: dict[str, tuple[Fill, ...]] = {}
         self._states: dict[str, OrderStatus] = {}
         self._events: list[ExecutionEvent] = []
+        self._order_requests: dict[str, OrderRequest] = {}
 
     @staticmethod
     def side_for_direction(direction: StrategyDirection) -> OrderSide:
@@ -441,29 +442,7 @@ class ExecutionEngine:
             )
 
         latency_ms = (time.perf_counter() - start) * 1000.0
-        if snapshot.client_order_id != order.client_order_id:
-            raise ValueError("broker response client_order_id mismatch")
-        if snapshot.requested_quantity != order.quantity:
-            raise ValueError("broker response quantity mismatch")
-        if not math.isfinite(snapshot.filled_quantity) or snapshot.filled_quantity < 0 or snapshot.filled_quantity > order.quantity + 1e-12:
-            raise ValueError("broker response filled quantity exceeds requested quantity")
-        fill_total = 0.0
-        for fill in snapshot.fills:
-            if fill.client_order_id != order.client_order_id:
-                raise ValueError("broker response fill client_order_id mismatch")
-            if fill.quantity <= 0 or fill.price <= 0:
-                raise ValueError("broker response contains invalid fill")
-            fill_total += fill.quantity
-        if fill_total > snapshot.filled_quantity + 1e-12:
-            raise ValueError("broker response fill total exceeds filled quantity")
-        if snapshot.status is OrderStatus.FILLED and (
-            abs(snapshot.filled_quantity - order.quantity) > 1e-12
-        ):
-            raise ValueError("FILLED broker response must fill the requested quantity")
-        if snapshot.status is OrderStatus.PARTIALLY_FILLED and not (
-            0.0 < snapshot.filled_quantity < order.quantity
-        ):
-            raise ValueError("PARTIALLY_FILLED broker response has invalid fill quantity")
+        self._validate_broker_snapshot(order, snapshot)
 
         self._transition(
             order.client_order_id,
@@ -471,6 +450,7 @@ class ExecutionEngine:
             snapshot.reason or "broker acknowledged order",
         )
         self._orders[order.client_order_id] = snapshot
+        self._order_requests[order.client_order_id] = order
         self._fills[order.client_order_id] = tuple(snapshot.fills)
         return ExecutionResult(
             request=order,
@@ -482,6 +462,56 @@ class ExecutionEngine:
             latency_ms=latency_ms,
             error=snapshot.reason or None,
         )
+
+    @staticmethod
+    def _validate_broker_snapshot(
+        order: OrderRequest,
+        snapshot: OrderSnapshot,
+    ) -> None:
+        """Validate one broker snapshot before it can affect local state."""
+        if snapshot.client_order_id != order.client_order_id:
+            raise ValueError("broker response client_order_id mismatch")
+        if snapshot.requested_quantity != order.quantity:
+            raise ValueError("broker response quantity mismatch")
+        if (
+            not math.isfinite(snapshot.filled_quantity)
+            or snapshot.filled_quantity < 0
+            or snapshot.filled_quantity > order.quantity + 1e-12
+        ):
+            raise ValueError("broker response filled quantity exceeds requested quantity")
+
+        fill_total = 0.0
+        seen_fill_ids: set[str] = set()
+        for fill in snapshot.fills:
+            if fill.client_order_id != order.client_order_id:
+                raise ValueError("broker response fill client_order_id mismatch")
+            if fill.fill_id in seen_fill_ids:
+                raise ValueError("broker response contains duplicate fill id")
+            seen_fill_ids.add(fill.fill_id)
+            if (
+                not math.isfinite(fill.quantity)
+                or not math.isfinite(fill.price)
+                or fill.quantity <= 0
+                or fill.price <= 0
+            ):
+                raise ValueError("broker response contains invalid fill")
+            fill_total += fill.quantity
+
+        if abs(fill_total - snapshot.filled_quantity) > 1e-12:
+            raise ValueError("broker response fill total does not match filled quantity")
+
+        if snapshot.status is OrderStatus.FILLED and (
+            abs(snapshot.filled_quantity - order.quantity) > 1e-12
+        ):
+            raise ValueError("FILLED broker response must fill the requested quantity")
+
+        if snapshot.status is OrderStatus.PARTIALLY_FILLED and not (
+            0.0 < snapshot.filled_quantity < order.quantity
+        ):
+            raise ValueError("PARTIALLY_FILLED broker response has invalid fill quantity")
+
+        if snapshot.status is OrderStatus.CANCELLED and snapshot.filled_quantity >= order.quantity:
+            raise ValueError("CANCELLED broker response cannot represent a fully filled order")
 
     def _transition(
         self,
@@ -526,6 +556,14 @@ class ExecutionEngine:
             self._transition(client_order_id, OrderStatus.UNKNOWN, "broker returned no order state")
             self._orders[client_order_id] = unknown
             return unknown
+
+        prior = self._orders.get(client_order_id)
+        if prior is None:
+            raise KeyError(f"order not found: {client_order_id}")
+        order = self._order_requests.get(client_order_id)
+        if order is None:
+            raise KeyError(f"order request not found: {client_order_id}")
+        self._validate_broker_snapshot(order, snapshot)
 
         current = self._states.get(client_order_id)
         if current is None:
