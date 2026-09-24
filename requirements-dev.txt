@@ -1,4 +1,6 @@
-# Monitoring Engine dependencies
+# Shared Python dependencies used by STOCK_BOT tests and monitoring CI
 pandas
 numpy
 scikit-learn
+yfinance
+pytest
