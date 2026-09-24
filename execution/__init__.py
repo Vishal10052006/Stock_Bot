@@ -83,3 +83,5 @@ __all__ = [
     "TimeInForce",
     "TradingExecutionEngine",
 ]
+from .deployment import ControlledDeploymentGate, DeploymentChecklist, DeploymentDecision
+from .instruments import Instrument, InstrumentResolver, StaticInstrumentResolver
