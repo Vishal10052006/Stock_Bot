@@ -522,6 +522,18 @@ class ExecutionEngine:
         ):
             raise ValueError("broker response filled quantity exceeds requested quantity")
 
+        # Validate lifecycle semantics before cumulative-fill accounting so
+        # a terminal-status contradiction is reported as such even when the
+        # accompanying fill list is also malformed.
+        if status is OrderStatus.FILLED and abs(filled_quantity - order.quantity) > 1e-12:
+            raise ValueError("FILLED broker response must fill the requested quantity")
+        if status is OrderStatus.PARTIALLY_FILLED and not (
+            0.0 < filled_quantity < order.quantity
+        ):
+            raise ValueError("PARTIALLY_FILLED broker response has invalid fill quantity")
+        if status is OrderStatus.CANCELLED and filled_quantity >= order.quantity:
+            raise ValueError("CANCELLED broker response cannot represent a fully filled order")
+
         fill_total = 0.0
         seen_fill_ids: set[str] = set()
         for fill in snapshot.fills:
