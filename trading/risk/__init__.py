@@ -8,6 +8,7 @@ from .contracts import (
     RiskAction,
     RiskCheck,
     RiskPositionContext,
+    RiskTransitionSizing,
     RiskPositionTransition,
     RiskReasonCode,
 )
@@ -31,6 +32,7 @@ __all__ = [
     "RiskEngine",
     "RiskInput",
     "RiskPositionContext",
+    "RiskTransitionSizing",
     "RiskPositionTransition",
     "RiskReasonCode",
     "build_target",
