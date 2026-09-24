@@ -50,3 +50,18 @@ pytest -q
 ```
 
 A clean repository-wide test run is required after any execution-engine change.
+
+
+## Risk-approved exposure boundary
+
+Execution consumes the immutable RiskDecision.approved_quantity and
+RiskDecision.approved_notional. A caller may not replace these values with a
+different quantity or notional. If optional values are supplied to the
+authorization boundary, they must exactly match the Risk-approved values.
+
+This creates a fail-closed boundary:
+
+Risk -> Safety -> Execution
+
+Risk owns sizing; Safety can only block; Execution cannot reconstruct, enlarge,
+or silently resize the approved order.
