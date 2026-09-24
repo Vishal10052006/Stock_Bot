@@ -140,10 +140,13 @@ class PaperBrokerAdapter:
         return snapshot
 
     def positions(self) -> tuple[PositionSnapshot, ...]:
+        # Positions are signed: positive=LONG, negative=SHORT.
+        # Keep both directions so reconciliation and short paper execution
+        # observe the same authoritative position state.
         return tuple(
             position
             for position in self._positions.values()
-            if position.quantity > 0
+            if position.quantity != 0.0
         )
 
     def _apply_fill(self, order: OrderRequest, fill: Fill) -> None:
