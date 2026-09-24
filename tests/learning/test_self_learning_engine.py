@@ -1,7 +1,8 @@
 """Tests for the controlled STOCK_BOT self-learning governance layer.
 
-These tests focus on invariants that can be checked without live data, broker
-credentials, or real-money execution.
+These tests cover causality, immutable provenance, dataset/experiment state,
+promotion gates, champion/rollback invariants, and drift-to-investigation
+behavior without requiring broker credentials or live trading.
 """
 
 from __future__ import annotations
@@ -10,13 +11,14 @@ from datetime import datetime, timezone
 
 import pytest
 
+from experiments.definition import ExperimentDefinition
+from experiments.record import ExperimentRecord
 from journal.models import TradeDecisionRecord, TradeJournalRecord
 
 from learning.champion import ChampionChallenger, build_rollback_plan
 from learning.cycle_store import LearningCycleStore
 from learning.dataset_store import DatasetManifestStore
 from learning.drift import DriftInvestigator
-from learning.engine import LearningEngine
 from learning.experience import (
     ExperienceContractError,
     audit_journal_linkage,
@@ -27,16 +29,16 @@ from learning.promotion import PromotionGate
 from learning.self_learning_models import (
     DatasetVersion,
     FailureClass,
+    LearningCycle,
     LearningDecision,
     LearningState,
-    LearningCycle,
     PromotionReview,
     ValidationEvidence,
 )
 
 
 def _decision(trade_id: str = "T1") -> TradeDecisionRecord:
-    """Create a deterministic decision-time fixture."""
+    """Create deterministic decision-time evidence."""
     return TradeDecisionRecord(
         trade_id=trade_id,
         timestamp=datetime(2026, 9, 24, 10, 0, tzinfo=timezone.utc),
@@ -63,7 +65,7 @@ def _decision(trade_id: str = "T1") -> TradeDecisionRecord:
 
 
 def _outcome(trade_id: str = "T1", pnl: float = 20.0) -> TradeJournalRecord:
-    """Create a deterministic completed-trade fixture."""
+    """Create deterministic completed-trade evidence."""
     return TradeJournalRecord(
         journal_id=f"J-{trade_id}",
         trade_id=trade_id,
@@ -84,6 +86,25 @@ def _outcome(trade_id: str = "T1", pnl: float = 20.0) -> TradeJournalRecord:
     )
 
 
+def _validation(*, governance: bool = False) -> ValidationEvidence:
+    """Create a complete structural evidence fixture."""
+    return ValidationEvidence(
+        integrity_passed=True,
+        leakage_passed=True,
+        oos_passed=True,
+        walk_forward_passed=True,
+        paper_passed=True,
+        predictive_metrics={
+            "balanced_accuracy": 0.60,
+            "macro_f1": 0.58,
+            "log_loss": 0.92,
+            "brier_score": 0.18,
+            "expected_calibration_error": 0.04,
+        },
+        trading_metrics={"trade_count": 100.0},
+    )
+
+
 def test_experience_requires_same_trade_id() -> None:
     """Mismatched decision/outcome records must fail closed."""
     with pytest.raises(ExperienceContractError, match="same trade_id"):
@@ -91,7 +112,7 @@ def test_experience_requires_same_trade_id() -> None:
 
 
 def test_experience_preserves_decision_time_features() -> None:
-    """Experience must retain only the decision feature snapshot."""
+    """Experience must retain the decision-time feature snapshot."""
     experience = build_trade_experience(_decision(), _outcome())
     assert experience.feature_snapshot == {"rsi": 55.0, "rvol_20": 1.2}
     assert experience.outcome_label == "LONG_SUCCESS"
@@ -99,7 +120,7 @@ def test_experience_preserves_decision_time_features() -> None:
 
 
 def test_journal_audit_detects_orphans_and_mismatches() -> None:
-    """Unlinked records and contradictory facts must be visible."""
+    """Unlinked records must block learning."""
     audit = audit_journal_linkage(
         (_decision("T1"),),
         (_outcome("T2"),),
@@ -110,7 +131,7 @@ def test_journal_audit_detects_orphans_and_mismatches() -> None:
 
 
 def test_dataset_manifest_is_immutable_by_version(tmp_path) -> None:
-    """A version may not silently point to different metadata."""
+    """A dataset version cannot silently point at changed metadata."""
     store = DatasetManifestStore(tmp_path / "datasets.jsonl")
     manifest = DatasetVersion(
         dataset_version="dataset-v1",
@@ -131,25 +152,22 @@ def test_dataset_manifest_is_immutable_by_version(tmp_path) -> None:
     store.append(manifest)
     assert store.get("dataset-v1").fingerprint == manifest.fingerprint
 
+    changed = DatasetVersion(
+        dataset_version=manifest.dataset_version,
+        creation_timestamp=manifest.creation_timestamp,
+        source=manifest.source,
+        symbols=manifest.symbols,
+        period_start=manifest.period_start,
+        period_end="2026-09-01",
+        row_count=manifest.row_count,
+        label_distribution=dict(manifest.label_distribution),
+        feature_schema_version=manifest.feature_schema_version,
+        label_definition_version=manifest.label_definition_version,
+        source_trade_ids=manifest.source_trade_ids,
+        known_limitations=manifest.known_limitations,
+    )
     with pytest.raises(ValueError, match="different metadata"):
-        store.append(
-            DatasetVersion(
-                **{
-                    dataset_version=manifest.dataset_version,
-                creation_timestamp=manifest.creation_timestamp,
-                source=manifest.source,
-                symbols=manifest.symbols,
-                period_start=manifest.period_start,
-                period_end="2026-09-01",
-                row_count=manifest.row_count,
-                label_distribution=dict(manifest.label_distribution),
-                feature_schema_version=manifest.feature_schema_version,
-                label_definition_version=manifest.label_definition_version,
-                source_trade_ids=manifest.source_trade_ids,
-                known_limitations=manifest.known_limitations,
-                }
-            )
-        )
+        store.append(changed)
 
 
 def test_cycle_store_round_trip(tmp_path) -> None:
@@ -166,12 +184,11 @@ def test_cycle_store_round_trip(tmp_path) -> None:
     )
     store = LearningCycleStore(tmp_path / "cycles.jsonl")
     store.append(cycle)
-    loaded = store.read_all()
-    assert loaded == (cycle,)
+    assert store.read_all() == (cycle,)
 
 
 def test_lifecycle_blocks_invalid_transition() -> None:
-    """Promotion cannot jump over the required research gates."""
+    """Promotion cannot jump directly from observation."""
     lifecycle = LearningLifecycle()
     lifecycle.require_transition("OBSERVATION", "HYPOTHESIS")
     with pytest.raises(ValueError):
@@ -179,20 +196,13 @@ def test_lifecycle_blocks_invalid_transition() -> None:
 
 
 def test_promotion_gate_is_fail_closed_without_governance() -> None:
-    """Even complete technical evidence cannot auto-promote."""
-    evidence = ValidationEvidence(
-        integrity_passed=True,
-        leakage_passed=True,
-        oos_passed=True,
-        walk_forward_passed=True,
-        paper_passed=True,
-    )
+    """Technical evidence alone cannot trigger promotion."""
     review = PromotionGate().review(
         candidate_id="C1",
         candidate_fingerprint="c" * 64,
         current_model_version="v1",
         challenger_model_version="v2",
-        validation=evidence,
+        validation=_validation(),
         reproducibility_passed=True,
         governance_approved=False,
     )
@@ -201,21 +211,14 @@ def test_promotion_gate_is_fail_closed_without_governance() -> None:
     assert review.promotable is False
 
 
-def test_promotion_gate_accepts_explicit_governance_evidence() -> None:
-    """A review is promotable only when every required gate is satisfied."""
-    evidence = ValidationEvidence(
-        integrity_passed=True,
-        leakage_passed=True,
-        oos_passed=True,
-        walk_forward_passed=True,
-        paper_passed=True,
-    )
+def test_promotion_gate_accepts_complete_explicit_review() -> None:
+    """A complete review is promotable only with explicit governance."""
     review = PromotionGate().review(
         candidate_id="C1",
         candidate_fingerprint="c" * 64,
         current_model_version="v1",
         challenger_model_version="v2",
-        validation=evidence,
+        validation=_validation(),
         reproducibility_passed=True,
         governance_approved=True,
     )
@@ -224,7 +227,7 @@ def test_promotion_gate_accepts_explicit_governance_evidence() -> None:
 
 
 def test_rollback_plan_requires_distinct_versions() -> None:
-    """Rollback must point to a different verified version."""
+    """Rollback must target a different verified model."""
     with pytest.raises(ValueError, match="differ"):
         build_rollback_plan(
             current_model_version="v2",
@@ -235,7 +238,7 @@ def test_rollback_plan_requires_distinct_versions() -> None:
 
 
 def test_drift_creates_investigation_not_retraining() -> None:
-    """Monitoring drift becomes a hypothesis rather than auto-retraining."""
+    """Monitoring drift becomes an investigation hypothesis."""
     from experiments.monitoring import MonitoringReport
 
     report = MonitoringReport(
@@ -251,3 +254,48 @@ def test_drift_creates_investigation_not_retraining() -> None:
     assert investigation is not None
     assert investigation.failure_class is FailureClass.CALIBRATION_FAILURE
     assert "retrain" not in investigation.hypothesis.lower()
+
+
+def test_candidate_and_champion_pair_must_match() -> None:
+    """A promotion review cannot be reused for another model pair."""
+    review = PromotionReview(
+        candidate_id="C1",
+        candidate_fingerprint="c" * 64,
+        current_model_version="v1",
+        challenger_model_version="v2",
+        validation=_validation(),
+        reproducibility_passed=True,
+        governance_approved=True,
+        decision=LearningDecision.KEEP,
+    )
+    assert ChampionChallenger.review_is_consistent(
+        review,
+        current_model_version="v1",
+        challenger_model_version="v2",
+    )
+    with pytest.raises(ValueError, match="challenger"):
+        ChampionChallenger.review_is_consistent(
+            review,
+            current_model_version="v1",
+            challenger_model_version="v3",
+        )
+
+
+def test_experiment_definition_is_frozen_and_distinct_from_learning_state() -> None:
+    """Learning evidence must produce a versioned research definition."""
+    definition = ExperimentDefinition(
+        experiment_id="EXP-001",
+        research_question="Does the challenger improve OOS prediction quality?",
+        hypothesis="The challenger improves balanced accuracy and log loss.",
+        failure_criterion="Reject if OOS robustness does not improve.",
+        dataset_version="dataset-v1",
+        code_version="code-v1",
+        period_start="2024-01-01",
+        period_end="2026-08-31",
+        symbols=("RELIANCE",),
+        method="controlled_challenger",
+        fixed_parameters=(("risk", "frozen"),),
+        allowed_change=("model",),
+    )
+    assert len(definition.fingerprint()) == 64
+    assert definition.allowed_change == ("model",)
