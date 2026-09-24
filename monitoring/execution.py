@@ -19,10 +19,16 @@ class ExecutionMonitoringSnapshot:
             value = float(getattr(self, name))
             if not math.isfinite(value) or value < 0: raise ValueError(f"{name} must be non-negative finite")
 
-def evaluate_execution_monitoring(snapshot: ExecutionMonitoringSnapshot) -> tuple[dict[str, float | int], tuple[str, ...]]:
+def evaluate_execution_monitoring(
+    snapshot: ExecutionMonitoringSnapshot,
+    *,
+    max_rejection_rate: float = 0.10,
+) -> tuple[dict[str, float | int], tuple[str, ...]]:
+    if not 0.0 <= max_rejection_rate <= 1.0:
+        raise ValueError("max_rejection_rate must be between 0 and 1")
     if snapshot.order_count == 0:
         return ({"order_count": 0, "fill_rate": 0.0, "rejection_rate": 0.0, "partial_fill_rate": 0.0, "average_latency_seconds": 0.0, "average_slippage": 0.0}, ())
     n = snapshot.order_count
     metrics = {"order_count": n, "fill_rate": snapshot.filled_count / n, "rejection_rate": snapshot.rejected_count / n, "partial_fill_rate": snapshot.partial_fill_count / n, "average_latency_seconds": snapshot.total_latency_seconds / n, "average_slippage": snapshot.total_slippage / n}
-    alerts = ("EXECUTION_REJECTION_RATE_HIGH",) if metrics["rejection_rate"] > 0.10 else ()
+    alerts = ("EXECUTION_REJECTION_RATE_HIGH",) if metrics["rejection_rate"] > max_rejection_rate else ()
     return metrics, alerts
