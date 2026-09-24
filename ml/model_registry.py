@@ -209,6 +209,10 @@ class ModelRegistry:
         records: Mapping[str, ModelRegistryRecord] | None = None,
     ) -> None:
         self._records = dict(records or {})
+        self._history = {
+            version: (record,)
+            for version, record in self._records.items()
+        }
 
     def register(self, record: ModelRegistryRecord) -> ModelRegistryRecord:
         """Register a research/candidate record without promotion."""
@@ -230,6 +234,10 @@ class ModelRegistry:
             return existing
 
         self._records[record.model_version] = record
+        self._history[record.model_version] = (
+            *self._history.get(record.model_version, ()),
+            record,
+        )
         return record
 
     def approve(self, model_version: str, approval: ModelApproval) -> ModelRegistryRecord:
@@ -255,6 +263,10 @@ class ModelRegistry:
             }
         )
         self._records[model_version] = approved
+        self._history[model_version] = (
+            *self._history.get(model_version, ()),
+            approved,
+        )
         return approved
 
     def retire(self, model_version: str, *, reason: str) -> ModelRegistryRecord:
@@ -268,6 +280,10 @@ class ModelRegistry:
             }
         )
         self._records[model_version] = retired
+        self._history[model_version] = (
+            *self._history.get(model_version, ()),
+            retired,
+        )
         return retired
 
     def get(self, model_version: str) -> ModelRegistryRecord:
@@ -280,6 +296,12 @@ class ModelRegistry:
     def versions(self) -> tuple[str, ...]:
         """Return all registered versions in deterministic order."""
         return tuple(sorted(self._records))
+
+    def history(self, model_version: str) -> tuple[ModelRegistryRecord, ...]:
+        """Return every immutable state recorded for one model version."""
+        if model_version not in self._history:
+            raise KeyError(f"unknown model version: {model_version}")
+        return self._history[model_version]
 
     def by_status(self, status: ModelRegistryStatus) -> tuple[ModelRegistryRecord, ...]:
         """Return records with one exact lifecycle status."""
