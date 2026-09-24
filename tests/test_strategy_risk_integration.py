@@ -109,3 +109,30 @@ def test_paper_run_has_deterministic_identity_and_persists_evidence(tmp_path) ->
     assert run.run_id == PaperDecisionLoop().run(rows).run_id
     assert journal.records() == (record,)
 
+
+
+
+def test_paper_run_auto_captures_runtime_evidence(tmp_path) -> None:
+    """The paper runtime should supply its own observable evidence boundary."""
+    rows = pd.DataFrame(
+        [
+            risk_row("2026-09-21 10:00:00"),
+            risk_row("2026-09-21 10:05:00"),
+        ]
+    )
+    journal = PaperEvidenceJournal(tmp_path / "paper_evidence_auto.jsonl")
+
+    run, record = PaperDecisionLoop().run_and_persist_evidence(
+        rows,
+        journal=journal,
+        evidence_version="PAPER-EVIDENCE-v1",
+        dataset_version="paper-test-auto-v1",
+        code_version="test-code-auto-v1",
+    )
+
+    assert len(run.equity_observations) == len(run.steps) == 2
+    assert record.evidence.fill_count == 1
+    assert record.evidence.latency_observation_count == 1
+    assert record.evidence.drawdown_observation_count == 2
+    assert record.evidence.operational_event_count == 2
+    assert record.evidence.calibration_observation_count == 0
