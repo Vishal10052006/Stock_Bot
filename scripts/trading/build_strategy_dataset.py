@@ -318,20 +318,9 @@ def _build_strategy_rows(
         validate="one_to_one",
     )
 
-    if features[
-        [
-            "close",
-            "atr_14",
-            "swing_high",
-            "swing_low",
-            "support_20",
-            "resistance_20",
-        ]
-    ].isna().any().any():
-        raise ValueError(
-            "strategy feature rows contain missing decision-time candidate inputs"
-        )
-
+    # Warm-up rows are expected here: ATR, structure, and regime families
+    # require prior observations. Do not fail on those causal warm-up NaNs;
+    # the final strategy-ready projection below drops incomplete rows.
     regime = detect_market_regime(features)
 
     # Phase 6 is one market regime per timestamp. Join by timestamp only,
