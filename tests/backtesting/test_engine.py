@@ -294,3 +294,20 @@ def test_last_session_bar_cannot_open_new_position() -> None:
     assert result.orders[0].timestamp == pd.Timestamp(
         "2026-01-01 09:15:00+05:30"
     )
+
+
+@pytest.mark.parametrize(
+    "field",
+    [
+        "quantity",
+        "max_holding_minutes",
+        "starting_equity",
+        "target_reward_risk",
+        "partial_exit_fraction",
+        "quantity_step",
+    ],
+)
+def test_backtest_config_rejects_non_finite_numeric_values(field: str) -> None:
+    kwargs = {field: float("nan")}
+    with pytest.raises(ValueError, match="finite"):
+        BacktestConfig(**kwargs)
