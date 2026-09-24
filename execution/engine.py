@@ -397,6 +397,7 @@ class ExecutionEngine:
         get_order before any retry is permitted.
         """
         self.validate(order)
+        self._order_requests[order.client_order_id] = order
 
         existing = self._orders.get(order.client_order_id)
         if existing is not None:
@@ -450,7 +451,6 @@ class ExecutionEngine:
             snapshot.reason or "broker acknowledged order",
         )
         self._orders[order.client_order_id] = snapshot
-        self._order_requests[order.client_order_id] = order
         self._fills[order.client_order_id] = tuple(snapshot.fills)
         return ExecutionResult(
             request=order,
