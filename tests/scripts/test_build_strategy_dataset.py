@@ -18,7 +18,10 @@ def _frames(rows: int = 1000) -> tuple[pd.DataFrame, pd.DataFrame]:
     )
 
     def make(symbol: str, offset: float) -> pd.DataFrame:
-        close = 100.0 + offset + np.arange(rows, dtype=float) * 0.03
+        # Use a deterministic oscillating series so causal swing-high/low
+        # references are actually confirmed in the synthetic fixture.
+        steps = np.arange(rows, dtype=float)
+        close = 100.0 + offset + steps * 0.03 + 0.8 * np.sin(steps / 5.0)
         return pd.DataFrame(
             {
                 "timestamp": timestamps,
@@ -27,9 +30,10 @@ def _frames(rows: int = 1000) -> tuple[pd.DataFrame, pd.DataFrame]:
                 "high": close + 0.20,
                 "low": close - 0.20,
                 "close": close,
-                "volume": 1000.0 + np.arange(rows) * 2.0,
+                "volume": 1000.0 + steps * 2.0,
             }
         )
+
 
     return make("RELIANCE", 0.0), make("NIFTY 50", 100.0)
 
