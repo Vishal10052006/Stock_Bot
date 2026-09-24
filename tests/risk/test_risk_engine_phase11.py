@@ -567,3 +567,52 @@ def test_flatten_does_not_require_available_cash() -> None:
 
     assert assessment.decision.status.value == "APPROVED"
     assert assessment.position_size == 10.0
+
+
+
+def test_reverse_risk_sizes_only_the_new_direction() -> None:
+    context = RiskPositionContext(
+        transition=RiskPositionTransition.REVERSE,
+        existing_quantity=10.0,
+        projected_quantity=-5.0,
+    )
+
+    assessment = RiskEngine().evaluate(
+        make_input(
+            candidate=make_candidate(CandidateDirection.SHORT),
+            symbol_already_open=True,
+            position_context=context,
+            gross_exposure=1_000.0,
+        )
+    )
+
+    assert assessment.decision.status.value == "APPROVED"
+    assert assessment.closing_quantity == 10.0
+    assert assessment.opening_position_size == 125.0
+    assert assessment.position_size == 135.0
+    assert assessment.gross_exposure_after == 13_500.0
+
+
+def test_reverse_gross_limit_resizes_only_new_direction() -> None:
+    context = RiskPositionContext(
+        transition=RiskPositionTransition.REVERSE,
+        existing_quantity=10.0,
+        projected_quantity=-5.0,
+    )
+
+    assessment = RiskEngine(
+        RiskConfig(allow_resize=True)
+    ).evaluate(
+        make_input(
+            candidate=make_candidate(CandidateDirection.SHORT),
+            symbol_already_open=True,
+            position_context=context,
+            gross_exposure=74_000.0,
+        )
+    )
+
+    assert assessment.decision.status.value == "APPROVED"
+    assert assessment.closing_quantity == 10.0
+    assert assessment.opening_position_size == 10.0
+    assert assessment.position_size == 20.0
+    assert assessment.gross_exposure_after == 75_000.0
