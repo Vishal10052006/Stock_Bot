@@ -1,4 +1,4 @@
-# STOCK_BOT — SELF-LEARNING ENGINE SL-00..SL-22
+# STOCK_BOT — SELF-LEARNING ENGINE SL-00..SL-23
 
 ## Objective
 
@@ -50,6 +50,7 @@ execution, or mutates production code.
 | 20 | Integration gate | full repository regression |
 | 21 | Real Phase-9 dataset adapter | real_dataset.py |
 | 22 | Dataset provenance builder | build_phase9_dataset_version |
+| 23 | Controlled candidate retraining | retrain_candidate |
 
 ## Promotion policy
 
@@ -101,3 +102,18 @@ pytest execution still requires a repository execution environment; the
 GitHub connector provides source/repository operations but not arbitrary shell
 execution.
 
+
+## SL-23 — Controlled Candidate Retraining
+
+SL-23 binds an explicit TrainingDataset, immutable DatasetVersion, and
+ExperimentSpec to the existing Phase-9 training engine. It supports only
+the explicitly named Logistic Regression and Random Forest trainers and
+returns an immutable RetrainingResult whose status remains CANDIDATE.
+
+The retraining boundary verifies that the supplied dataset fingerprint is
+present in DatasetVersion.source_fingerprints, so a dataset cannot be
+trained under unrelated provenance metadata. Candidate artifact identity is
+derived from the serialized fitted model state and SHA-256 hashed.
+
+SL-23 does not select datasets, automatically retrain from losses, promote
+models, mutate production models, modify risk controls, or access execution.
