@@ -505,3 +505,65 @@ def test_transition_sizing_separates_close_and_open_quantities(
     assert sizing.order_quantity == order
     assert sizing.closing_quantity == closing
     assert sizing.opening_quantity == opening
+
+
+
+def test_reduction_does_not_double_count_symbol_concentration() -> None:
+    context = RiskPositionContext(
+        transition=RiskPositionTransition.REDUCE,
+        existing_quantity=100.0,
+        projected_quantity=50.0,
+    )
+
+    assessment = RiskEngine(
+        RiskConfig(max_symbol_exposure_fraction=0.10)
+    ).evaluate(
+        make_input(
+            symbol_already_open=True,
+            position_context=context,
+            symbol_exposure={"RELIANCE": 10_000.0},
+        )
+    )
+
+    assert assessment.decision.status.value == "APPROVED"
+
+
+def test_reduction_does_not_double_count_sector_concentration() -> None:
+    context = RiskPositionContext(
+        transition=RiskPositionTransition.REDUCE,
+        existing_quantity=100.0,
+        projected_quantity=50.0,
+    )
+
+    assessment = RiskEngine(
+        RiskConfig(max_sector_exposure_fraction=0.10)
+    ).evaluate(
+        make_input(
+            symbol_already_open=True,
+            position_context=context,
+            sector="ENERGY",
+            sector_exposure={"ENERGY": 10_000.0},
+            symbol_exposure={"RELIANCE": 10_000.0},
+        )
+    )
+
+    assert assessment.decision.status.value == "APPROVED"
+
+
+def test_flatten_does_not_require_available_cash() -> None:
+    context = RiskPositionContext(
+        transition=RiskPositionTransition.FLATTEN,
+        existing_quantity=10.0,
+        projected_quantity=0.0,
+    )
+
+    assessment = RiskEngine().evaluate(
+        make_input(
+            symbol_already_open=True,
+            position_context=context,
+            available_cash=0.0,
+        )
+    )
+
+    assert assessment.decision.status.value == "APPROVED"
+    assert assessment.position_size == 10.0
