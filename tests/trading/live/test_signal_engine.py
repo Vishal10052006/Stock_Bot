@@ -170,8 +170,6 @@ def test_live_signal_custom_session_bounds() -> None:
 
 
 def test_live_signal_rejects_non_finite_staleness_configuration() -> None:
-    import math
-
     for value in (float("nan"), float("inf"), float("-inf")):
         try:
             LiveSignalEngine(max_staleness_seconds=value)
