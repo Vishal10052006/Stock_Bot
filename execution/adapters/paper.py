@@ -33,8 +33,13 @@ class PaperAdapterConfig:
     partial_fill_ratio: float = 1.0
 
     def __post_init__(self) -> None:
-        if self.slippage_bps < 0 or self.fee_bps < 0:
-            raise ValueError("slippage_bps and fee_bps must be non-negative")
+        if (
+            not math.isfinite(self.slippage_bps)
+            or not math.isfinite(self.fee_bps)
+            or self.slippage_bps < 0
+            or self.fee_bps < 0
+        ):
+            raise ValueError("slippage_bps and fee_bps must be finite and non-negative")
         if not 0.0 < self.partial_fill_ratio <= 1.0:
             raise ValueError("partial_fill_ratio must be in (0, 1]")
 
@@ -72,8 +77,8 @@ class PaperBrokerAdapter:
                 else 100.0
             )
         )
-        if price <= 0:
-            raise ValueError("paper execution price must be positive")
+        if not math.isfinite(price) or price <= 0:
+            raise ValueError("paper execution price must be positive and finite")
 
         ratio = self.config.partial_fill_ratio
         filled_quantity = order.quantity * ratio
@@ -135,7 +140,7 @@ class PaperBrokerAdapter:
         if prior.status is OrderStatus.FILLED:
             return prior
         if prior.status not in allowed:
-            raise ValueError(f"cannot complete order in state {prior.status.value}")
+            raise ValueError(f"cannot complete partially filled order in state {prior.status.value}")
 
         remaining = prior.requested_quantity - prior.filled_quantity
         if remaining <= 0:
