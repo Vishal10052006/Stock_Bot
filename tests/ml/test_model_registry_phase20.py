@@ -74,6 +74,9 @@ def test_direct_approved_registration_is_forbidden() -> None:
             _record(
                 approval_status=ModelRegistryStatus.APPROVED.value,
                 approval_reference="approval-1",
+                approval_fingerprint="d" * 64,
+                approval_evaluator="controlled-review",
+                approval_timestamp="2026-09-24T16:00:00+05:30",
             )
         )
 
