@@ -48,7 +48,7 @@ execution, or mutates production code.
 | 18 | Execution learning | slippage/fill evidence only |
 | 19 | Failure injection | promotion/evidence safety tests |
 | 20 | Integration gate | full repository regression |
-
+| 21 | Real Phase-9 dataset adapter | real_dataset.py |\n| 22 | Dataset provenance builder | build_phase9_dataset_version |\n
 ## Promotion policy
 
 A candidate must carry artifact, experiment, evaluation and lineage identities.
