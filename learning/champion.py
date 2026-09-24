@@ -1,4 +1,4 @@
-"""Champion/challenger and rollback safeguards.
+"""Safe model-promotion and rollback helpers.
 
 This module manages research/governance state only. It cannot place orders,
 change hard risk limits, or enable live execution.
@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+import hashlib
+import json
 
 from ml.model_registry import ModelRegistry, ModelRegistryRecord, ModelRegistryStatus
 
@@ -36,9 +38,6 @@ class RollbackPlan:
     @property
     def fingerprint(self) -> str:
         """Return a deterministic rollback identity."""
-        import hashlib
-        import json
-
         payload = {
             "from_model_version": self.from_model_version,
             "to_model_version": self.to_model_version,
@@ -60,7 +59,7 @@ class ChampionChallenger:
         registry: ModelRegistry,
         model_version: str,
     ) -> ModelRegistryRecord:
-        """Return a CANDIDATE record or fail closed."""
+        """Return a CANDIDATE registry record or fail closed."""
         record = registry.get(model_version)
         if record.approval_status != ModelRegistryStatus.CANDIDATE.value:
             raise ValueError("challenger must be CANDIDATE")
@@ -84,7 +83,7 @@ class ChampionChallenger:
         current_model_version: str,
         challenger_model_version: str,
     ) -> bool:
-        """Verify that a review compares the expected pair."""
+        """Verify that a review compares the expected champion/challenger pair."""
         if not isinstance(review, PromotionReview):
             raise TypeError("review must be a PromotionReview")
         if review.current_model_version != current_model_version:
@@ -102,7 +101,7 @@ class ChampionChallenger:
         parent_model_version: str,
         activated_at: str | None = None,
     ) -> ChampionRecord:
-        """Create an activation record after explicit governance approval."""
+        """Create a champion activation record after explicit approval."""
         if not review.promotable:
             raise ValueError("promotion review is not promotable")
         if approved_model.approval_status != ModelRegistryStatus.APPROVED.value:
@@ -111,6 +110,8 @@ class ChampionChallenger:
             raise ValueError("approved model does not match challenger")
         if not experiment_id.strip():
             raise ValueError("experiment_id must be non-empty")
+        if parent_model_version != review.current_model_version:
+            raise ValueError("parent model must match reviewed champion")
 
         return ChampionRecord(
             model_version=approved_model.model_version,
