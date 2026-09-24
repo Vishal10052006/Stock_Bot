@@ -13,6 +13,7 @@ from enum import Enum
 import pandas as pd
 
 from trading.risk.gate import RiskDecision, RiskDecisionStatus
+from trading.risk.contracts import RiskPositionTransition
 from trading.strategy.models import StrategyDirection
 
 
@@ -38,6 +39,8 @@ class ExecutionAuthorization:
     risk_decision_id: str = ""
     restrictions: tuple[str, ...] = ()
     execution_version: str = "risk-aware-v2.0"
+    position_transition: RiskPositionTransition | None = None
+    approved_projected_quantity: float | None = None
 
     def __post_init__(self) -> None:
         if pd.Timestamp(self.timestamp).tzinfo is None:
@@ -101,4 +104,6 @@ def authorize_risk_decision(
         approved_notional=notional,
         risk_decision_id=risk_decision_id,
         restrictions=restrictions,
+        position_transition=risk_decision.position_transition,
+        approved_projected_quantity=risk_decision.approved_projected_quantity,
     )
