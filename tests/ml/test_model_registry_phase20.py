@@ -185,3 +185,34 @@ def test_registry_rejects_malformed_artifact_identities(field: str, value: str) 
 def test_approved_record_requires_governance_evidence() -> None:
     with pytest.raises(ValueError, match="approval_reference"):
         _record(approval_status=ModelRegistryStatus.APPROVED.value)
+
+
+def test_registry_preserves_state_history_across_approval() -> None:
+    registry = ModelRegistry()
+    candidate = registry.register(_record())
+
+    approval = ModelApproval(
+        model_fingerprint=candidate.fingerprint,
+        approval_reference="approval-history",
+        evaluator="controlled-review",
+        approved_at="2026-09-24T16:00:00+05:30",
+    )
+    approved = registry.approve("signal-v2.0", approval)
+
+    history = registry.history("signal-v2.0")
+
+    assert history == (candidate, approved)
+    assert history[0].fingerprint == candidate.fingerprint
+    assert history[1].fingerprint == approved.fingerprint
+
+
+def test_registry_metadata_is_immutable() -> None:
+    hyperparameters = {"nested": {"value": 1}}
+    record = _record(hyperparameters=hyperparameters)
+
+    hyperparameters["nested"]["value"] = 99
+
+    assert record.hyperparameters["nested"]["value"] == 1
+
+    with pytest.raises(TypeError):
+        record.hyperparameters["new"] = 1  # type: ignore[index]
