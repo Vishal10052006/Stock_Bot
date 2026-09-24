@@ -1,6 +1,6 @@
 # STOCK BOT — Phase 20 Model Registry
 
-**Status:** COMPLETE — immutable registry and CI validation  
+**Status:** COMPLETE — immutable registry, lifecycle, provenance, and CI validation  
 **Module:** `ml/model_registry.py`
 
 ## Objective
@@ -53,7 +53,10 @@ Every `ModelRegistryRecord` contains:
 - strategy version when applicable;
 - experiment lineage ID;
 - evaluation fingerprint;
-- approval reference when approved.
+- candidate fingerprint when supplied;
+- approval reference when approved;
+- approval fingerprint, evaluator, and approval timestamp when approved;
+- retirement reason when retired.
 
 The complete registry record has a deterministic SHA-256 fingerprint.
 
@@ -146,3 +149,20 @@ Verified on 2026-09-24 against GitHub Actions run #424.
 - Registry-specific lifecycle, identity, artifact, approval, retirement, history,
   and immutability tests: PASS
 - No broker, Risk, Safety, or live-execution authority was introduced.
+
+
+## Hardened completion checkpoint — 2026-09-24
+
+The registry audit additionally verifies that:
+
+- constructor seeding cannot bypass the explicit approval transition;
+- registry keys must match each record's `model_version`;
+- only `CANDIDATE` records can transition to `APPROVED`;
+- approval evidence identity and governance metadata are retained;
+- retirement reasons are persisted in the immutable retired state;
+- non-finite metric values are rejected;
+- nested registry metadata remains immutable after caller-owned mappings change.
+
+The repository also contains separate `tests/backtesting` and
+`tests/execution` package markers so identically named test modules cannot
+collide during full pytest collection.
