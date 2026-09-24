@@ -8,6 +8,7 @@ from portfolio.contracts import (
     PortfolioAction,
     PortfolioLimits,
     PortfolioPosition,
+    PositionTransition,
     PortfolioSnapshot,
     TradeIntent,
 )
@@ -75,3 +76,39 @@ def test_existing_symbol_uses_existing_sector_when_intent_omits_sector() -> None
     decision = manager.evaluate(state(), TradeIntent("INFY", 1, 1500, "BUY", None, "d8"))
     assert decision.action is PortfolioAction.REJECT
     assert decision.reason_code == "MAX_SECTOR_EXPOSURE"
+
+
+def test_decision_records_open_transition() -> None:
+    manager = PortfolioManager(PortfolioLimits())
+    decision = manager.evaluate(
+        state(),
+        TradeIntent("TCS", 1, 3500, "BUY", "IT", "d9"),
+    )
+    assert decision.position_transition is PositionTransition.OPEN
+
+
+def test_decision_records_reduce_transition() -> None:
+    manager = PortfolioManager(PortfolioLimits())
+    decision = manager.evaluate(
+        state(),
+        TradeIntent("INFY", 5, 1500, "SELL", "IT", "d10"),
+    )
+    assert decision.position_transition is PositionTransition.REDUCE
+
+
+def test_decision_records_flatten_transition() -> None:
+    manager = PortfolioManager(PortfolioLimits())
+    decision = manager.evaluate(
+        state(),
+        TradeIntent("INFY", 10, 1500, "SELL", "IT", "d11"),
+    )
+    assert decision.position_transition is PositionTransition.FLATTEN
+
+
+def test_decision_records_reverse_transition() -> None:
+    manager = PortfolioManager(PortfolioLimits())
+    decision = manager.evaluate(
+        state(),
+        TradeIntent("INFY", 15, 1500, "SELL", "IT", "d12"),
+    )
+    assert decision.position_transition is PositionTransition.REVERSE
