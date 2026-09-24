@@ -117,10 +117,10 @@ class ValidationOrchestrator:
             raise TypeError("candidate must be a ModelCandidate")
         if not isinstance(run, ValidationRun):
             raise TypeError("run must be a ValidationRun")
-        if candidate.lifecycle is not CandidateLifecycle.VALIDATING:
-            raise ValueError("candidate must be VALIDATING before completion")
         if run.candidate_fingerprint != candidate.fingerprint:
             raise ValueError("validation run does not match candidate")
+        if candidate.lifecycle is not CandidateLifecycle.VALIDATING:
+            raise ValueError("candidate must be VALIDATING before completion")
         if not run.gate.valid:
             raise ValueError("validation gate is invalid")
         if not at.strip():
