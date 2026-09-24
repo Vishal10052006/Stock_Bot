@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from time import perf_counter
 from typing import Any
 
 import numpy as np
@@ -69,7 +70,7 @@ class MarketBot:
         monitoring: Any | None = None,
     ) -> MarketContext:
         """Build a causal context using only data at or before the final benchmark timestamp."""
-        started_at = __import__("time").perf_counter()
+        started_at = perf_counter()
         benchmark = self._canonical_benchmark(benchmark_data)
         timestamp = benchmark["timestamp"].iloc[-1]
         validate_market_inputs(benchmark, constituent_data)
