@@ -15,6 +15,8 @@ def _risk(status: RiskDecisionStatus = RiskDecisionStatus.APPROVED) -> RiskDecis
         status=status,
         strategy_direction=StrategyDirection.LONG,
         reason="test risk decision",
+        approved_quantity=166.0 if status is RiskDecisionStatus.APPROVED else 0.0,
+        approved_notional=16_600.0 if status is RiskDecisionStatus.APPROVED else 0.0,
     )
 
 
@@ -110,3 +112,26 @@ def test_safety_decision_type_is_required() -> None:
             approved_quantity=166.0,
             safety_decision=object(),  # type: ignore[arg-type]
         )
+
+def test_execution_boundary_rejects_quantity_tampering() -> None:
+    safety = SafetyDecision(True, SafetyBlock.NONE, "Safety checks passed.")
+
+    with pytest.raises(ValueError, match="exactly equal"):
+        authorize_execution(
+            _risk(),
+            approved_quantity=167.0,
+            safety_decision=safety,
+        )
+
+
+def test_execution_authorization_uses_risk_decision_quantity_by_default() -> None:
+    safety = SafetyDecision(True, SafetyBlock.NONE, "Safety checks passed.")
+
+    authorization = authorize_execution(
+        _risk(),
+        safety_decision=safety,
+    )
+
+    assert authorization.status is ExecutionAuthorizationStatus.AUTHORIZED
+    assert authorization.approved_quantity == 166.0
+    assert authorization.approved_notional == 16_600.0
