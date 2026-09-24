@@ -153,6 +153,11 @@ def main() -> None:
         stale_events,
     )
 
+    fill_timestamps = _indexed_map(sidecar, "fill_timestamps")
+    false_signals = _indexed_map(sidecar, "false_signals")
+    equity_observations = _indexed_map(sidecar, "equity_observations")
+    calibration_outcomes = _indexed_map(sidecar, "calibration_outcomes")
+
     journal = PaperEvidenceJournal(args.journal)
     loop = PaperDecisionLoop()
     run, record = loop.run_and_persist_evidence(
@@ -160,10 +165,10 @@ def main() -> None:
         journal=journal,
         price_column=args.price_column,
         quantity=args.quantity,
-        fill_timestamps=_indexed_map(sidecar, "fill_timestamps"),
-        false_signals=_indexed_map(sidecar, "false_signals"),
-        equity_observations=_indexed_map(sidecar, "equity_observations"),
-        calibration_outcomes=_indexed_map(sidecar, "calibration_outcomes"),
+        fill_timestamps=fill_timestamps or None,
+        false_signals=false_signals or None,
+        equity_observations=equity_observations or None,
+        calibration_outcomes=calibration_outcomes or None,
         operational_events=operational_events,
         operational_errors=operational_errors,
         stale_events=stale_events,
@@ -205,15 +210,15 @@ def main() -> None:
         "observation_provenance": {
             "equity": (
                 "paper_runtime_account_snapshot"
-                if not _indexed_map(sidecar, "equity_observations")
+                if not equity_observations
                 else "external_observation_sidecar"
             ),
             "latency": (
                 "deterministic_paper_fill_timestamp"
-                if run.orders and not _indexed_map(sidecar, "fill_timestamps")
+                if run.orders and not fill_timestamps
                 else (
                     "external_observation_sidecar"
-                    if _indexed_map(sidecar, "fill_timestamps")
+                    if fill_timestamps
                     else "not_observed"
                 )
             ),
@@ -224,12 +229,12 @@ def main() -> None:
             ),
             "calibration": (
                 "external_prediction_outcome_sidecar"
-                if _indexed_map(sidecar, "calibration_outcomes")
+                if calibration_outcomes
                 else "not_applicable_without_prediction_probability"
             ),
             "false_signal_outcomes": (
                 "external_observation_sidecar"
-                if _indexed_map(sidecar, "false_signals")
+                if false_signals
                 else "not_observed"
             ),
         },
@@ -260,7 +265,7 @@ def main() -> None:
         "Calibration scope    : "
         + (
             "observed"
-            if _indexed_map(sidecar, "calibration_outcomes")
+            if calibration_outcomes
             else "not applicable without prediction probability"
         )
     )
