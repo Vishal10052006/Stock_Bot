@@ -46,6 +46,29 @@ def test_reconciliation_matches_normalized_positions() -> None:
     assert report.safe
 
 
+def test_reconciliation_supports_signed_short_positions():
+    report = BrokerReconciler().reconcile(
+        (BrokerPosition("ITC", -10.0, 100.0),),
+        (BrokerPosition("itc", -10.0 + 5e-13, 100.0 + 5e-13),),
+    )
+    assert report.status is ReconciliationStatus.MATCH
+    assert report.safe
+
+
+@pytest.mark.parametrize(
+    ("quantity", "average_price"),
+    [
+        (0.0, 100.0),
+        (float("nan"), 100.0),
+        (10.0, 0.0),
+        (10.0, float("inf")),
+    ],
+)
+def test_reconciliation_position_contract_rejects_invalid_values(quantity, average_price):
+    with pytest.raises(ValueError):
+        BrokerPosition("ITC", quantity, average_price)
+
+
 def test_reconciliation_blocks_on_mismatch() -> None:
     report = BrokerReconciler().reconcile(
         (BrokerPosition("ITC", 10, 100.0),),
