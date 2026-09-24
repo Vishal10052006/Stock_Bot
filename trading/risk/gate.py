@@ -37,6 +37,8 @@ class RiskDecision:
     risk_version: str = "RISK-v1.0"
     reason_code: RiskReasonCode | None = None
     resized: bool = False
+    approved_quantity: float = 0.0
+    approved_notional: float = 0.0
 
     def __post_init__(self) -> None:
         timestamp = pd.Timestamp(self.timestamp)
@@ -48,6 +50,12 @@ class RiskDecision:
             raise ValueError("risk reason must not be empty")
         if not self.risk_version.strip():
             raise ValueError("risk_version must not be empty")
+        if self.approved_quantity < 0 or self.approved_notional < 0:
+            raise ValueError("approved exposure must be non-negative")
+        if self.status is RiskDecisionStatus.REJECTED and (
+            self.approved_quantity != 0.0 or self.approved_notional != 0.0
+        ):
+            raise ValueError("rejected risk decisions cannot carry approved exposure")
 
         object.__setattr__(self, "timestamp", timestamp)
         object.__setattr__(self, "symbol", self.symbol.strip().upper())
