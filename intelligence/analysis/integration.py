@@ -136,6 +136,7 @@ def build_analysis_context(
         )
     )
     if monitoring is not None:
-        monitoring.observe_analysis(measure_analysis(context, started_at))
-        monitoring.observe_analysis_quality(measure_analysis(context, started_at))
+        metrics = measure_analysis(context, started_at)
+        monitoring.observe_analysis(metrics)
+        monitoring.observe_analysis_quality(metrics)
     return context
