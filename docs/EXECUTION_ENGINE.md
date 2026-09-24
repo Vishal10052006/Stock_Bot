@@ -156,3 +156,16 @@ A very small floating-point tolerance (1e-12) is allowed for quantity and
 average-price representation noise; material differences remain failures.
 These rules also apply to duck-typed adapter/test objects, so validation does
 not depend on the broker adapter constructing PositionSnapshot instances.
+
+
+### Order reconciliation invariants
+
+The reconcile_order() method now applies the same broker-snapshot validation
+used by submission, refresh, and cancellation. A broker snapshot is not
+considered reconciled merely because status and filled quantity match: its
+identity, requested quantity, fills, cumulative fill accounting, and lifecycle
+consistency must also be valid.
+
+Average fill prices are compared with the same 1e-12 representation tolerance
+used for position reconciliation. Missing local journal/request state is a
+reconciliation failure rather than an implicit recovery.
