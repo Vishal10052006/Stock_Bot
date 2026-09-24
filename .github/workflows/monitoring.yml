@@ -1,0 +1,42 @@
+name: Monitoring Engine
+
+on:
+  push:
+    branches:
+      - main
+      - feature/phase-23-monitoring
+    paths:
+      - "monitoring/**"
+      - "tests/test_monitoring_engine.py"
+      - ".github/workflows/monitoring.yml"
+  pull_request:
+    paths:
+      - "monitoring/**"
+      - "tests/test_monitoring_engine.py"
+      - ".github/workflows/monitoring.yml"
+
+jobs:
+  monitoring:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install project dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt; fi
+          pip install pytest
+
+      - name: Run focused monitoring tests
+        run: pytest -q tests/test_monitoring_engine.py
+
+      - name: Run full test suite
+        run: pytest -q
