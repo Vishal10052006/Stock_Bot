@@ -532,6 +532,35 @@ class _MalformedSubmitAdapter(PaperBrokerAdapter):
         )
 
 
+class _MissingBrokerIdAdapter(PaperBrokerAdapter):
+    def submit(self, order):
+        return type(
+            "MalformedSnapshot",
+            (),
+            {
+                "client_order_id": order.client_order_id,
+                "status": OrderStatus.FILLED,
+                "requested_quantity": order.quantity,
+                "filled_quantity": order.quantity,
+            },
+        )()
+
+
+def test_malformed_submission_without_broker_id_is_journaled_unknown() -> None:
+    """A malformed broker object must not mask the original validation error."""
+    engine = ExecutionEngine(_MissingBrokerIdAdapter())
+    request = order_request()
+
+    with pytest.raises(ValueError, match="broker_order_id"):
+        engine.submit(request)
+
+    unknown = engine.get_order(request.client_order_id)
+    assert unknown is not None
+    assert unknown.status is OrderStatus.UNKNOWN
+    assert unknown.broker_order_id == f"UNKNOWN:{request.client_order_id}"
+    assert "invalid broker submission state" in unknown.reason
+
+
 def test_malformed_submission_state_is_journaled_unknown_before_error():
     adapter = _MalformedSubmitAdapter()
     engine = ExecutionEngine(adapter)
