@@ -806,6 +806,13 @@ class RiskEngine:
             resized=resized,
             approved_quantity=quantity,
             approved_notional=entry * quantity,
+            position_transition=(
+                position_context.transition
+                if position_context is not None
+                else None
+            ),
+            requested_projected_quantity=requested_projected_quantity,
+            approved_projected_quantity=approved_projected_quantity,
         )
 
         return RiskAssessment(
