@@ -596,6 +596,10 @@ class ExecutionEngine:
 
         self._transition(client_order_id, OrderStatus.CANCEL_PENDING, "cancellation requested")
         snapshot = self.adapter.cancel(client_order_id)
+        order = self._order_requests.get(client_order_id)
+        if order is None:
+            raise KeyError(f"order request not found: {client_order_id}")
+        self._validate_broker_snapshot(order, snapshot)
         if snapshot.status is not OrderStatus.CANCEL_PENDING:
             self._transition(client_order_id, snapshot.status, snapshot.reason or "cancellation result")
         self._orders[client_order_id] = snapshot
