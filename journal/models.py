@@ -240,10 +240,29 @@ class TradeJournalRecord:
             raise ValueError("exit_time must not precede entry_time")
         if not self.symbol.strip():
             raise ValueError("trade symbol must not be empty")
+        numeric_fields = (
+            ("quantity", self.quantity),
+            ("entry_price", self.entry_price),
+            ("exit_price", self.exit_price),
+            ("gross_pnl", self.gross_pnl),
+            ("fees", self.fees),
+            ("slippage_cost", self.slippage_cost),
+            ("net_pnl", self.net_pnl),
+            ("holding_minutes", self.holding_minutes),
+            ("mae", self.mae),
+            ("mfe", self.mfe),
+        )
+        for name, value in numeric_fields:
+            if not math.isfinite(float(value)):
+                raise ValueError(f"{name} must be finite")
         if self.quantity <= 0:
             raise ValueError("trade quantity must be positive")
         if self.entry_price <= 0 or self.exit_price <= 0:
             raise ValueError("trade prices must be positive")
+        if self.fees < 0:
+            raise ValueError("fees must be non-negative")
+        if self.slippage_cost < 0:
+            raise ValueError("slippage_cost must be non-negative")
         if self.mae > 0 or self.mfe < 0:
             raise ValueError("MAE must be <= 0 and MFE must be >= 0")
         object.__setattr__(self, "symbol", self.symbol.strip().upper())
