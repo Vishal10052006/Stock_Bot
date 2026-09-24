@@ -252,8 +252,14 @@ class OrderStateMachine:
     _ALLOWED = {
         OrderStatus.CREATED: {OrderStatus.VALIDATED, OrderStatus.REJECTED_LOCAL},
         OrderStatus.VALIDATED: {OrderStatus.SUBMITTING, OrderStatus.REJECTED_LOCAL},
+        # Paper and some synchronous broker adapters may return a
+        # terminal/fill state directly from submit(). The lifecycle still
+        # records SUBMITTING first, so these are valid acknowledgement
+        # transitions rather than an illegal state-machine shortcut.
         OrderStatus.SUBMITTING: {
             OrderStatus.SUBMITTED,
+            OrderStatus.PARTIALLY_FILLED,
+            OrderStatus.FILLED,
             OrderStatus.REJECTED_BROKER,
             OrderStatus.FAILED,
             OrderStatus.UNKNOWN,
@@ -281,6 +287,8 @@ class OrderStateMachine:
             OrderStatus.UNKNOWN,
         },
         OrderStatus.CANCEL_PENDING: {OrderStatus.CANCELLED, OrderStatus.FILLED, OrderStatus.UNKNOWN},
+        # UNKNOWN means the broker state is no longer authoritative.
+        # A later reconciliation may recover any observable broker state.
         OrderStatus.UNKNOWN: {
             OrderStatus.SUBMITTED,
             OrderStatus.OPEN,
@@ -291,6 +299,13 @@ class OrderStateMachine:
             OrderStatus.REJECTED_BROKER,
             OrderStatus.FAILED,
         },
+        # A previously terminal local state can become UNKNOWN when a
+        # reconciliation lookup cannot recover authoritative broker state.
+        OrderStatus.FILLED: {OrderStatus.UNKNOWN},
+        OrderStatus.CANCELLED: {OrderStatus.UNKNOWN},
+        OrderStatus.REJECTED_BROKER: {OrderStatus.UNKNOWN},
+        OrderStatus.EXPIRED: {OrderStatus.UNKNOWN},
+        OrderStatus.FAILED: {OrderStatus.UNKNOWN},
     }
 
     @classmethod
@@ -617,21 +632,3 @@ class ExecutionReadiness:
             return False
         return risk_authorized and safety_allowed
 
-
-__all__ = [
-    "BrokerAdapter",
-    "ExecutionEngine",
-    "ExecutionEvent",
-    "ExecutionMetrics",
-    "ExecutionReadiness",
-    "ExecutionResult",
-    "Fill",
-    "OrderRequest",
-    "OrderSide",
-    "OrderSnapshot",
-    "OrderStatus",
-    "OrderStateMachine",
-    "OrderType",
-    "PositionSnapshot",
-    "TimeInForce",
-]
