@@ -135,8 +135,18 @@ def test_dataset_manifest_is_immutable_by_version(tmp_path) -> None:
         store.append(
             DatasetVersion(
                 **{
-                    **manifest.__dict__,
-                    "period_end": "2026-09-01",
+                    dataset_version=manifest.dataset_version,
+                creation_timestamp=manifest.creation_timestamp,
+                source=manifest.source,
+                symbols=manifest.symbols,
+                period_start=manifest.period_start,
+                period_end="2026-09-01",
+                row_count=manifest.row_count,
+                label_distribution=dict(manifest.label_distribution),
+                feature_schema_version=manifest.feature_schema_version,
+                label_definition_version=manifest.label_definition_version,
+                source_trade_ids=manifest.source_trade_ids,
+                known_limitations=manifest.known_limitations,
                 }
             )
         )
