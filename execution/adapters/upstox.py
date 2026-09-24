@@ -1,70 +1,71 @@
-"""Upstox broker adapter boundary.
-
-The adapter is deliberately fail-closed until a current, validated Upstox
-configuration is supplied. It does not embed credentials and never attempts to
-place an order without an explicit configured client.
-"""
-
+"""Phase 25 sandbox-first Upstox broker adapter boundary."""
 from __future__ import annotations
-
 from dataclasses import dataclass
-from typing import Any
-
-from execution.engine import OrderRequest, OrderSnapshot, PositionSnapshot
-
+import math
+from typing import Any, Protocol
+from execution.engine import OrderRequest, OrderSnapshot, OrderStatus, OrderType, PositionSnapshot
 
 @dataclass(frozen=True, slots=True)
 class UpstoxAdapterConfig:
-    """Provider-neutral metadata needed to construct a real client elsewhere."""
-
-    api_base_url: str
+    api_base_url: str = "https://api-hft.upstox.com"
     access_token_env: str = "UPSTOX_ACCESS_TOKEN"
+    sandbox: bool = True
     enabled: bool = False
+    product: str = "D"
+    validity: str = "DAY"
+    slice_orders: bool = False
+    market_protection: int = -1
+    def __post_init__(self):
+        if not self.api_base_url.strip() or not self.access_token_env.strip(): raise ValueError("Upstox endpoints/env must be non-empty")
+        if self.product not in {"I","D","MTF"}: raise ValueError("unsupported Upstox product")
+        if self.validity not in {"DAY","IOC"}: raise ValueError("unsupported Upstox validity")
+        if self.market_protection < -1 or self.market_protection > 25: raise ValueError("invalid market protection")
+        if not isinstance(self.sandbox,bool) or not isinstance(self.enabled,bool): raise TypeError("sandbox and enabled must be bool")
+        if self.enabled and not self.sandbox: raise ValueError("live Upstox adapter remains locked; sandbox=True is required")
 
-    def __post_init__(self) -> None:
-        if not self.api_base_url.strip():
-            raise ValueError("api_base_url must not be empty")
-        if not self.access_token_env.strip():
-            raise ValueError("access_token_env must not be empty")
+class UpstoxClient(Protocol):
+    def place_order_v3(self, payload: dict[str, Any]) -> dict[str, Any]: ...
+    def get_order(self, order_id: str) -> dict[str, Any]: ...
+    def cancel_order(self, order_id: str) -> dict[str, Any]: ...
+    def positions(self) -> dict[str, Any]: ...
 
+def _status(value: str) -> OrderStatus:
+    mapping={"PUT_ORDER_REQ_RECEIVED":OrderStatus.SUBMITTED,"VALIDATION_PENDING":OrderStatus.SUBMITTED,"OPEN":OrderStatus.OPEN,"PARTIALLY_FILLED":OrderStatus.PARTIALLY_FILLED,"COMPLETE":OrderStatus.FILLED,"FILLED":OrderStatus.FILLED,"CANCELLED":OrderStatus.CANCELLED,"REJECTED":OrderStatus.REJECTED_BROKER,"EXPIRED":OrderStatus.EXPIRED}
+    return mapping.get(value.strip().upper().replace(" ","_"),OrderStatus.UNKNOWN)
 
 class UpstoxBrokerAdapter:
-    """Explicit integration boundary for future Upstox connectivity."""
-
-    def __init__(self, config: UpstoxAdapterConfig, client: Any | None = None) -> None:
-        self.config = config
-        self.client = client
-
-    def _require_enabled(self) -> None:
-        if not self.config.enabled:
-            raise RuntimeError(
-                "Upstox live adapter is disabled; enable only after controlled "
-                "validation and current broker/compliance verification."
-            )
-        if self.client is None:
-            raise RuntimeError(
-                "No Upstox client was supplied. Credentials/client construction "
-                "must remain outside the execution domain."
-            )
-
-    def submit(self, order: OrderRequest) -> OrderSnapshot:
-        self._require_enabled()
-        raise NotImplementedError(
-            "Provider-specific Upstox request mapping must be implemented and "
-            "verified against the current Upstox API contract before live use."
-        )
-
-    def get_order(self, client_order_id: str) -> OrderSnapshot | None:
-        self._require_enabled()
-        raise NotImplementedError
-
-    def cancel(self, client_order_id: str) -> OrderSnapshot:
-        self._require_enabled()
-        raise NotImplementedError
-
-    def positions(self) -> tuple[PositionSnapshot, ...]:
-        self._require_enabled()
-        raise NotImplementedError
-
-
-__all__ = ["UpstoxAdapterConfig", "UpstoxBrokerAdapter"]
+    VERSION="UPSTOX-ADAPTER-v1.0"
+    def __init__(self, config: UpstoxAdapterConfig, client: UpstoxClient | None = None): self.config=config; self.client=client
+    def _require_enabled(self):
+        if not self.config.enabled: raise RuntimeError("Upstox adapter is disabled")
+        if not self.config.sandbox: raise RuntimeError("live Upstox adapter is locked")
+        if self.client is None: raise RuntimeError("an explicitly supplied sandbox client is required")
+    def _payload(self, order: OrderRequest):
+        if order.quantity != int(order.quantity): raise ValueError("Upstox quantity must be an integer")
+        return {"quantity":int(order.quantity),"product":self.config.product,"validity":self.config.validity,"price":0.0 if order.order_type is OrderType.MARKET else float(order.limit_price),"tag":order.client_order_id,"instrument_token":order.symbol,"order_type":order.order_type.value,"transaction_type":order.side.value,"disclosed_quantity":0,"trigger_price":0.0,"is_amo":False,"slice":self.config.slice_orders,"market_protection":self.config.market_protection}
+    @staticmethod
+    def _data(response):
+        if not isinstance(response,dict) or response.get("status")!="success": raise ValueError("invalid Upstox response")
+        data=response.get("data")
+        if not isinstance(data,dict): raise ValueError("Upstox response data must be an object")
+        return data
+    def submit(self, order):
+        self._require_enabled(); data=self._data(self.client.place_order_v3(self._payload(order))); ids=data.get("order_ids")
+        if not isinstance(ids,list) or not ids or not all(isinstance(x,str) and x.strip() for x in ids): raise ValueError("Upstox place response must contain order_ids")
+        return OrderSnapshot(broker_order_id=ids[0],client_order_id=order.client_order_id,status=OrderStatus.SUBMITTED,requested_quantity=order.quantity,reason="Upstox sandbox order accepted")
+    def get_order(self, client_order_id):
+        self._require_enabled(); data=self._data(self.client.get_order(client_order_id)); qty=float(data.get("quantity")); filled=float(data.get("filled_quantity",data.get("filled_qty",0.0))); avg=data.get("average_price",data.get("average_fill_price")); avg=None if avg in (None,0,0.0) and filled==0 else float(avg)
+        return OrderSnapshot(broker_order_id=str(data.get("order_id",client_order_id)),client_order_id=client_order_id,status=_status(str(data.get("status","UNKNOWN"))),requested_quantity=qty,filled_quantity=filled,average_fill_price=avg,reason=str(data.get("status_message","")))
+    def cancel(self, client_order_id):
+        self._require_enabled(); current=self.get_order(client_order_id); self._data(self.client.cancel_order(current.broker_order_id))
+        return OrderSnapshot(broker_order_id=current.broker_order_id,client_order_id=client_order_id,status=OrderStatus.CANCELLED,requested_quantity=current.requested_quantity,filled_quantity=current.filled_quantity,average_fill_price=current.average_fill_price,reason="Upstox sandbox cancellation accepted")
+    def positions(self):
+        self._require_enabled(); data=self._data(self.client.positions()); rows=data.get("net_positions",data.get("positions",[]))
+        if not isinstance(rows,list): raise ValueError("Upstox positions must be a list")
+        result=[]
+        for row in rows:
+            if not isinstance(row,dict): raise ValueError("invalid Upstox position")
+            symbol=str(row.get("trading_symbol") or row.get("instrument_token") or "").strip(); quantity=float(row.get("quantity",row.get("net_quantity",0.0))); price=float(row.get("average_price",row.get("avg_price",0.0)))
+            if not symbol or not math.isfinite(quantity) or not math.isfinite(price) or price<=0: raise ValueError("invalid Upstox position values")
+            result.append(PositionSnapshot(symbol,quantity,price))
+        return tuple(result)
