@@ -452,8 +452,15 @@ class ExecutionEngine:
         try:
             self._validate_broker_snapshot(order, snapshot)
         except (TypeError, ValueError) as exc:
+            # Validation can fail because the broker object itself is malformed.
+            # Never dereference an untrusted broker field while recording the
+            # fail-closed UNKNOWN journal entry; preserve the original error.
+            raw_broker_order_id = getattr(snapshot, "broker_order_id", "")
+            broker_order_id = str(raw_broker_order_id).strip()
+            if not broker_order_id:
+                broker_order_id = f"UNKNOWN:{order.client_order_id}"
             unknown = OrderSnapshot(
-                broker_order_id=snapshot.broker_order_id,
+                broker_order_id=broker_order_id,
                 client_order_id=order.client_order_id,
                 status=OrderStatus.UNKNOWN,
                 requested_quantity=order.quantity,
