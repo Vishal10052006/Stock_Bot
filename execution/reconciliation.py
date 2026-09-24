@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import hashlib
+import math
 import json
 from enum import Enum
 
@@ -23,10 +24,11 @@ class BrokerPosition:
     def __post_init__(self) -> None:
         if not self.symbol.strip():
             raise ValueError("symbol must not be empty")
-        if self.quantity < 0:
-            raise ValueError("quantity must not be negative")
-        if self.average_price < 0:
-            raise ValueError("average_price must not be negative")
+        if not math.isfinite(self.quantity) or self.quantity == 0.0:
+            raise ValueError("quantity must be finite and non-zero")
+        if not math.isfinite(self.average_price) or self.average_price <= 0.0:
+            raise ValueError("average_price must be positive and finite")
+        object.__setattr__(self, "symbol", self.symbol.strip().upper())
 
 
 @dataclass(frozen=True, slots=True)
@@ -67,7 +69,12 @@ class BrokerReconciler:
         for symbol in symbols:
             left = local_map.get(symbol, (0.0, 0.0))
             right = broker_map.get(symbol, (0.0, 0.0))
-            if left != right:
+            quantity_tolerance = 1e-12
+            price_tolerance = 1e-12
+            if (
+                abs(left[0] - right[0]) > quantity_tolerance
+                or abs(left[1] - right[1]) > price_tolerance
+            ):
                 mismatches.append(
                     f"{symbol}: local={left} broker={right}"
                 )
