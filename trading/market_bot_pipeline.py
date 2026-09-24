@@ -14,6 +14,7 @@ from market.bot.contracts import MarketContext
 from market.bot.integration import build_phase5_market_context
 from market.bot.provenance import build_provenance
 from trading.ab30_pipeline import MarketAnalysisResult, build_market_analysis
+from monitoring.runtime import MonitoringRuntime
 
 
 def build_market_analysis_from_market_bot(
@@ -26,6 +27,7 @@ def build_market_analysis_from_market_bot(
     sector_mappings: tuple = (),
     data_version: str | None = None,
     feature_version: str | None = None,
+    monitoring: MonitoringRuntime | None = None,
 ) -> MarketAnalysisResult:
     """Run the production Market Bot -> AB-30 composition.
 
@@ -62,6 +64,7 @@ def build_market_analysis_from_market_bot(
         sector_mappings=sector_mappings,
         data_version=data_version or market_context.metadata.data_version,
         feature_version=feature_version or market_context.metadata.feature_version,
+        monitoring=monitoring,
     )
 
     provenance = dict(result.analysis.provenance)
