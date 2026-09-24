@@ -464,6 +464,24 @@ class RiskEngine:
         else:
             requested_quantity = sizing.quantity
 
+        # Portfolio is the source of trade intent. Risk may reduce that intent
+        # when a hard risk budget requires it, but it must never increase the
+        # requested opening quantity. This preserves the Portfolio -> Risk
+        # contract and prevents Risk from silently enlarging an order.
+        requested_opening_quantity = (
+            transition_sizing.opening_quantity
+            if (
+                transition_sizing is not None
+                and not release_only
+            )
+            else None
+        )
+        risk_sized_opening_quantity = (
+            min(sizing.quantity, requested_opening_quantity)
+            if requested_opening_quantity is not None
+            else sizing.quantity
+        )
+
         cash_resized = False
         reverse_closing_quantity = (
             transition_sizing.closing_quantity
@@ -548,15 +566,21 @@ class RiskEngine:
         )
 
         if reverse_transition:
-            opening_quantity = quantity
+            opening_quantity = risk_sized_opening_quantity
             quantity = reverse_closing_quantity + opening_quantity
-            requested_order_quantity = reverse_closing_quantity + sizing.quantity
-        else:
-            opening_quantity = (
-                transition_sizing.opening_quantity
-                if transition_sizing is not None
-                else quantity
+            requested_order_quantity = (
+                reverse_closing_quantity + (
+                    requested_opening_quantity
+                    if requested_opening_quantity is not None
+                    else sizing.quantity
+                )
             )
+        elif transition_sizing is not None:
+            opening_quantity = risk_sized_opening_quantity
+            quantity = opening_quantity
+            requested_order_quantity = transition_sizing.order_quantity
+        else:
+            opening_quantity = quantity
             requested_order_quantity = requested_quantity
 
         resized = cash_resized or (
@@ -641,7 +665,10 @@ class RiskEngine:
                 if reverse_transition and position_context is not None:
                     opening_quantity = min(opening_quantity, exposure_quantity)
                     quantity = reverse_closing_quantity + opening_quantity
-                    resized = opening_quantity < sizing.quantity
+                    resized = (
+                        requested_opening_quantity is not None
+                        and opening_quantity < requested_opening_quantity
+                    )
                     proposed_value = entry * opening_quantity
                     gross_after = projected_gross_exposure(
                         current_gross_exposure=value.gross_exposure,
@@ -655,7 +682,7 @@ class RiskEngine:
                     )
                 else:
                     quantity = min(quantity, exposure_quantity)
-                    resized = quantity < requested_quantity
+                    resized = quantity < requested_order_quantity
                     proposed_value = entry * quantity
                     gross_after = gross_exposure_after(
                         current_gross_exposure=value.gross_exposure,
