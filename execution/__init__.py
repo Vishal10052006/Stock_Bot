@@ -38,6 +38,12 @@ from .safety import (
     SafetyDecision,
     SafetyState,
 )
+from .routing import (
+    RouteDecision,
+    RouteQuote,
+    RoutingPolicy,
+    SmartOrderRouter,
+)
 
 def build_research_readiness_evidence(*args, **kwargs):
     """Lazily import the research adapter to avoid execution import cycles."""
@@ -65,6 +71,10 @@ __all__ = [
     "OrderType",
     "PositionSnapshot",
     "ReadinessEvidence",
+    "RouteDecision",
+    "RouteQuote",
+    "RoutingPolicy",
+    "SmartOrderRouter",
     "ReconciliationReport",
     "ReconciliationStatus",
     "SafetyBlock",
