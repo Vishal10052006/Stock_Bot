@@ -298,3 +298,110 @@ def test_execution_metrics_include_fills_and_fees():
     assert metrics.filled_quantity == 100.0
     assert metrics.fill_ratio == 1.0
     assert metrics.total_fees > 0.0
+
+
+def _snapshot_for(
+    order: OrderRequest,
+    *,
+    status: OrderStatus,
+    requested: float,
+    filled: float,
+    fill_quantity: float | None = None,
+) -> object:
+    from execution.engine import Fill, OrderSnapshot
+
+    fills = ()
+    if fill_quantity is not None:
+        fills = (
+            Fill(
+                fill_id="F-1",
+                client_order_id=order.client_order_id,
+                quantity=fill_quantity,
+                price=100.0,
+            ),
+        )
+    return OrderSnapshot(
+        broker_order_id="BROKER-1",
+        client_order_id=order.client_order_id,
+        status=status,
+        requested_quantity=requested,
+        filled_quantity=filled,
+        average_fill_price=100.0 if filled else None,
+        fills=fills,
+    )
+
+
+class _StaticAdapter:
+    def __init__(self, snapshot_factory):
+        self.snapshot_factory = snapshot_factory
+
+    def submit(self, order):
+        return self.snapshot_factory(order)
+
+    def get_order(self, client_order_id):
+        return None
+
+    def cancel(self, client_order_id):
+        raise NotImplementedError
+
+    def positions(self):
+        return ()
+
+
+def test_broker_response_rejects_filled_quantity_over_request():
+    adapter = _StaticAdapter(
+        lambda order: _snapshot_for(
+            order,
+            status=OrderStatus.PARTIALLY_FILLED,
+            requested=order.quantity,
+            filled=order.quantity + 1.0,
+            fill_quantity=order.quantity,
+        )
+    )
+    engine = ExecutionEngine(adapter)
+
+    with pytest.raises(ValueError, match="exceeds requested"):
+        engine.submit(order_request())
+
+
+def test_broker_response_rejects_mismatched_fill_identity():
+    from execution.engine import Fill, OrderSnapshot
+
+    def bad_snapshot(order):
+        return OrderSnapshot(
+            broker_order_id="BROKER-2",
+            client_order_id=order.client_order_id,
+            status=OrderStatus.FILLED,
+            requested_quantity=order.quantity,
+            filled_quantity=order.quantity,
+            average_fill_price=100.0,
+            fills=(
+                Fill(
+                    fill_id="F-2",
+                    client_order_id="OTHER-ORDER",
+                    quantity=order.quantity,
+                    price=100.0,
+                ),
+            ),
+        )
+
+    engine = ExecutionEngine(_StaticAdapter(bad_snapshot))
+
+    with pytest.raises(ValueError, match="fill client_order_id"):
+        engine.submit(order_request())
+
+
+def test_filled_status_requires_full_requested_quantity():
+    adapter = _StaticAdapter(
+        lambda order: _snapshot_for(
+            order,
+            status=OrderStatus.FILLED,
+            requested=order.quantity,
+            filled=order.quantity - 1.0,
+            fill_quantity=order.quantity - 1.0,
+        )
+    )
+    engine = ExecutionEngine(adapter)
+
+    with pytest.raises(ValueError, match="FILLED"):
+        engine.submit(order_request())
