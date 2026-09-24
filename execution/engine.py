@@ -439,6 +439,25 @@ class ExecutionEngine:
             raise ValueError("broker response client_order_id mismatch")
         if snapshot.requested_quantity != order.quantity:
             raise ValueError("broker response quantity mismatch")
+        if snapshot.filled_quantity < 0 or snapshot.filled_quantity > order.quantity + 1e-12:
+            raise ValueError("broker response filled quantity exceeds requested quantity")
+        fill_total = 0.0
+        for fill in snapshot.fills:
+            if fill.client_order_id != order.client_order_id:
+                raise ValueError("broker response fill client_order_id mismatch")
+            if fill.quantity <= 0 or fill.price <= 0:
+                raise ValueError("broker response contains invalid fill")
+            fill_total += fill.quantity
+        if fill_total > snapshot.filled_quantity + 1e-12:
+            raise ValueError("broker response fill total exceeds filled quantity")
+        if snapshot.status is OrderStatus.FILLED and (
+            abs(snapshot.filled_quantity - order.quantity) > 1e-12
+        ):
+            raise ValueError("FILLED broker response must fill the requested quantity")
+        if snapshot.status is OrderStatus.PARTIALLY_FILLED and not (
+            0.0 < snapshot.filled_quantity < order.quantity
+        ):
+            raise ValueError("PARTIALLY_FILLED broker response has invalid fill quantity")
 
         self._transition(
             order.client_order_id,
