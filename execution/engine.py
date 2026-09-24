@@ -252,8 +252,12 @@ class OrderStateMachine:
     _ALLOWED = {
         OrderStatus.CREATED: {OrderStatus.VALIDATED, OrderStatus.REJECTED_LOCAL},
         OrderStatus.VALIDATED: {OrderStatus.SUBMITTING, OrderStatus.REJECTED_LOCAL},
+        # Synchronous adapters may return a terminal or partial fill directly.
+        # Do not invent an intermediate SUBMITTED/OPEN event when none occurred.
         OrderStatus.SUBMITTING: {
             OrderStatus.SUBMITTED,
+            OrderStatus.PARTIALLY_FILLED,
+            OrderStatus.FILLED,
             OrderStatus.REJECTED_BROKER,
             OrderStatus.FAILED,
             OrderStatus.UNKNOWN,
