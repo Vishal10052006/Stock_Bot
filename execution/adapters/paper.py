@@ -10,6 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Callable
+import math
 
 import pandas as pd
 
@@ -50,6 +51,7 @@ class PaperBrokerAdapter:
         self.config = config or PaperAdapterConfig()
         self.price_provider = price_provider
         self._orders: dict[str, OrderSnapshot] = {}
+        self._requests: dict[str, OrderRequest] = {}
         self._positions: dict[str, PositionSnapshot] = {}
         self._sequence = 0
 
@@ -113,9 +115,51 @@ class PaperBrokerAdapter:
             fills=(fill,),
         )
         self._orders[order.client_order_id] = snapshot
+        self._requests[order.client_order_id] = order
         self._apply_fill(order, fill)
         return snapshot
 
+    def fill_remaining(self, client_order_id: str, *, after_cancel: bool = False) -> OrderSnapshot:
+        """Advance a paper order with its outstanding quantity.
+
+        ``after_cancel=True`` models a broker race where cancellation loses
+        to a fill that was already accepted by the broker.
+        """
+        prior = self._orders.get(client_order_id)
+        order = self._requests.get(client_order_id)
+        if prior is None or order is None:
+            raise KeyError(f"paper order not found: {client_order_id}")
+        allowed = {OrderStatus.PARTIALLY_FILLED}
+        if after_cancel:
+            allowed.add(OrderStatus.CANCELLED)
+        if prior.status is OrderStatus.FILLED:
+            return prior
+        if prior.status not in allowed:
+            raise ValueError(f"cannot complete order in state {prior.status.value}")
+
+        remaining = prior.requested_quantity - prior.filled_quantity
+        if remaining <= 0:
+            return prior
+        self._sequence += 1
+        price = float(self.price_provider(order)) if self.price_provider is not None else (float(order.limit_price) if order.limit_price is not None else 100.0)
+        if not math.isfinite(price) or price <= 0:
+            raise ValueError("paper execution price must be positive and finite")
+        adverse = self.config.slippage_bps / 10_000.0
+        fill_price = price * (1.0 + adverse if order.side is OrderSide.BUY else 1.0 - adverse)
+        fee = fill_price * remaining * self.config.fee_bps / 10_000.0
+        fill = Fill(fill_id=f"PF-{self._sequence:08d}", client_order_id=order.client_order_id, quantity=remaining, price=fill_price, fee=fee, timestamp=self._now())
+        total = prior.filled_quantity + remaining
+        snapshot = OrderSnapshot(
+            broker_order_id=prior.broker_order_id, client_order_id=prior.client_order_id,
+            status=OrderStatus.FILLED, requested_quantity=prior.requested_quantity,
+            filled_quantity=total,
+            average_fill_price=((prior.filled_quantity * float(prior.average_fill_price) + remaining * fill_price) / total),
+            reason=("Deterministic completion after cancellation race." if after_cancel else "Deterministic completion of outstanding paper quantity."),
+            updated_at=fill.timestamp, fills=prior.fills + (fill,),
+        )
+        self._orders[client_order_id] = snapshot
+        self._apply_fill(order, fill)
+        return snapshot
     def get_order(self, client_order_id: str) -> OrderSnapshot | None:
         return self._orders.get(client_order_id)
 
