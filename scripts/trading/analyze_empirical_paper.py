@@ -62,6 +62,49 @@ def analyze(rows: pd.DataFrame) -> dict[str, Any]:
     signal_symbols = Counter(step.strategy.symbol for step in signal_steps)
     signal_regimes = Counter(step.strategy.regime for step in signal_steps)
 
+    exposure_rejections = [
+        step for step in signal_steps
+        if (
+            step.risk.reason == "Maximum gross exposure would be exceeded."
+            and step.risk.gross_exposure_before is not None
+            and step.risk.gross_exposure_limit is not None
+            and step.risk.gross_exposure_after is not None
+        )
+    ]
+    before = [
+        float(step.risk.gross_exposure_before) / float(step.risk.gross_exposure_limit)
+        for step in exposure_rejections
+    ]
+    after = [
+        float(step.risk.gross_exposure_after) / float(step.risk.gross_exposure_limit)
+        for step in exposure_rejections
+    ]
+    excess = [
+        float(step.risk.gross_exposure_after) - float(step.risk.gross_exposure_limit)
+        for step in exposure_rejections
+    ]
+    exposure_summary = {
+        "rejections": len(exposure_rejections),
+        "utilization_before": {
+            "min": min(before) if before else None,
+            "median": float(pd.Series(before).median()) if before else None,
+            "max": max(before) if before else None,
+        },
+        "utilization_after": {
+            "min": min(after) if after else None,
+            "median": float(pd.Series(after).median()) if after else None,
+            "max": max(after) if after else None,
+        },
+        "excess_exposure": {
+            "min": min(excess) if excess else None,
+            "median": float(pd.Series(excess).median()) if excess else None,
+            "max": max(excess) if excess else None,
+        },
+        "by_symbol": dict(
+            sorted(Counter(step.risk.symbol for step in exposure_rejections).items())
+        ),
+    }
+
     fill_symbols = Counter(step.order.symbol for step in filled_steps)
     fill_directions = Counter(step.order.direction.value for step in filled_steps)
 
@@ -121,6 +164,7 @@ def analyze(rows: pd.DataFrame) -> dict[str, Any]:
             "by_symbol": dict(sorted(fill_symbols.items())),
             "by_direction": dict(sorted(fill_directions.items())),
         },
+        "exposure_diagnostics": exposure_summary,
         "equity": equity_summary,
         "observation_boundary": {
             "latency": (
