@@ -8,11 +8,13 @@ on:
     paths:
       - "monitoring/**"
       - "tests/test_monitoring_engine.py"
+      - "requirements-dev.txt"
       - ".github/workflows/monitoring.yml"
   pull_request:
     paths:
       - "monitoring/**"
       - "tests/test_monitoring_engine.py"
+      - "requirements-dev.txt"
       - ".github/workflows/monitoring.yml"
 
 jobs:
