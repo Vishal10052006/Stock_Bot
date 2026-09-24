@@ -139,3 +139,20 @@ Cancellation is not treated as proof that no further fill can occur. A broker
 race may produce a later authoritative FILLED snapshot after cancellation;
 the state machine permits that correction and portfolio reconciliation follows
 the final broker position.
+
+
+### Position-set invariants
+
+Position reconciliation canonicalizes symbols using strip().upper() and
+requires the local and broker snapshots to contain exactly the same symbol
+set. A symbol present on only one side is a reconciliation failure.
+
+Signed quantities are compared as signed values, so a long/short sign reversal
+cannot be hidden by absolute-value comparison. Quantities and average prices
+must be finite, positions must be non-zero, and average prices must be
+strictly positive. Duplicate symbols are rejected on either side.
+
+A very small floating-point tolerance (1e-12) is allowed for quantity and
+average-price representation noise; material differences remain failures.
+These rules also apply to duck-typed adapter/test objects, so validation does
+not depend on the broker adapter constructing PositionSnapshot instances.
