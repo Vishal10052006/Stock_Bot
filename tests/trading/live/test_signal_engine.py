@@ -167,3 +167,30 @@ def test_live_signal_custom_session_bounds() -> None:
 
     assert event.status is LiveSignalStatus.BLOCKED
     assert event.block_reason is LiveSignalBlockReason.OUTSIDE_SESSION
+
+
+def test_live_signal_rejects_non_finite_staleness_configuration() -> None:
+    import math
+
+    for value in (float("nan"), float("inf"), float("-inf")):
+        try:
+            LiveSignalEngine(max_staleness_seconds=value)
+        except ValueError:
+            continue
+        raise AssertionError(f"expected ValueError for {value!r}")
+
+
+def test_live_signal_blocks_malformed_non_strategy_input() -> None:
+    class BadInput:
+        timestamp = pd.Timestamp("2026-09-25T09:20:00+05:30")
+        symbol = ""
+
+    engine = LiveSignalEngine()
+    event = engine.evaluate(
+        BadInput(),
+        observed_at=_observed("2026-09-25T09:20:05+05:30"),
+    )
+
+    assert event.status is LiveSignalStatus.BLOCKED
+    assert event.block_reason is LiveSignalBlockReason.INVALID_INPUT
+    assert event.symbol == "UNKNOWN"
