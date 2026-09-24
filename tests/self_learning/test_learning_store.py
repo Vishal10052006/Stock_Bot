@@ -1,4 +1,8 @@
-"""Tests for append-only self-learning persistence."""
+"""Tests for a production-safe, append-only learning ledger.
+
+The ledger is a research memory. It must not become a broker/execution state
+store, and duplicate identities must be rejected.
+"""
 
 from pathlib import Path
 
@@ -8,12 +12,12 @@ from self_learning.contracts import LearningEvidence, LearningTrigger
 from self_learning.store import AppendOnlyLearningStore, DuplicateArtifactError
 
 
-def _evidence() -> LearningEvidence:
+def _evidence(evidence_id: str) -> LearningEvidence:
     return LearningEvidence(
-        evidence_id="E1",
+        evidence_id=evidence_id,
         pattern="REGIME_LOSS_CLUSTER",
         error_class="CONTEXT_LOSS_CLUSTER",
-        source_trade_ids=("T1", "T2", "T3"),
+        source_trade_ids=(f"{evidence_id}-T1", f"{evidence_id}-T2", f"{evidence_id}-T3"),
         evidence_count=3,
         population_count=6,
         occurrence_rate=0.5,
@@ -26,7 +30,7 @@ def _evidence() -> LearningEvidence:
 
 def test_learning_store_round_trip(tmp_path: Path) -> None:
     store = AppendOnlyLearningStore(tmp_path / "learning.jsonl")
-    record = _evidence()
+    record = _evidence("E1")
 
     store.add_evidence(record)
 
@@ -36,7 +40,7 @@ def test_learning_store_round_trip(tmp_path: Path) -> None:
 
 def test_learning_store_rejects_duplicate_identity(tmp_path: Path) -> None:
     store = AppendOnlyLearningStore(tmp_path / "learning.jsonl")
-    record = _evidence()
+    record = _evidence("E1")
 
     store.add_evidence(record)
 
@@ -44,26 +48,13 @@ def test_learning_store_rejects_duplicate_identity(tmp_path: Path) -> None:
         store.add_evidence(record)
 
 
-def test_learning_store_is_append_only(tmp_path: Path) -> None:
+def test_learning_store_preserves_existing_lines(tmp_path: Path) -> None:
     path = tmp_path / "learning.jsonl"
     store = AppendOnlyLearningStore(path)
-    store.add_evidence(_evidence())
+    store.add_evidence(_evidence("E1"))
 
     before = path.read_text(encoding="utf-8")
-    store.add_evidence(
-        LearningEvidence(
-            evidence_id="E2",
-            pattern="HIGH_CONFIDENCE_FALSE_SIGNAL",
-            error_class="HIGH_CONFIDENCE_FAILURE",
-            source_trade_ids=("T4", "T5", "T6"),
-            evidence_count=3,
-            population_count=7,
-            occurrence_rate=3 / 7,
-            confidence=0.15,
-            average_reward=-0.3,
-            rationale="Repeated false-positive evidence.",
-        )
-    )
+    store.add_evidence(_evidence("E2"))
     after = path.read_text(encoding="utf-8")
 
     assert after.startswith(before)
