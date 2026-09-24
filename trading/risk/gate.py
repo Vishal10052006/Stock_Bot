@@ -15,7 +15,7 @@ import pandas as pd
 
 from trading.strategy.models import StrategyDecision, StrategyDirection
 
-from .contracts import RiskAction, RiskReasonCode
+from .contracts import RiskAction, RiskReasonCode, RiskPositionTransition
 
 
 class RiskDecisionStatus(str, Enum):
@@ -39,6 +39,9 @@ class RiskDecision:
     resized: bool = False
     approved_quantity: float = 0.0
     approved_notional: float = 0.0
+    position_transition: RiskPositionTransition | None = None
+    requested_projected_quantity: float | None = None
+    approved_projected_quantity: float | None = None
 
     def __post_init__(self) -> None:
         timestamp = pd.Timestamp(self.timestamp)
