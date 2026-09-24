@@ -713,3 +713,173 @@ def test_cancel_validates_authoritative_broker_snapshot() -> None:
     adapter.cancel = malformed_cancel  # type: ignore[method-assign]
     with pytest.raises(ValueError, match="fill total|CANCELLED"):
         engine.cancel(request.client_order_id)
+
+
+def test_position_reconciliation_rejects_missing_broker_symbol():
+    from execution.engine import PositionSnapshot
+
+    engine = ExecutionEngine(PaperBrokerAdapter())
+    local = (
+        PositionSnapshot(symbol="ITC", quantity=10.0, average_price=100.0),
+        PositionSnapshot(symbol="TCS", quantity=5.0, average_price=200.0),
+    )
+    broker = (
+        PositionSnapshot(symbol="ITC", quantity=10.0, average_price=100.0),
+    )
+
+    adapter = engine.adapter
+    adapter._positions = {
+        "ITC": broker[0],
+    }
+
+    assert not engine.reconcile_positions(local)
+
+
+def test_position_reconciliation_rejects_missing_local_symbol():
+    from execution.engine import PositionSnapshot
+
+    adapter = PaperBrokerAdapter()
+    adapter._positions = {
+        "ITC": PositionSnapshot(symbol="ITC", quantity=10.0, average_price=100.0),
+        "TCS": PositionSnapshot(symbol="TCS", quantity=5.0, average_price=200.0),
+    }
+    engine = ExecutionEngine(adapter)
+
+    local = (
+        PositionSnapshot(symbol="ITC", quantity=10.0, average_price=100.0),
+    )
+
+    assert not engine.reconcile_positions(local)
+
+
+def test_position_reconciliation_rejects_long_short_sign_mismatch():
+    from execution.engine import PositionSnapshot
+
+    adapter = PaperBrokerAdapter()
+    adapter._positions = {
+        "ITC": PositionSnapshot(symbol="ITC", quantity=-10.0, average_price=100.0),
+    }
+    engine = ExecutionEngine(adapter)
+
+    local = (
+        PositionSnapshot(symbol="ITC", quantity=10.0, average_price=100.0),
+    )
+
+    assert not engine.reconcile_positions(local)
+
+
+def test_position_reconciliation_normalizes_symbol_case_and_whitespace():
+    from execution.engine import PositionSnapshot
+
+    adapter = PaperBrokerAdapter()
+    adapter._positions = {
+        "ITC": PositionSnapshot(symbol="ITC", quantity=10.0, average_price=100.0),
+    }
+    engine = ExecutionEngine(adapter)
+
+    local = (
+        PositionSnapshot(symbol=" itc ", quantity=10.0, average_price=100.0),
+    )
+
+    assert engine.reconcile_positions(local)
+
+
+@pytest.mark.parametrize("bad_quantity", [float("nan"), float("inf"), float("-inf")])
+def test_position_reconciliation_rejects_non_finite_duck_typed_quantity(bad_quantity):
+    adapter = PaperBrokerAdapter()
+    engine = ExecutionEngine(adapter)
+
+    local = (
+        type("P", (), {
+            "symbol": "ITC",
+            "quantity": bad_quantity,
+            "average_price": 100.0,
+        })(),
+    )
+
+    assert not engine.reconcile_positions(local)
+
+
+@pytest.mark.parametrize("bad_price", [float("nan"), float("inf"), float("-inf"), 0.0, -1.0])
+def test_position_reconciliation_rejects_invalid_duck_typed_average_price(bad_price):
+    adapter = PaperBrokerAdapter()
+    engine = ExecutionEngine(adapter)
+
+    local = (
+        type("P", (), {
+            "symbol": "ITC",
+            "quantity": 10.0,
+            "average_price": bad_price,
+        })(),
+    )
+
+    assert not engine.reconcile_positions(local)
+
+
+def test_position_reconciliation_rejects_zero_quantity_position():
+    from execution.engine import PositionSnapshot
+
+    adapter = PaperBrokerAdapter()
+    engine = ExecutionEngine(adapter)
+
+    local = (
+        PositionSnapshot(symbol="ITC", quantity=0.0, average_price=100.0),
+    )
+
+    assert not engine.reconcile_positions(local)
+
+
+def test_position_reconciliation_accepts_tiny_float_rounding_difference():
+    from execution.engine import PositionSnapshot
+
+    adapter = PaperBrokerAdapter()
+    adapter._positions = {
+        "ITC": PositionSnapshot(
+            symbol="ITC",
+            quantity=10.0,
+            average_price=100.0,
+        ),
+    }
+    engine = ExecutionEngine(adapter)
+
+    local = (
+        PositionSnapshot(
+            symbol="ITC",
+            quantity=10.0 + 5e-13,
+            average_price=100.0 + 5e-13,
+        ),
+    )
+
+    assert engine.reconcile_positions(local)
+
+
+def test_position_reconciliation_rejects_material_quantity_difference():
+    from execution.engine import PositionSnapshot
+
+    adapter = PaperBrokerAdapter()
+    adapter._positions = {
+        "ITC": PositionSnapshot(symbol="ITC", quantity=10.0, average_price=100.0),
+    }
+    engine = ExecutionEngine(adapter)
+
+    local = (
+        PositionSnapshot(symbol="ITC", quantity=10.0001, average_price=100.0),
+    )
+
+    assert not engine.reconcile_positions(local)
+
+
+def test_position_reconciliation_rejects_duplicate_broker_symbols():
+    class DuplicateBroker(PaperBrokerAdapter):
+        def positions(self):
+            return (
+                type("P", (), {"symbol": "ITC", "quantity": 10.0, "average_price": 100.0})(),
+                type("P", (), {"symbol": "itc", "quantity": 10.0, "average_price": 100.0})(),
+            )
+
+    engine = ExecutionEngine(DuplicateBroker())
+    local = (
+        type("P", (), {"symbol": "ITC", "quantity": 10.0, "average_price": 100.0})(),
+    )
+
+    assert not engine.reconcile_positions(local)
