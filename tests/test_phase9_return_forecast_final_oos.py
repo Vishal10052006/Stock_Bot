@@ -28,13 +28,10 @@ def _write_inputs(tmp_path: Path) -> tuple[Path, Path]:
             "future_return": [0.0] * 12,
         }
     )
-    # _load_merged only needs canonical feature columns to exist; future_return
-    # is supplied by the target artifact.
-    dataset["open"] = 100.0
-    dataset["high"] = 101.0
-    dataset["low"] = 99.0
+    # Minimal valid Phase 5 feature fixture; the target supplies future_return.
     dataset["close"] = 100.0
-    dataset["volume"] = 1000.0
+    for feature in ("price_ema_9_distance_pct", "price_ema_20_distance_pct", "price_ema_50_distance_pct", "ema_9_20_distance_pct", "ema_20_50_distance_pct"):
+        dataset[feature] = 0.0
 
     targets = pd.DataFrame(
         {
