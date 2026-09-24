@@ -9,6 +9,7 @@ from collections.abc import Mapping
 from typing import Any
 
 import pandas as pd
+from time import perf_counter
 
 from intelligence.analysis.contracts import AnalysisContext, AnalysisInput
 from intelligence.analysis.engine import AnalysisEngine
@@ -18,6 +19,7 @@ from intelligence.analysis.fundamentals.alignment import (
 )
 from intelligence.analysis.fundamentals.provider import FundamentalProvider
 from market.features.validation import validate_feature_dataset
+from intelligence.analysis.monitoring import measure_analysis
 
 
 class AnalysisIntegrationError(ValueError):
@@ -34,6 +36,7 @@ def build_analysis_context(
     data_version: str = "unknown",
     feature_version: str = "v1.0",
     analysis_engine: AnalysisEngine | None = None,
+    monitoring: Any | None = None,
 ) -> AnalysisContext:
     """Build AnalysisContext from a validated real FeatureDataset row.
 
@@ -41,6 +44,7 @@ def build_analysis_context(
     already present in FeatureDataset v1. Regime is attached by exact
     decision timestamp and is therefore never forward-filled.
     """
+    started_at = perf_counter()
     validated = validate_feature_dataset(feature_dataset)
 
     if validated["symbol"].nunique() != 1:
@@ -116,7 +120,7 @@ def build_analysis_context(
     )
 
     engine = analysis_engine or AnalysisEngine()
-    return engine.analyze(
+    context = engine.analyze(
         AnalysisInput(
             timestamp=timestamp,
             symbol=symbol,
@@ -131,3 +135,7 @@ def build_analysis_context(
             feature_version=feature_version,
         )
     )
+    if monitoring is not None:
+        monitoring.observe_analysis(measure_analysis(context, started_at))
+        monitoring.observe_analysis_quality(measure_analysis(context, started_at))
+    return context
