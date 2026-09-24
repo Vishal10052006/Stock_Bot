@@ -1,4 +1,4 @@
-# STOCK_BOT — SELF-LEARNING ENGINE SL-00..SL-25
+# STOCK_BOT — SELF-LEARNING ENGINE SL-00..SL-26
 
 ## Objective
 
@@ -53,6 +53,7 @@ execution, or mutates production code.
 | 23 | Controlled candidate retraining | retrain_candidate |
 | 24 | Candidate model lifecycle | CandidateLifecycleController |
 | 25 | Validation evidence orchestration | ValidationOrchestrator |
+| 26 | Promotion gate hardening | PromotionController.review_run |
 
 ## Promotion policy
 
@@ -144,3 +145,9 @@ SL-25 adds `ValidationOrchestrator` and immutable `ValidationRun` records. The o
 
 The orchestrator delegates structural gating to the existing `validate_candidate()` function. A valid gate may advance the candidate from VALIDATING through PAPER to PROMOTION_REVIEW; it never creates a promotion decision, deploys a model, accesses a broker, or changes risk/execution controls. Stage evidence is supplied by existing validation boundaries rather than by a second backtest or validation engine.
 
+
+## SL-26 — Hardened Promotion Review
+
+SL-26 binds promotion review to an immutable ValidationRun belonging to the exact ModelCandidate under review. PromotionController.review_run requires the candidate to be in PROMOTION_REVIEW, verifies the run's candidate fingerprint, revalidates the stage evidence through the existing structural gate, and records the validation-run fingerprint alongside stage artifact fingerprints in the promotion decision.
+
+A stale or mismatched validation run therefore cannot produce an eligible review. Explicit approval remains separate from eligibility; this change does not deploy models, access a broker, alter risk controls, or infer profitability.
