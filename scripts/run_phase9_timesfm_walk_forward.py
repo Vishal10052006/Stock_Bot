@@ -346,9 +346,14 @@ def main() -> None:
                 f"fold {window.fold_id} violates chronological separation"
             )
 
+        # Context may include earlier observed rows from the test session.
+        # This is causal sequential inference: _session_history enforces
+        # timestamp < decision timestamp, so no future test observation enters
+        # any prediction. Restricting history to train would incorrectly make
+        # the first test session have zero intraday context.
         predictions, skipped = _forecast_rows(
             model,
-            history=train,
+            history=merged,
             test=test,
             context_length=config.context_length,
             horizon=horizon,
