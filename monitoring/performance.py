@@ -10,11 +10,7 @@ from monitoring.models import PerformanceSnapshot
 
 
 def performance_from_records(records: Iterable[object]) -> PerformanceSnapshot:
-    """Aggregate completed TradeJournalRecord-compatible objects.
-
-    The function intentionally relies on the journal outcome contract rather
-    than reconstructing values from market data.
-    """
+    """Aggregate completed TradeJournalRecord-compatible objects only."""
     items = tuple(records)
     trade_count = len(items)
     if not items:
@@ -37,8 +33,6 @@ def performance_from_records(records: Iterable[object]) -> PerformanceSnapshot:
 
     net_pnls = [float(item.net_pnl) for item in items]
     gross_pnls = [float(item.gross_pnl) for item in items]
-    fees = sum(float(item.fees) for item in items)
-    slippage = sum(float(item.slippage_cost) for item in items)
     wins = [value for value in net_pnls if value > 0]
     losses = [value for value in net_pnls if value < 0]
 
@@ -52,8 +46,12 @@ def performance_from_records(records: Iterable[object]) -> PerformanceSnapshot:
 
     gross_profit = sum(wins)
     gross_loss = abs(sum(losses))
-    profit_factor = inf if gross_loss == 0 and gross_profit > 0 else (
-        gross_profit / gross_loss if gross_loss else 0.0
+    profit_factor = (
+        inf
+        if gross_loss == 0.0 and gross_profit > 0.0
+        else gross_profit / gross_loss
+        if gross_loss
+        else 0.0
     )
 
     return PerformanceSnapshot(
@@ -62,8 +60,8 @@ def performance_from_records(records: Iterable[object]) -> PerformanceSnapshot:
         losing_trades=len(losses),
         net_pnl=sum(net_pnls),
         gross_pnl=sum(gross_pnls),
-        fees=fees,
-        slippage_cost=slippage,
+        fees=sum(float(item.fees) for item in items),
+        slippage_cost=sum(float(item.slippage_cost) for item in items),
         expectancy=sum(net_pnls) / trade_count,
         win_rate=len(wins) / trade_count,
         profit_factor=profit_factor,
@@ -75,9 +73,8 @@ def performance_from_records(records: Iterable[object]) -> PerformanceSnapshot:
 
 
 def grouped_net_pnl(records: Iterable[object], key: str) -> Mapping[str, float]:
-    """Aggregate net P&L by a simple journal field."""
+    """Aggregate net P&L by a stable journal attribute."""
     result: dict[str, float] = defaultdict(float)
     for item in records:
-        value = getattr(item, key)
-        result[str(value)] += float(item.net_pnl)
+        result[str(getattr(item, key))] += float(item.net_pnl)
     return dict(sorted(result.items()))
