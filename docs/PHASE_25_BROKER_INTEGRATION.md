@@ -1,15 +1,36 @@
 # Phase 25 — Broker Integration
 
-Phase 25 establishes the provider-specific Upstox contract while keeping live execution locked.
+## Implemented boundary
 
-Upstox currently documents a V3 Place Order endpoint and sandbox support. The V3 order request includes quantity, product, validity, price, tag, instrument token, order type, transaction type, disclosed quantity, trigger price, AMO, slicing, and market protection.
+- Upstox V3 sandbox-first adapter;
+- explicit injected broker client;
+- deterministic provider instrument identity resolver;
+- integer and lot-size validation;
+- provider instrument token mapping;
+- broker order-ID retention for lifecycle refresh/cancel;
+- fail-closed refresh when broker identity is unavailable;
+- canonical order status mapping;
+- position snapshot mapping.
 
-`UpstoxBrokerAdapter` maps the broker-neutral `OrderRequest` into the provider payload and converts provider responses into canonical execution snapshots.
+The adapter remains disabled by default and refuses live configuration.
 
-Credentials are not stored in the adapter. The provider client is injected.
+## Critical provider identity rule
 
-Enabled mode requires `sandbox=True`; the default is disabled.
+A trading symbol such as ITC is not itself an Upstox V3 instrument token. The adapter therefore requires an explicit InstrumentResolver and sends the resolved provider token.
 
-Before any live activation, the repository still requires current broker/API verification, sandbox lifecycle testing, reconciliation verification, authentication verification, compliance verification, and complete readiness evidence.
+A production or sandbox run must use a verified current instrument master rather than a hand-written token list.
 
-Phase 25 engineering infrastructure is implemented; live broker submission remains locked.
+## Operational prerequisites
+
+Before any live consideration:
+
+1. verify current Upstox API contract;
+2. verify the current sandbox instrument master;
+3. authenticate through the supported OAuth flow;
+4. execute sandbox place → query → partial/full fill → cancel lifecycle tests;
+5. verify restart and reconciliation behavior;
+6. verify broker positions against local state;
+7. verify rate limits and error semantics;
+8. complete current broker/exchange/regulatory checks.
+
+No live order path is enabled by this phase.
