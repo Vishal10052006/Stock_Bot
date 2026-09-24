@@ -145,3 +145,9 @@ def test_shared_runtime_composition_carries_market_analysis_prediction_and_paper
     assert "model.prediction_count" in payload["metrics"]
     assert "strategy.decisions" in payload["metrics"]
     assert "risk.equity" in payload["metrics"]
+
+
+def test_shared_runtime_injection_is_singleton_across_paper_boundary():
+    runtime = TradingResearchRuntime()
+    assert runtime.paper_loop.monitoring is runtime.monitoring
+    assert runtime.report()["metrics"] == {}
