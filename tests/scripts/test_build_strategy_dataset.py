@@ -10,7 +10,7 @@ from scripts.trading.build_strategy_dataset import (
 )
 
 
-def _frames(rows: int = 180) -> tuple[pd.DataFrame, pd.DataFrame]:
+def _frames(rows: int = 1000) -> tuple[pd.DataFrame, pd.DataFrame]:
     timestamps = pd.date_range(
         "2026-01-05 03:45:00+00:00",
         periods=rows,
@@ -67,7 +67,7 @@ def test_candidate_inputs_are_causal() -> None:
     changed_stocks = stocks.copy()
     changed_market = market.copy()
 
-    cutoff = 120
+    cutoff = 700
     changed_stocks.loc[cutoff:, ["open", "high", "low", "close", "volume"]] *= 4.0
     changed_market.loc[cutoff:, ["open", "high", "low", "close", "volume"]] *= 0.25
 
