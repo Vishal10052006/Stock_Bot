@@ -86,6 +86,8 @@ def analyze(rows: pd.DataFrame) -> dict[str, Any]:
     ]
     exposure_constrained_quantities = []
     quantity_reduction_ratios = []
+    exposure_constrained_risk = []
+    risk_utilization_ratios = []
     zero_exposure_incompatible = 0
     for step in exposure_rejections:
         assessment = step.risk_assessment
@@ -108,6 +110,17 @@ def analyze(rows: pd.DataFrame) -> dict[str, Any]:
             quantity_reduction_ratios.append(
                 max_quantity / float(assessment.position_size)
             )
+        constrained_risk = (
+            max_quantity * float(assessment.stop_distance)
+            if assessment.stop_distance is not None
+            else None
+        )
+        if constrained_risk is not None:
+            exposure_constrained_risk.append(constrained_risk)
+            if float(assessment.risk_budget) > 0:
+                risk_utilization_ratios.append(
+                    constrained_risk / float(assessment.risk_budget)
+                )
         if float(assessment.proposed_value) > float(assessment.gross_exposure_limit):
             zero_exposure_incompatible += 1
 
@@ -157,6 +170,8 @@ def analyze(rows: pd.DataFrame) -> dict[str, Any]:
             "zero_exposure_incompatible_count": zero_exposure_incompatible,
             "exposure_constrained_quantity": exposure_constrained_quantities,
             "risk_first_to_exposure_quantity_ratio": quantity_reduction_ratios,
+            "exposure_constrained_risk": exposure_constrained_risk,
+            "exposure_constrained_risk_to_budget_ratio": risk_utilization_ratios,
         },
     }
 
