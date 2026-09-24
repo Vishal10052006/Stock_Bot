@@ -1210,3 +1210,55 @@ def test_order_reconciliation_rejects_missing_local_request():
     engine._order_requests.pop(request.client_order_id)
 
     assert not engine.reconcile_order(request.client_order_id)
+
+
+def test_execution_metrics_persist_submission_latency() -> None:
+    adapter = PaperBrokerAdapter()
+    engine = ExecutionEngine(adapter)
+    engine.submit(order_request())
+
+    metrics = engine.metrics()
+
+    assert metrics.average_latency_ms >= 0.0
+
+
+def test_unknown_submission_is_never_accepted_by_result_or_metrics() -> None:
+    class FailingAdapter(PaperBrokerAdapter):
+        def submit(self, order):
+            raise RuntimeError("transport unavailable")
+
+    engine = ExecutionEngine(FailingAdapter())
+    result = engine.submit(order_request())
+
+    assert result.snapshot.status is OrderStatus.UNKNOWN
+    assert not result.accepted
+    assert engine.metrics().accepted_orders == 0
+    assert engine.metrics().unknown_orders == 1
+
+
+def test_unknown_refresh_recovery_preserves_broker_reported_fills() -> None:
+    adapter = PaperBrokerAdapter(
+        config=PaperAdapterConfig(
+            partial_fill_ratio=0.5,
+            slippage_bps=0.0,
+            fee_bps=0.0,
+        )
+    )
+    engine = ExecutionEngine(adapter)
+    request = order_request()
+    first = engine.submit(request)
+    assert first.snapshot.filled_quantity == 50.0
+
+    authoritative = adapter.get_order(request.client_order_id)
+    assert authoritative is not None
+    adapter._orders.pop(request.client_order_id)
+
+    unknown = engine.refresh(request.client_order_id)
+    assert unknown.status is OrderStatus.UNKNOWN
+    assert unknown.filled_quantity == 50.0
+
+    adapter._orders[request.client_order_id] = authoritative
+    recovered = engine.refresh(request.client_order_id)
+
+    assert recovered.status is OrderStatus.PARTIALLY_FILLED
+    assert recovered.filled_quantity == 50.0
