@@ -50,11 +50,18 @@ def test_backtest_applies_entry_and_exit_costs() -> None:
     entry = result.orders[0]
 
     assert entry.quantity == 250.0
-    assert outcome.gross_pnl > 0.0
-    assert outcome.slippage_cost > entry.slippage_cost
-    assert outcome.fees > entry.fees
-    assert outcome.net_pnl < outcome.gross_pnl
-    assert outcome.net_pnl == pytest.approx(outcome.gross_pnl - outcome.fees - outcome.slippage_cost)
+    assert entry.fill_price == pytest.approx(100.10)
+    assert outcome.entry_price == pytest.approx(100.10)
+    assert outcome.exit_price == pytest.approx(100.899)
+    # Gross P&L is measured from decision/reference prices. Explicit
+    # execution slippage is then deducted exactly once.
+    assert outcome.gross_pnl == pytest.approx(250.0)
+    assert outcome.slippage_cost == pytest.approx(0.5025)
+    assert outcome.fees == pytest.approx(25.124875)
+    assert outcome.net_pnl == pytest.approx(224.372625)
+    assert outcome.net_pnl == pytest.approx(
+        outcome.gross_pnl - outcome.fees - outcome.slippage_cost
+    )
 
 
 def test_zero_cost_backtest_matches_market_move() -> None:
@@ -83,3 +90,46 @@ def test_zero_cost_backtest_matches_market_move() -> None:
     assert outcome.fees == 0.0
     assert outcome.slippage_cost == 0.0
     assert outcome.net_pnl == 250.0
+
+
+def test_nonzero_exit_slippage_requires_reference_price() -> None:
+    from execution.trading_execution import (
+        ExecutionAuthorization,
+        ExecutionAuthorizationStatus,
+    )
+    from paper.runtime import PaperOrder, PaperOrderStatus
+    from trading.paper.lifecycle import PaperTradeLifecycle
+
+    timestamp = pd.Timestamp("2026-01-01 09:15:00+05:30")
+    authorization = ExecutionAuthorization(
+        timestamp=timestamp,
+        symbol="ITC",
+        direction=__import__("trading.strategy.models", fromlist=["StrategyDirection"]).StrategyDirection.LONG,
+        status=ExecutionAuthorizationStatus.AUTHORIZED,
+        reason="test",
+        risk_version="test",
+        approved_quantity=10.0,
+        approved_notional=1000.0,
+    )
+    order = PaperOrder(
+        timestamp=timestamp,
+        symbol="ITC",
+        direction=authorization.direction,
+        requested_price=100.0,
+        fill_price=100.1,
+        quantity=10.0,
+        status=PaperOrderStatus.FILLED,
+        fees=0.0,
+        slippage_cost=1.0,
+        reason="test",
+    )
+    lifecycle = PaperTradeLifecycle()
+    lifecycle.open(order)
+
+    with pytest.raises(ValueError, match="reference_price"):
+        lifecycle.close(
+            "ITC",
+            timestamp=timestamp + pd.Timedelta(minutes=5),
+            price=99.9,
+            exit_slippage_cost=1.0,
+        )
