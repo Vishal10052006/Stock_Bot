@@ -22,6 +22,7 @@ from .promotion import PromotionController
 from .retraining import RetrainingResult, retrain_candidate
 from .store import AppendOnlyLearningStore, DuplicateArtifactError
 from .validation import ValidationPolicy, validate_candidate
+from .validation_adapter import summarize_artifact, validate_dataset_boundary
 
 __all__ = [
     "AppendOnlyLearningStore",
@@ -50,5 +51,7 @@ __all__ = [
     "build_dataset_version",
     "dataframe_fingerprint",
     "retrain_candidate",
+    "summarize_artifact",
     "validate_candidate",
+    "validate_dataset_boundary",
 ]
