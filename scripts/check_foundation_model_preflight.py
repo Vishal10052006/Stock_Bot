@@ -33,7 +33,7 @@ def main() -> int:
     free_bytes = shutil.disk_usage(os.getcwd()).free
     free_gb = free_bytes / (1024**3)
     print(f"Free disk (GB): {free_gb:.2f}")
-    print(f"Free disk >= {args.min_free_disk_gb:.1f} GB: {free_gb >= args.min_free_disk_gb:.2f}")
+    print(f"Free disk >= {args.min_free_disk_gb:.1f} GB: {free_gb >= args.min_free_disk_gb}")
 
     if sys.version_info < (3, 10):
         return 1
