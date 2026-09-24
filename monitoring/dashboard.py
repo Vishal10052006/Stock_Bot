@@ -7,6 +7,12 @@ from .engine import MonitoringSnapshot
 
 def snapshot_payload(snapshot: MonitoringSnapshot) -> dict[str, Any]:
     """Serialize one monitoring snapshot into a JSON-safe dashboard payload."""
+    by_severity: dict[str, int] = {}
+    by_code: dict[str, int] = {}
+    for alert in snapshot.alerts:
+        by_severity[alert.severity.value] = by_severity.get(alert.severity.value, 0) + 1
+        by_code[alert.code] = by_code.get(alert.code, 0) + 1
+
     return {
         "timestamp": snapshot.timestamp,
         "health": [
@@ -32,4 +38,9 @@ def snapshot_payload(snapshot: MonitoringSnapshot) -> dict[str, Any]:
             }
             for alert in snapshot.alerts
         ],
+        "alert_summary": {
+            "total": len(snapshot.alerts),
+            "by_severity": by_severity,
+            "by_code": by_code,
+        },
     }
