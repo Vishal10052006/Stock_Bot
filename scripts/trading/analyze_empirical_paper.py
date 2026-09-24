@@ -104,6 +104,28 @@ def analyze(rows: pd.DataFrame) -> dict[str, Any]:
         "by_symbol": dict(
             sorted(Counter(step.risk.symbol for step in exposure_rejections).items())
         ),
+        "sizing": {
+            "risk_budget": [
+                float(step.risk_assessment.risk_budget)
+                for step in exposure_rejections
+                if step.risk_assessment.risk_budget is not None
+            ],
+            "stop_distance": [
+                float(step.risk_assessment.stop_distance)
+                for step in exposure_rejections
+                if step.risk_assessment.stop_distance is not None
+            ],
+            "position_size": [
+                float(step.risk_assessment.position_size)
+                for step in exposure_rejections
+                if step.risk_assessment.position_size is not None
+            ],
+            "proposed_value": [
+                float(step.risk_assessment.proposed_value)
+                for step in exposure_rejections
+                if step.risk_assessment.proposed_value is not None
+            ],
+        },
     }
 
     fill_symbols = Counter(step.order.symbol for step in filled_steps)
