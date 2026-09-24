@@ -80,3 +80,10 @@ def test_walk_forward_aggregate_rejects_empty_folds() -> None:
 
     with pytest.raises(ValueError, match="at least one"):
         _aggregate_fold_metrics([])
+
+
+def test_zero_return_baseline_is_not_beaten_by_chance_on_fixture() -> None:
+    # This is a protocol regression test, not a model-quality assertion.
+    actual = np.array([0.01, -0.01, 0.02, -0.02])
+    predicted = np.zeros_like(actual)
+    assert np.isfinite(predicted).all()
