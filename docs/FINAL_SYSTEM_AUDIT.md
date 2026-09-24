@@ -2,8 +2,8 @@
 
 **Audit date:** 2026-09-24  
 **Audited branch:** `main`  
-**Audited commit:** `bc8aaad0e0618f14de10cda781ea6c20d173fce6`  
-**Latest verified CI:** GitHub Actions run #426 (`35993684404`) — SUCCESS
+**Audited commit:** `c21da9b5ef529f5e00649e345736296a401e6b97`  
+**Latest verified CI:** GitHub Actions run #446 (`35995438325`) — SUCCESS
 
 ## 1. Executive status
 
@@ -227,7 +227,7 @@ The older generic reinforcement implementation remains isolated from the trading
 
 Phase 20 is implemented as an immutable, versioned model-artifact registry in `ml/model_registry.py`.
 
-The registry now binds model versions to feature/data/code provenance, artifact SHA-256 identity, strategy version when applicable, experiment lineage, evaluation fingerprint, and explicit approval evidence. Duplicate version metadata cannot silently replace an existing registration. Approval and retirement preserve historical immutable states.
+The registry now binds model versions to feature/data/code provenance, artifact SHA-256 identity, strategy version when applicable, experiment lineage, evaluation fingerprint, candidate identity when supplied, and explicit approval evidence. Duplicate version metadata cannot silently replace an existing registration. Approval and retirement preserve historical immutable states. Constructor seeding cannot bypass approval, only CANDIDATE records can be approved, approval metadata is retained, retirement reasons are persisted, and non-finite metrics are rejected.
 
 Direct approved registration is forbidden; approval requires explicit governance evidence matching the exact registered record. The registry has no Risk, Safety, broker, or live-execution authority.
 
