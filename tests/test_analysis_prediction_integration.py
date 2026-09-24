@@ -10,6 +10,7 @@ from ml.integration.analysis_prediction import predict_from_analysis
 from ml.models.logistic import LogisticOutcomeModel
 from ml.preprocessing.pipeline import FeaturePreprocessor
 from ml.preprocessing.models import NUMERIC_FEATURES, BOOLEAN_FEATURES
+from monitoring.runtime import MonitoringRuntime
 
 
 def _training_frame(rows: int = 12) -> tuple[pd.DataFrame, pd.Series]:
@@ -118,3 +119,23 @@ def test_ab25_does_not_use_analysis_direction_as_prediction() -> None:
     assert prediction.predicted_class == str(
         prediction.probabilities.iloc[0].idxmax()
     )
+
+
+def test_analysis_integration_emits_monitoring_telemetry() -> None:
+    from intelligence.analysis.integration import build_analysis_context
+
+    X_train, _ = _training_frame()
+    features = X_train.copy()
+    features.insert(0, "symbol", "RELIANCE")
+    features.insert(0, "timestamp", pd.date_range("2026-09-20", periods=len(features), tz="UTC"))
+    runtime = MonitoringRuntime()
+    context = build_analysis_context(
+        features,
+        monitoring=runtime,
+        data_version="test-data",
+        feature_version="test-features",
+    )
+    dashboard = runtime.dashboard()
+    assert context.symbol == "RELIANCE"
+    assert any(item["name"] == "analysis.completeness" for item in dashboard["metrics"])
+    assert any(item["component"] == "analysis_bot" for item in dashboard["health"])
