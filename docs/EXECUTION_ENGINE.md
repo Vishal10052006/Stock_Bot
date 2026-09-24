@@ -86,3 +86,17 @@ idempotent; an already-journaled client order is not submitted to the adapter a
 second time.
 
 A malformed broker response must never be treated as a valid fill.
+
+
+## Position reconciliation boundary
+
+Broker positions are authoritative for reconciliation. The comparison is
+fail-closed: duplicate symbols or invalid position values invalidate the
+reconciliation rather than being silently normalized.
+
+A PARTIALLY_FILLED order may legitimately leave a smaller signed position than
+the requested order quantity. That broker position must be reconciled against
+the local position snapshot before downstream state is considered synchronized.
+
+An UNKNOWN order state remains unresolved; it must not be treated as a
+successful fill or as evidence that the expected position exists.
