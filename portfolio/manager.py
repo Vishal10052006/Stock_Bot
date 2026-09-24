@@ -41,11 +41,27 @@ class PortfolioManager:
         projected = projected_snapshot(snapshot, intent)
         projected_count = position_count(projected)
 
+        # For an existing symbol, sector may already be part of portfolio
+        # state. Preserve that authoritative context when the intent omits it.
+        projected_position = next(
+            (
+                position
+                for position in projected.positions
+                if position.symbol == intent.symbol
+            ),
+            None,
+        )
+        sector = (
+            intent.sector
+            if intent.sector is not None
+            else (projected_position.sector if projected_position is not None else None)
+        )
+
         checks = (
             self._check_position_count(projected_count),
             self._check_gross_exposure(projected),
             self._check_symbol_exposure(projected, intent.symbol),
-            self._check_sector_exposure(projected, intent.sector),
+            self._check_sector_exposure(projected, sector),
         )
 
         for reason_code, reason in checks:
