@@ -535,7 +535,11 @@ class RiskEngine:
             )
             requested_order_quantity = requested_quantity
 
-        resized = cash_resized or quantity < requested_order_quantity
+        resized = cash_resized or (
+            opening_quantity < sizing.quantity
+            if reverse_transition
+            else quantity < requested_order_quantity
+        )
         if quantity <= 0:
             return self._reject(
                 value,
@@ -552,7 +556,11 @@ class RiskEngine:
                 RiskReasonCode.VOLATILITY_LIMIT,
             )
 
-        proposed_value = entry * quantity
+        proposed_value = (
+            entry * opening_quantity
+            if reverse_transition
+            else entry * quantity
+        )
 
         if reverse_transition and position_context is not None:
             projected_reverse_quantity = (
@@ -606,14 +614,30 @@ class RiskEngine:
                         daily_pnl,
                         RiskReasonCode.MAX_GROSS_EXPOSURE,
                     )
-                quantity = min(quantity, exposure_quantity)
-                resized = quantity < requested_quantity
-                proposed_value = entry * quantity
-                gross_after = gross_exposure_after(
-                    current_gross_exposure=value.gross_exposure,
-                    entry_price=entry,
-                    quantity=quantity,
-                )
+                if reverse_transition and position_context is not None:
+                    opening_quantity = min(opening_quantity, exposure_quantity)
+                    quantity = reverse_closing_quantity + opening_quantity
+                    resized = opening_quantity < sizing.quantity
+                    proposed_value = entry * opening_quantity
+                    gross_after = projected_gross_exposure(
+                        current_gross_exposure=value.gross_exposure,
+                        existing_quantity=position_context.existing_quantity,
+                        projected_quantity=(
+                            -opening_quantity
+                            if position_context.existing_quantity > 0
+                            else opening_quantity
+                        ),
+                        mark_price=entry,
+                    )
+                else:
+                    quantity = min(quantity, exposure_quantity)
+                    resized = quantity < requested_quantity
+                    proposed_value = entry * quantity
+                    gross_after = gross_exposure_after(
+                        current_gross_exposure=value.gross_exposure,
+                        entry_price=entry,
+                        quantity=quantity,
+                    )
             else:
                 return self._reject(
                     value,
