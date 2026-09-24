@@ -171,13 +171,24 @@ class PaperTradingRuntime:
         authorization: ExecutionAuthorization,
         *,
         price: float,
-        quantity: float,
+        quantity: float | None = None,
     ) -> PaperOrder:
         """Simulate a fill only when ExecutionAuthorization is approved."""
         if not isinstance(authorization, ExecutionAuthorization):
             raise TypeError("authorization must be an ExecutionAuthorization")
-        if price <= 0 or quantity <= 0:
-            raise ValueError("price and quantity must be positive")
+        if price <= 0:
+            raise ValueError("price must be positive")
+
+        if authorization.status is ExecutionAuthorizationStatus.AUTHORIZED:
+            if authorization.approved_quantity <= 0:
+                raise ValueError("authorized execution must carry a positive quantity")
+            if quantity is not None and float(quantity) != authorization.approved_quantity:
+                raise ValueError(
+                    "paper execution quantity must exactly equal authorization approved quantity"
+                )
+            quantity = authorization.approved_quantity
+        elif quantity is None or quantity <= 0:
+            raise ValueError("blocked paper orders require a positive requested quantity")
 
         symbol = authorization.symbol.upper()
 
