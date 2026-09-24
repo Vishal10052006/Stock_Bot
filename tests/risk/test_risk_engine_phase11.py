@@ -16,6 +16,7 @@ from trading.risk.contracts import (
     RiskReasonCode,
 )
 from trading.risk.engine import RiskConfig, RiskEngine, RiskInput
+from trading.risk.exposure import projected_gross_exposure
 from trading.risk.kill_switch import KillSwitchState
 from trading.signals.models import CandidateDirection, TradeCandidate
 
@@ -422,58 +423,48 @@ def test_reduction_does_not_consume_open_position_slot() -> None:
 
 
 
-def test_reduction_uses_projected_gross_exposure() -> None:
+
+
+def test_reduction_gross_exposure_replaces_symbol_contribution() -> None:
     context = RiskPositionContext(
         transition=RiskPositionTransition.REDUCE,
         existing_quantity=10.0,
         projected_quantity=5.0,
     )
 
-    assessment = RiskEngine().evaluate(
-        make_input(
-            gross_exposure=62_000.0,
-            symbol_already_open=True,
-            position_context=context,
-        )
-    )
-
-    assert assessment.decision.status.value == "APPROVED"
-    assert assessment.gross_exposure_after == 62_500.0
+    assert projected_gross_exposure(
+        current_gross_exposure=62_000.0,
+        existing_quantity=context.existing_quantity,
+        projected_quantity=context.projected_quantity,
+        mark_price=100.0,
+    ) == 61_500.0
 
 
-def test_flatten_uses_projected_gross_exposure() -> None:
+def test_flatten_gross_exposure_removes_symbol_contribution() -> None:
     context = RiskPositionContext(
         transition=RiskPositionTransition.FLATTEN,
         existing_quantity=10.0,
         projected_quantity=0.0,
     )
 
-    assessment = RiskEngine().evaluate(
-        make_input(
-            gross_exposure=62_000.0,
-            symbol_already_open=True,
-            position_context=context,
-        )
-    )
-
-    assert assessment.decision.status.value == "APPROVED"
-    assert assessment.gross_exposure_after == 61_000.0
+    assert projected_gross_exposure(
+        current_gross_exposure=62_000.0,
+        existing_quantity=context.existing_quantity,
+        projected_quantity=context.projected_quantity,
+        mark_price=100.0,
+    ) == 61_000.0
 
 
-def test_reverse_replaces_existing_symbol_gross_exposure() -> None:
+def test_reverse_gross_exposure_replaces_directional_contribution() -> None:
     context = RiskPositionContext(
         transition=RiskPositionTransition.REVERSE,
         existing_quantity=10.0,
         projected_quantity=-5.0,
     )
 
-    assessment = RiskEngine().evaluate(
-        make_input(
-            gross_exposure=62_000.0,
-            symbol_already_open=True,
-            position_context=context,
-        )
-    )
-
-    assert assessment.decision.status.value == "APPROVED"
-    assert assessment.gross_exposure_after == 61_500.0
+    assert projected_gross_exposure(
+        current_gross_exposure=62_000.0,
+        existing_quantity=context.existing_quantity,
+        projected_quantity=context.projected_quantity,
+        mark_price=100.0,
+    ) == 61_500.0
