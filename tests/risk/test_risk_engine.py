@@ -135,6 +135,9 @@ def test_gross_exposure_limit_rejects_before_approval() -> None:
     assert assessment.decision.status.value == "REJECTED"
     assert "gross exposure" in assessment.decision.reason.lower()
     assert assessment.entry_price == 100.0
+    assert assessment.stop_price == 96.0
+    assert assessment.risk_budget == 500.0
+    assert assessment.stop_distance == 4.0
     assert assessment.position_size == 125.0
     assert assessment.gross_exposure_before == 62_600.0
     assert assessment.gross_exposure_limit == 75_000.0
