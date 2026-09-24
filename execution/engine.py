@@ -252,8 +252,13 @@ class OrderStateMachine:
     _ALLOWED = {
         OrderStatus.CREATED: {OrderStatus.VALIDATED, OrderStatus.REJECTED_LOCAL},
         OrderStatus.VALIDATED: {OrderStatus.SUBMITTING, OrderStatus.REJECTED_LOCAL},
+        # Simulated brokers may return immediate terminal states; real
+        # brokers may acknowledge first and transition later via refresh().
         OrderStatus.SUBMITTING: {
             OrderStatus.SUBMITTED,
+            OrderStatus.OPEN,
+            OrderStatus.PARTIALLY_FILLED,
+            OrderStatus.FILLED,
             OrderStatus.REJECTED_BROKER,
             OrderStatus.FAILED,
             OrderStatus.UNKNOWN,
