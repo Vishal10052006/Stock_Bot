@@ -149,6 +149,27 @@ The foundation-model experiment is accepted only after:
 A foundation model is not promoted to production merely because it produces a
 forecast or performs well on a single fold.
 
+## Empirical completion evidence
+
+The first real-data zero-shot walk-forward run completed on 2026-09-24.
+
+| Fold | Train | Test | Evaluated | Skipped | MAE | RMSE | Direction | 80% Coverage |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| 1 | 2431 | 669 | 156 | 513 | 0.00425766 | 0.00643488 | 0.4295 | 0.5000 |
+| 2 | 3387 | 664 | 187 | 477 | 0.00325133 | 0.00538989 | 0.4759 | 0.6310 |
+| 3 | 4351 | 654 | 629 | 25 | 0.00480048 | 0.00849919 | 0.5056 | 0.6041 |
+
+The experiment completed with no final-OOS observations used. These results
+support execution of the causal foundation-model research path, but do not
+establish a universal directional edge, calibrated 80% intervals,
+profitability, or production superiority. The large variation in usable
+session-local context across folds remains a documented data/context
+limitation.
+
+The adapter also received a regression fix for a backend batch-size validation
+issue. The caller-visible batch size is captured before TimesFM inference, and
+the regression suite covers backend mutation of the input container.
+
 ## Completion boundary
 
 This stage is complete only when the implementation, tests, real-data
