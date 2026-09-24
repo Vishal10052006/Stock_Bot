@@ -87,3 +87,28 @@ def test_forecast_rejects_non_finite_input() -> None:
 
     with pytest.raises(ValueError, match="non-finite"):
         model.forecast([np.array([1.0] * 31 + [np.nan])], horizon=1)
+
+    
+def test_forecast_shape_validation_uses_pre_call_batch_size() -> None:
+    class FakeModel:
+        def forecast(self, *, horizon, inputs):
+            # Simulate a backend that pads/mutates the input container while
+            # still returning forecasts for the caller-supplied series.
+            inputs.extend([np.ones(32) for _ in range(4)])
+            point = np.full((2, horizon), 0.01, dtype=float)
+            quantiles = np.empty((2, horizon, 10), dtype=float)
+            for q in range(10):
+                quantiles[:, :, q] = (q + 1) * 0.001
+            return point, quantiles
+
+    model = FoundationForecastModel()
+    model._model = FakeModel()
+    model._compiled = True
+
+    point, quantiles = model.forecast(
+        [np.ones(32), np.ones(33)],
+        horizon=4,
+    )
+
+    assert point.shape == (2, 4)
+    assert quantiles.shape == (2, 4, 10)
