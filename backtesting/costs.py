@@ -7,6 +7,7 @@ must be supplied through configuration when the broker layer is introduced.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
 
 
 @dataclass(frozen=True, slots=True)
@@ -30,6 +31,8 @@ class CostConfig:
             self.stamp_duty_bps,
         )
 
+        if any(not math.isfinite(float(value)) for value in values):
+            raise ValueError("transaction costs must be finite")
         if any(value < 0 for value in values):
             raise ValueError("transaction costs cannot be negative")
 
@@ -70,13 +73,15 @@ class TransactionCostModel:
         price: float,
         quantity: float,
     ) -> CostBreakdown:
-        if price <= 0:
-            raise ValueError("price must be positive")
+        if not math.isfinite(float(price)) or price <= 0:
+            raise ValueError("price must be positive and finite")
 
-        if quantity <= 0:
-            raise ValueError("quantity must be positive")
+        if not math.isfinite(float(quantity)) or quantity <= 0:
+            raise ValueError("quantity must be positive and finite")
 
         notional = price * quantity
+        if not math.isfinite(notional):
+            raise ValueError("notional must be finite")
 
         def bps(value: float) -> float:
             return notional * value / 10_000.0
