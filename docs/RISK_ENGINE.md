@@ -93,6 +93,30 @@ RESIZE is only possible when an explicit advanced policy permits deterministic
 sizing reduction. The frozen v1 configuration keeps allow_resize=False, so
 gross-exposure and volatility violations remain hard NO_TRADE outcomes.
 
+## Position transition context
+
+Risk can consume an optional immutable `RiskPositionContext` describing the
+signed position transition at decision time:
+
+- OPEN: flat -> non-zero;
+- INCREASE: larger absolute position in the same direction;
+- REDUCE: smaller non-zero position in the same direction;
+- FLATTEN: existing position -> flat;
+- REVERSE: existing direction -> opposite direction.
+
+The context also carries existing and projected signed quantities and validates
+that the transition geometry is internally consistent.
+
+When supplied, position-count and duplicate-symbol gates are transition-aware:
+REDUCE and FLATTEN do not consume a new open-position slot or trigger the
+duplicate-symbol veto. OPEN still remains subject to both controls, while
+REVERSE is treated as a transition that creates a new directional position.
+
+This phase establishes the Risk-side contract and hard-gate semantics. It does
+not yet change risk-first sizing or exposure arithmetic for reductions,
+flattening, or reversals; those economics must be integrated with explicit
+quantity semantics and dedicated tests before execution integration.
+
 ## Hard vetoes
 
 The engine rejects a candidate when any hard safety condition is met:
@@ -193,6 +217,7 @@ Dedicated tests cover:
 - liquidity;
 - kill switch;
 - duplicate-symbol protection;
+- signed position-transition context and transition-aware entry gates;
 - causal timestamp identity;
 - optional symbol concentration;
 - optional sector concentration;
