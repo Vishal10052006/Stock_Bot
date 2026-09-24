@@ -8,6 +8,7 @@ by AB-25 through AB-29.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
 import pandas as pd
 
@@ -17,6 +18,7 @@ from market.features.builder import build_features
 from market.features.validation import validate_feature_dataset
 from market.indicators.engine import IndicatorEngine
 from market.regime.detector import detect_market_regime
+from monitoring.runtime import MonitoringRuntime
 
 
 class MarketAnalysisPipelineError(ValueError):
@@ -42,6 +44,7 @@ def build_market_analysis(
     sector_mappings: tuple = (),
     data_version: str = "market-v1",
     feature_version: str = "v1.0",
+    monitoring: MonitoringRuntime | None = None,
 ) -> MarketAnalysisResult:
     """Run real Phase 4/5/6 components and produce one AnalysisContext.
 
@@ -132,6 +135,7 @@ def build_market_analysis(
         regime_dataset=regime,
         data_version=data_version,
         feature_version=feature_version,
+        monitoring=monitoring,
     )
 
     return MarketAnalysisResult(
