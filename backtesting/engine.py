@@ -555,6 +555,7 @@ class HistoricalBacktestEngine:
             quantity=quantity,
             exit_fees=exit_fees,
             exit_slippage_cost=fill.slippage_cost,
+            reference_price=price,
         )
 
     def _close_expired_trade(
@@ -639,6 +640,7 @@ class HistoricalBacktestEngine:
             price=fill.fill_price,
             exit_fees=exit_fees,
             exit_slippage_cost=fill.slippage_cost,
+            reference_price=price,
         )
 
     def _open_trade(self, symbol: str) -> PaperOrder | None:
