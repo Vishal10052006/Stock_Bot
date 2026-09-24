@@ -12,10 +12,10 @@ import pandas as pd
 
 from market.bot.contracts import MarketContext
 from monitoring.runtime import MonitoringRuntime
-from ml.integration.analysis_prediction import PredictionContext
+from ml.integration.analysis_prediction import PredictionContext, predict_from_analysis
 from ml.models.logistic import LogisticOutcomeModel
 from ml.preprocessing.pipeline import FeaturePreprocessor
-from trading.ab30_pipeline import MarketAnalysisResult, build_market_analysis_and_prediction
+from trading.ab30_pipeline import MarketAnalysisResult
 from trading.market_bot_pipeline import build_market_analysis_from_market_bot
 from trading.paper.decision_loop import PaperDecisionLoop, PaperDecisionRun
 
@@ -58,7 +58,7 @@ class TradingResearchRuntime:
         every producer. Market Bot provenance remains attached by its existing
         composition boundary.
         """
-        phase5_market_context = build_market_analysis_from_market_bot(
+        analysis = build_market_analysis_from_market_bot(
             candles,
             symbol=symbol,
             benchmark_history=benchmark_history,
@@ -70,21 +70,15 @@ class TradingResearchRuntime:
             monitoring=self.monitoring,
         )
 
-        prediction = build_market_analysis_and_prediction(
-            candles,
-            symbol=symbol,
+        prediction = predict_from_analysis(
+            analysis.analysis,
             model=model,
             preprocessor=preprocessor,
-            market_context=phase5_market_context.features,
-            sector_context=sector_context,
-            sector_mappings=sector_mappings,
-            data_version=data_version or market_context.metadata.data_version,
-            feature_version=feature_version or market_context.metadata.feature_version,
             model_version=model_version,
             monitoring=self.monitoring,
-        )[1]
+        )
 
-        return phase5_market_context, prediction
+        return analysis, prediction
 
     def paper_decisions(
         self,
