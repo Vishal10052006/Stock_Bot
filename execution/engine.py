@@ -409,6 +409,7 @@ class ExecutionEngine:
                     OrderStatus.REJECTED_LOCAL,
                     OrderStatus.REJECTED_BROKER,
                     OrderStatus.FAILED,
+                    OrderStatus.UNKNOWN,
                 },
                 latency_ms=0.0,
             )
@@ -553,8 +554,19 @@ class ExecutionEngine:
                 reason="broker returned no order state",
                 fills=prior.fills,
             )
-            self._transition(client_order_id, OrderStatus.UNKNOWN, "broker returned no order state")
+            # Repeated broker unavailability is not a new lifecycle
+            # transition. UNKNOWN is already the authoritative local state for
+            # the unresolved observation; do not manufacture UNKNOWN -> UNKNOWN
+            # events or raise on a retry.
+            current = self._states.get(client_order_id)
+            if current is not OrderStatus.UNKNOWN:
+                self._transition(
+                    client_order_id,
+                    OrderStatus.UNKNOWN,
+                    "broker returned no order state",
+                )
             self._orders[client_order_id] = unknown
+            self._fills[client_order_id] = tuple(unknown.fills)
             return unknown
 
         prior = self._orders.get(client_order_id)
