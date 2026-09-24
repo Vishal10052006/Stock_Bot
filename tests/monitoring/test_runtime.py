@@ -39,7 +39,7 @@ def test_runtime_observes_model_performance_and_regime():
     runtime.observe_model(ModelMonitoringSnapshot(
         model_version="m1", prediction_count=3,
         labeled_count=3, correct_count=2,
-        log_loss=0.2, brier_score=0.1, ece=0.02,
+        log_loss=0.2, brier_score=0.1, expected_calibration_error=0.02,
         reference_probabilities=(0.2, 0.4, 0.6),
         current_probabilities=(0.3, 0.5, 0.7),
     ))
