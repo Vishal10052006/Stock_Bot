@@ -1,14 +1,17 @@
 """Tests for promotion and validation gates."""
 
 import pytest
+from dataclasses import replace
 
 from self_learning.contracts import (
     CandidateLifecycle,
     ModelCandidate,
     ValidationSummary,
+    CandidateLifecycle,
 )
 from self_learning.promotion import PromotionController
 from self_learning.validation import validate_candidate
+from self_learning.validation_orchestrator import ValidationRun
 
 
 def _candidate() -> ModelCandidate:
@@ -124,3 +127,66 @@ def test_rollback_is_explicit_and_non_execution() -> None:
     )
     assert result.state.value == "ROLLED_BACK"
     assert result.challenger_version == "v1"
+
+
+def _validation_run(candidate: ModelCandidate) -> ValidationRun:
+    validations = _validations(candidate)
+    return ValidationRun(
+        candidate_fingerprint=candidate.fingerprint,
+        stages=tuple(validations.values()),
+        gate=validate_candidate(candidate, validations),
+    )
+
+
+def test_review_run_requires_exact_candidate_and_promotion_review_state() -> None:
+    candidate = _candidate()
+    run = _validation_run(candidate)
+
+    with pytest.raises(ValueError, match="PROMOTION_REVIEW"):
+        PromotionController().review_run(
+            champion_version="model-v1",
+            challenger=candidate,
+            validation_run=run,
+        )
+
+    review_candidate = replace(candidate, lifecycle=CandidateLifecycle.PROMOTION_REVIEW)
+    with pytest.raises(ValueError, match="does not match challenger"):
+        PromotionController().review_run(
+            champion_version="model-v1",
+            challenger=review_candidate,
+            validation_run=run,
+        )
+
+
+def test_review_run_binds_validation_run_fingerprint_to_decision() -> None:
+    candidate = replace(_candidate(), lifecycle=CandidateLifecycle.PROMOTION_REVIEW)
+    run = _validation_run(candidate)
+
+    decision = PromotionController().review_run(
+        champion_version="model-v1",
+        challenger=candidate,
+        validation_run=run,
+    )
+
+    assert decision.state.value == "ELIGIBLE"
+    assert run.fingerprint in decision.validation_fingerprints
+
+
+def test_review_run_revalidates_stage_evidence() -> None:
+    candidate = replace(_candidate(), lifecycle=CandidateLifecycle.PROMOTION_REVIEW)
+    validations = _validations(candidate)
+    validations["PAPER"] = replace(validations["PAPER"], valid=False, issues=("PAPER_FAILED",))
+    run = ValidationRun(
+        candidate_fingerprint=candidate.fingerprint,
+        stages=tuple(validations.values()),
+        gate=validate_candidate(candidate, validations),
+    )
+
+    decision = PromotionController().review_run(
+        champion_version="model-v1",
+        challenger=candidate,
+        validation_run=run,
+    )
+
+    assert decision.state.value == "BLOCKED"
+    assert "STAGE_INVALID:PAPER" in decision.reasons
