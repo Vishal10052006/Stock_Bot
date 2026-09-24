@@ -13,6 +13,7 @@ from trading.risk.contracts import (
     RiskAction,
     RiskPositionContext,
     RiskPositionTransition,
+    RiskTransitionSizing,
     RiskReasonCode,
 )
 from trading.risk.engine import RiskConfig, RiskEngine, RiskInput
@@ -468,3 +469,39 @@ def test_reverse_gross_exposure_replaces_directional_contribution() -> None:
         projected_quantity=context.projected_quantity,
         mark_price=100.0,
     ) == 61_500.0
+
+
+
+@pytest.mark.parametrize(
+    ("transition", "existing", "projected", "order", "closing", "opening"),
+    [
+        (RiskPositionTransition.OPEN, 0.0, 10.0, 10.0, 0.0, 10.0),
+        (RiskPositionTransition.INCREASE, 10.0, 15.0, 5.0, 0.0, 5.0),
+        (RiskPositionTransition.REDUCE, 10.0, 5.0, 5.0, 5.0, 0.0),
+        (RiskPositionTransition.FLATTEN, 10.0, 0.0, 10.0, 10.0, 0.0),
+        (RiskPositionTransition.REVERSE, 10.0, -5.0, 15.0, 10.0, 5.0),
+        (RiskPositionTransition.INCREASE, -10.0, -15.0, 5.0, 0.0, 5.0),
+        (RiskPositionTransition.REDUCE, -10.0, -5.0, 5.0, 5.0, 0.0),
+        (RiskPositionTransition.FLATTEN, -10.0, 0.0, 10.0, 10.0, 0.0),
+        (RiskPositionTransition.REVERSE, -10.0, 5.0, 15.0, 10.0, 5.0),
+    ],
+)
+def test_transition_sizing_separates_close_and_open_quantities(
+    transition: RiskPositionTransition,
+    existing: float,
+    projected: float,
+    order: float,
+    closing: float,
+    opening: float,
+) -> None:
+    context = RiskPositionContext(
+        transition=transition,
+        existing_quantity=existing,
+        projected_quantity=projected,
+    )
+
+    sizing = RiskTransitionSizing.from_context(context)
+
+    assert sizing.order_quantity == order
+    assert sizing.closing_quantity == closing
+    assert sizing.opening_quantity == opening
