@@ -156,6 +156,158 @@ def test_refresh_marks_missing_broker_state_unknown():
     assert refreshed.status is OrderStatus.UNKNOWN
 
 
+def test_repeated_refresh_while_broker_state_is_unavailable_is_idempotent():
+    """UNKNOWN is a stable recovery state while the broker remains unavailable."""
+    adapter = PaperBrokerAdapter()
+    engine = ExecutionEngine(adapter)
+    request = order_request()
+    engine.submit(request)
+    adapter._orders.pop(request.client_order_id)
+
+    first = engine.refresh(request.client_order_id)
+    event_count = len(engine.events)
+    second = engine.refresh(request.client_order_id)
+
+    assert first.status is OrderStatus.UNKNOWN
+    assert second.status is OrderStatus.UNKNOWN
+    assert second.filled_quantity == first.filled_quantity
+    assert len(engine.events) == event_count
+    assert engine.get_order(request.client_order_id).status is OrderStatus.UNKNOWN
+
+
+def test_unknown_order_recovers_to_authoritative_filled_state_without_resubmit():
+    """A later broker observation resolves UNKNOWN and never submits twice."""
+    adapter = PaperBrokerAdapter()
+    engine = ExecutionEngine(adapter)
+    request = order_request()
+    original = adapter.submit(request)
+    adapter._orders.pop(request.client_order_id)
+
+    unknown = engine.refresh(request.client_order_id)
+    assert unknown.status is OrderStatus.UNKNOWN
+
+    adapter._orders[request.client_order_id] = original
+    recovered = engine.refresh(request.client_order_id)
+
+    assert recovered.status is OrderStatus.FILLED
+    assert recovered.filled_quantity == request.quantity
+    assert engine.get_order(request.client_order_id).status is OrderStatus.FILLED
+    assert len(engine.journal) == 1
+
+    repeated = engine.submit(request)
+    assert repeated.snapshot.status is OrderStatus.FILLED
+    assert repeated.accepted
+    assert len(engine.journal) == 1
+
+
+def test_unknown_order_recovers_to_partial_state_without_manufacturing_fill():
+    """Recovery to PARTIALLY_FILLED preserves only broker-reported exposure."""
+    adapter = PaperBrokerAdapter(
+        config=PaperAdapterConfig(
+            partial_fill_ratio=0.5,
+            slippage_bps=0.0,
+            fee_bps=0.0,
+        )
+    )
+    engine = ExecutionEngine(adapter)
+    request = order_request()
+    original = adapter.submit(request)
+    adapter._orders.pop(request.client_order_id)
+
+    unknown = engine.refresh(request.client_order_id)
+    assert unknown.status is OrderStatus.UNKNOWN
+    assert unknown.filled_quantity == 50.0
+
+    adapter._orders[request.client_order_id] = original
+    recovered = engine.refresh(request.client_order_id)
+
+    assert recovered.status is OrderStatus.PARTIALLY_FILLED
+    assert recovered.filled_quantity == 50.0
+    assert len(engine.fills(request.client_order_id)) == 1
+    assert adapter.positions()[0].quantity == 50.0
+
+
+def test_unknown_order_recovers_to_cancelled_state():
+    """An unresolved order can later resolve to an authoritative cancellation."""
+    adapter = PaperBrokerAdapter(
+        config=PaperAdapterConfig(
+            partial_fill_ratio=0.5,
+            slippage_bps=0.0,
+            fee_bps=0.0,
+        )
+    )
+    engine = ExecutionEngine(adapter)
+    request = order_request()
+    engine.submit(request)
+    cancelled = engine.cancel(request.client_order_id)
+    assert cancelled.status is OrderStatus.CANCELLED
+
+    adapter._orders.pop(request.client_order_id)
+    unknown = engine.refresh(request.client_order_id)
+    assert unknown.status is OrderStatus.UNKNOWN
+
+    adapter._orders[request.client_order_id] = cancelled
+    recovered = engine.refresh(request.client_order_id)
+
+    assert recovered.status is OrderStatus.CANCELLED
+    assert recovered.filled_quantity == cancelled.filled_quantity
+    assert adapter.positions()[0].quantity == 40.0
+
+
+class _FailOnceAdapter(PaperBrokerAdapter):
+    """Raise once to simulate an ambiguous broker submission outcome."""
+
+    def __init__(self):
+        super().__init__()
+        self.submit_calls = 0
+        self.fail_submission = True
+
+    def submit(self, order):
+        self.submit_calls += 1
+        if self.fail_submission:
+            self.fail_submission = False
+            raise RuntimeError("ambiguous transport failure")
+        return super().submit(order)
+
+
+def test_unknown_submission_is_not_reported_as_accepted_on_retry():
+    """A retry sees the unresolved journal entry instead of resubmitting."""
+    adapter = _FailOnceAdapter()
+    engine = ExecutionEngine(adapter)
+    request = order_request()
+
+    first = engine.submit(request)
+    assert first.snapshot.status is OrderStatus.UNKNOWN
+    assert not first.accepted
+    assert adapter.submit_calls == 1
+
+    second = engine.submit(request)
+
+    assert second.snapshot.status is OrderStatus.UNKNOWN
+    assert not second.accepted
+    assert adapter.submit_calls == 1
+    assert len(engine.journal) == 1
+
+
+def test_unknown_submission_can_recover_after_broker_state_appears():
+    """Recovery uses refresh rather than a duplicate broker submission."""
+    adapter = _FailOnceAdapter()
+    engine = ExecutionEngine(adapter)
+    request = order_request()
+
+    first = engine.submit(request)
+    assert first.snapshot.status is OrderStatus.UNKNOWN
+
+    authoritative = PaperBrokerAdapter().submit(request)
+    adapter._orders[request.client_order_id] = authoritative
+
+    recovered = engine.refresh(request.client_order_id)
+
+    assert recovered.status is OrderStatus.FILLED
+    assert recovered.filled_quantity == request.quantity
+    assert adapter.submit_calls == 1
+
+
 def test_cancel_persists_broker_state():
     adapter = PaperBrokerAdapter(
         config=PaperAdapterConfig(partial_fill_ratio=0.5)
