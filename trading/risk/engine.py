@@ -247,6 +247,8 @@ class RiskAssessment:
     closing_quantity: float | None = None
     opening_quantity: float | None = None
     opening_position_size: float | None = None
+    requested_projected_quantity: float | None = None
+    approved_projected_quantity: float | None = None
 
 
 def _strategy_direction(candidate: TradeCandidate) -> StrategyDirection:
@@ -583,11 +585,10 @@ class RiskEngine:
             opening_quantity = quantity
             requested_order_quantity = requested_quantity
 
-        resized = cash_resized or (
-            opening_quantity < sizing.quantity
-            if reverse_transition
-            else quantity < requested_order_quantity
-        )
+        if requested_opening_quantity is not None:
+            resized = cash_resized or opening_quantity < requested_opening_quantity
+        else:
+            resized = cash_resized or quantity < requested_order_quantity
         if quantity <= 0:
             return self._reject(
                 value,
@@ -761,6 +762,28 @@ class RiskEngine:
                 RiskReasonCode.CORRELATION_LIMIT,
             )
 
+        if position_context is not None:
+            requested_projected_quantity = position_context.projected_quantity
+            if release_only:
+                approved_projected_quantity = position_context.projected_quantity
+            elif reverse_transition:
+                approved_projected_quantity = (
+                    -opening_quantity
+                    if position_context.existing_quantity > 0
+                    else opening_quantity
+                )
+            else:
+                delta_sign = 1.0 if position_context.projected_quantity > 0 else -1.0
+                approved_projected_quantity = (
+                    position_context.existing_quantity
+                    + delta_sign * opening_quantity
+                )
+        else:
+            requested_projected_quantity = None
+            approved_projected_quantity = (
+                quantity if direction is StrategyDirection.LONG else -quantity
+            )
+
         decision = RiskDecision(
             timestamp=value.timestamp,
             symbol=value.symbol,
@@ -795,6 +818,8 @@ class RiskEngine:
             closing_quantity=(transition_sizing.closing_quantity if transition_sizing else None),
             opening_quantity=(opening_quantity if transition_sizing else None),
             opening_position_size=(opening_quantity if reverse_transition else None),
+            requested_projected_quantity=requested_projected_quantity,
+            approved_projected_quantity=approved_projected_quantity,
         )
 
     def _reject(
