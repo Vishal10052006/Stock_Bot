@@ -330,7 +330,12 @@ class RiskEngine:
                 RiskReasonCode.DAILY_LOSS_LIMIT,
             )
 
-        if value.trades_today >= self.config.max_trades_per_day:
+        position_context = value.position_context
+
+        if (
+            position_context is None
+            or position_context.consumes_trade_entry
+        ) and value.trades_today >= self.config.max_trades_per_day:
             return self._reject(
                 value,
                 "Maximum daily trade entries reached.",
@@ -338,14 +343,33 @@ class RiskEngine:
                 RiskReasonCode.MAX_TRADES_REACHED,
             )
 
-        position_context = value.position_context
-        opens_position = (
-            position_context.opens_position
+        if position_context is not None:
+            direction_follows_projection = position_context.transition in {
+                RiskPositionTransition.OPEN,
+                RiskPositionTransition.INCREASE,
+                RiskPositionTransition.REVERSE,
+            }
+            expected_long = (
+                position_context.projected_quantity > 0
+                if direction_follows_projection
+                else position_context.existing_quantity < 0
+            )
+            actual_long = direction is StrategyDirection.LONG
+            if actual_long != expected_long:
+                return self._reject(
+                    value,
+                    "Candidate direction is inconsistent with the supplied position transition.",
+                    daily_pnl,
+                    RiskReasonCode.POSITION_CONTEXT_MISMATCH,
+                )
+
+        creates_position_slot = (
+            position_context.creates_position_slot
             if position_context is not None
             else not value.symbol_already_open
         )
 
-        if opens_position and value.open_positions >= self.config.max_open_positions:
+        if creates_position_slot and value.open_positions >= self.config.max_open_positions:
             return self._reject(
                 value,
                 "Maximum open positions reached.",
