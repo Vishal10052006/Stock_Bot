@@ -35,6 +35,7 @@ from .real_dataset import (
 from .store import AppendOnlyLearningStore, DuplicateArtifactError
 from .validation import ValidationPolicy, validate_candidate
 from .validation_adapter import summarize_artifact, validate_dataset_boundary
+from .validation_orchestrator import ValidationOrchestrator, ValidationRun
 
 __all__ = [
     "AppendOnlyLearningStore",
@@ -62,7 +63,9 @@ __all__ = [
     "PromotionState",
     "RetrainingResult",
     "SelfLearningOrchestrator",
+    "ValidationOrchestrator",
     "ValidationPolicy",
+    "ValidationRun",
     "ValidationSummary",
     "build_dataset_version",
     "build_phase9_dataset_version",
