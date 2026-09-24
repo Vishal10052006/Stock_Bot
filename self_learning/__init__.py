@@ -19,6 +19,7 @@ from .dataset import build_dataset_version, dataframe_fingerprint
 from .experiments import ExperimentArtifact, ExperimentRegistry
 from .orchestrator import LearningRunResult, SelfLearningOrchestrator
 from .promotion import PromotionController
+from .provenance import build_phase9_dataset_version
 from .retraining import RetrainingResult, retrain_candidate
 from .real_dataset import (
     DatasetDiagnostics,
@@ -62,6 +63,7 @@ __all__ = [
     "ValidationPolicy",
     "ValidationSummary",
     "build_dataset_version",
+    "build_phase9_dataset_version",
     "compare_snapshot_overlap",
     "discover_phase9_snapshots",
     "inspect_phase9_snapshot",
