@@ -7,19 +7,8 @@ position. It does not authorize, size, or execute the trade.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from enum import Enum
 
-from portfolio.contracts import PortfolioPosition, TradeIntent
-
-
-class PositionTransition(str, Enum):
-    """Semantic transition produced by a proposed trade."""
-
-    OPEN = "OPEN"
-    INCREASE = "INCREASE"
-    REDUCE = "REDUCE"
-    FLATTEN = "FLATTEN"
-    REVERSE = "REVERSE"
+from portfolio.contracts import PortfolioPosition, PositionTransition, TradeIntent
 
 
 @dataclass(frozen=True, slots=True)
