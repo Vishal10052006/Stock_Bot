@@ -20,6 +20,16 @@ from .experiments import ExperimentArtifact, ExperimentRegistry
 from .orchestrator import LearningRunResult, SelfLearningOrchestrator
 from .promotion import PromotionController
 from .retraining import RetrainingResult, retrain_candidate
+from .real_dataset import (
+    DatasetDiagnostics,
+    Phase9DatasetError,
+    SnapshotOverlap,
+    compare_snapshot_overlap,
+    discover_phase9_snapshots,
+    inspect_phase9_snapshot,
+    load_phase9_dataset,
+    validate_snapshot_set,
+)
 from .store import AppendOnlyLearningStore, DuplicateArtifactError
 from .validation import ValidationPolicy, validate_candidate
 from .validation_adapter import summarize_artifact, validate_dataset_boundary
@@ -30,6 +40,9 @@ __all__ = [
     "ChampionState",
     "ChampionStateStore",
     "DatasetVersion",
+    "DatasetDiagnostics",
+    "Phase9DatasetError",
+    "SnapshotOverlap",
     "DuplicateArtifactError",
     "ExperienceBundle",
     "ExperimentArtifact",
@@ -49,6 +62,11 @@ __all__ = [
     "ValidationPolicy",
     "ValidationSummary",
     "build_dataset_version",
+    "compare_snapshot_overlap",
+    "discover_phase9_snapshots",
+    "inspect_phase9_snapshot",
+    "load_phase9_dataset",
+    "validate_snapshot_set",
     "dataframe_fingerprint",
     "retrain_candidate",
     "summarize_artifact",
