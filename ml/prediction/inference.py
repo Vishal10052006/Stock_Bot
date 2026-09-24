@@ -15,6 +15,7 @@ import pandas as pd
 
 from ml.prediction.contracts import ClassificationPrediction, PredictionProvenance
 from ml.prediction.storage import PredictionRecord, PredictionStore
+from ml.prediction.monitoring import PredictionTelemetry
 
 
 class ClassificationPredictor(Protocol):
@@ -50,9 +51,11 @@ class PredictionInferenceService:
         predictor: ClassificationPredictor,
         *,
         store: PredictionStore | None = None,
+        monitoring: object | None = None,
     ) -> None:
         self.predictor = predictor
         self.store = store
+        self.monitoring = monitoring
 
     def predict(self, request: PredictionInferenceRequest) -> tuple[ClassificationPrediction, ...]:
         result = self.predictor.predict(
@@ -84,6 +87,22 @@ class PredictionInferenceService:
                 provenance=request.provenance,
             )
             predictions.append(prediction)
+
+            if self.monitoring is not None:
+                probabilities = prediction.probabilities
+                predicted_class = max(probabilities, key=probabilities.get)
+                self.monitoring.observe_prediction(
+                    PredictionTelemetry(
+                        timestamp=prediction.timestamp,
+                        symbol=prediction.symbol,
+                        model_version=request.provenance.model_version,
+                        feature_version=request.provenance.feature_version,
+                        long_probability=probabilities["LONG_SUCCESS"],
+                        short_probability=probabilities["SHORT_SUCCESS"],
+                        no_edge_probability=probabilities["NO_EDGE"],
+                        predicted_class=predicted_class,
+                    )
+                )
 
             if self.store is not None:
                 self.store.append(
