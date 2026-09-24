@@ -147,44 +147,60 @@ class PaperBrokerAdapter:
         )
 
     def _apply_fill(self, order: OrderRequest, fill: Fill) -> None:
-        """Update a simple net position book from the fill."""
+        """Update a signed net position from one fill.
+
+        Positive quantity represents LONG exposure and negative quantity
+        represents SHORT exposure. Reversals close existing exposure first
+        and then open the residual quantity in the new direction.
+        """
         symbol = order.symbol
         current = self._positions.get(symbol)
-        signed_quantity = fill.quantity if order.side is OrderSide.BUY else -fill.quantity
+        current_qty = current.quantity if current is not None else 0.0
+        signed_fill = fill.quantity if order.side is OrderSide.BUY else -fill.quantity
 
-        if current is None:
-            if signed_quantity > 0:
-                self._positions[symbol] = PositionSnapshot(
-                    symbol=symbol,
-                    quantity=signed_quantity,
-                    average_price=fill.price,
-                )
+        if current_qty == 0.0:
+            self._positions[symbol] = PositionSnapshot(
+                symbol=symbol,
+                quantity=signed_fill,
+                average_price=fill.price,
+            )
             return
 
-        current_signed = (
-            current.quantity
-            if order.side is OrderSide.BUY
-            else -current.quantity
+        same_direction = (current_qty > 0 and signed_fill > 0) or (
+            current_qty < 0 and signed_fill < 0
         )
-        new_signed = current_signed + signed_quantity
 
-        if new_signed <= 0:
+        if same_direction:
+            new_qty = current_qty + signed_fill
+            weighted_price = (
+                abs(current_qty) * current.average_price
+                + abs(signed_fill) * fill.price
+            ) / abs(new_qty)
+            self._positions[symbol] = PositionSnapshot(
+                symbol=symbol,
+                quantity=new_qty,
+                average_price=weighted_price,
+            )
+            return
+
+        # Opposite-side fill closes existing exposure first.
+        close_qty = min(abs(current_qty), abs(signed_fill))
+        residual = abs(signed_fill) - close_qty
+        if residual > 0:
+            self._positions[symbol] = PositionSnapshot(
+                symbol=symbol,
+                quantity=residual if signed_fill > 0 else -residual,
+                average_price=fill.price,
+            )
+        elif abs(current_qty) == close_qty:
             self._positions.pop(symbol, None)
-            return
-
-        if order.side is OrderSide.BUY:
-            weighted = (
-                current.average_price * current.quantity
-                + fill.price * fill.quantity
-            ) / new_signed
         else:
-            weighted = current.average_price
+            self._positions[symbol] = PositionSnapshot(
+                symbol=symbol,
+                quantity=current_qty,
+                average_price=current.average_price,
+            )
 
-        self._positions[symbol] = PositionSnapshot(
-            symbol=symbol,
-            quantity=new_signed,
-            average_price=weighted,
-        )
 
 
 __all__ = ["PaperAdapterConfig", "PaperBrokerAdapter"]
