@@ -23,6 +23,7 @@ It owns:
 - optional volatility-aware sizing;
 - liquidity block;
 - duplicate-symbol block;
+- position-transition/direction consistency;
 - independent kill-switch state;
 - machine-readable risk reason codes;
 - immutable risk assessments.
@@ -107,10 +108,13 @@ signed position transition at decision time:
 The context also carries existing and projected signed quantities and validates
 that the transition geometry is internally consistent.
 
-When supplied, position-count and duplicate-symbol gates are transition-aware:
-REDUCE and FLATTEN do not consume a new open-position slot or trigger the
-duplicate-symbol veto. OPEN still remains subject to both controls, while
-REVERSE is treated as a transition that creates a new directional position.
+When supplied, position-count and daily-entry gates are transition-aware:
+REDUCE and FLATTEN do not consume a new open-position slot or daily entry
+budget, and they do not trigger the duplicate-symbol veto. OPEN creates a new
+position slot. INCREASE and REVERSE consume a daily entry, but neither
+increases the number of open symbols because they operate on an existing
+symbol. REVERSE remains subject to the duplicate-symbol exception because it
+replaces the existing direction.
 
 Risk economics now handle all three non-open transition classes explicitly. REDUCE and FLATTEN use the signed transition order quantity as exposure-release operations. REVERSE closes the existing signed position in full and risk-sizes only the newly opened directional quantity; the resulting broker order is the close quantity plus the new opening quantity. Gross exposure is calculated from the projected signed position rather than by blindly adding the full broker order value.
 
