@@ -42,3 +42,17 @@ EMP-05 EVIDENCE_VALIDATED means the evidence contract is satisfied for the suppl
 EMP-06 provides the descriptive failure/execution breakdown needed before deciding whether additional paper observations or a research investigation are warranted.
 
 A low fill count is reported as observed. It is not automatically treated as a strategy defect; the rejection reasons must be inspected first.
+
+
+## EMP-06.1 — Gross exposure diagnostics
+
+For signals rejected by the frozen gross-exposure control, the analyzer records the
+decision-time exposure before the proposed trade, the frozen exposure limit, the
+hypothetical exposure after the proposed quantity, utilization before/after, excess
+exposure, proposed notional, and rejection counts by symbol.
+
+These observations are diagnostic only. They do not alter the 75% gross-exposure
+policy and do not imply that the policy should be relaxed.
+
+The exposure-after value for a rejected trade is hypothetical: no order was
+submitted and no portfolio state was mutated by that rejected candidate.
