@@ -1,0 +1,37 @@
+name: Prediction Bot tests
+
+on:
+  push:
+    branches:
+      - feat/prediction-complete-model
+  pull_request:
+    branches:
+      - feat/prediction-pb09-current-main
+
+jobs:
+  prediction-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install prediction test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install numpy pandas scikit-learn pytest yfinance
+      - name: Run Prediction Bot contract tests
+        run: |
+          pytest -q \
+            tests/test_prediction_artifacts_registry.py \
+            tests/test_prediction_contracts_and_drift.py \
+            tests/test_prediction_uncertainty.py \
+            tests/test_prediction_robustness.py \
+            tests/test_boosting_models.py \
+            tests/test_return_forecast.py \
+            tests/test_return_forecast_evaluation.py \
+            tests/test_prediction_feature_drift.py \
+            tests/test_prediction_storage.py \
+            tests/test_prediction_inference.py \
+            tests/test_prediction_failures.py \
+            tests/datasets/test_return_targets.py
