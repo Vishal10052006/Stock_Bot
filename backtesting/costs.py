@@ -49,6 +49,23 @@ class CostBreakdown:
     sebi: float
     stamp_duty: float
 
+    def __post_init__(self) -> None:
+        values = (
+            self.notional,
+            self.brokerage,
+            self.exchange_transaction,
+            self.stt,
+            self.gst,
+            self.sebi,
+            self.stamp_duty,
+        )
+        if any(not math.isfinite(float(value)) for value in values):
+            raise ValueError("cost breakdown values must be finite")
+        if self.notional <= 0:
+            raise ValueError("cost breakdown notional must be positive")
+        if any(value < 0 for value in values[1:]):
+            raise ValueError("cost breakdown components must be non-negative")
+
     @property
     def total(self) -> float:
         return (
