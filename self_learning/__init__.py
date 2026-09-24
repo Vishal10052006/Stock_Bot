@@ -1,5 +1,6 @@
 """Controlled self-learning package exports."""
 
+from .candidate_lifecycle import CandidateLifecycleController, allowed_transitions
 from .champion import ChampionState, ChampionStateStore
 from .contracts import (
     CandidateLifecycle,
@@ -37,6 +38,7 @@ from .validation_adapter import summarize_artifact, validate_dataset_boundary
 
 __all__ = [
     "AppendOnlyLearningStore",
+    "CandidateLifecycleController",
     "CandidateLifecycle",
     "ChampionState",
     "ChampionStateStore",
@@ -74,4 +76,5 @@ __all__ = [
     "summarize_artifact",
     "validate_candidate",
     "validate_dataset_boundary",
+    "allowed_transitions",
 ]
