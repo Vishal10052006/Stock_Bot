@@ -677,31 +677,58 @@ class ExecutionEngine:
     def reconcile_positions(self, local: tuple[PositionSnapshot, ...]) -> bool:
         """Compare local positions with the authoritative broker snapshot.
 
-        Reconciliation is fail-closed: duplicate symbols, non-finite values,
-        or any quantity/price mismatch make the reconciliation invalid.
+        Reconciliation is fail-closed. The two snapshots must contain the
+        same non-zero symbols with matching signed quantities and average
+        prices. Broker/local objects are validated even when they are
+        duck-typed test doubles rather than PositionSnapshot instances.
         """
         broker = self.adapter.positions()
 
         def canonical(
             positions: tuple[PositionSnapshot, ...],
-        ) -> dict[str, tuple[float, float]]:
+        ) -> dict[str, tuple[float, float]] | None:
             result: dict[str, tuple[float, float]] = {}
             for item in positions:
-                if item.symbol in result:
-                    return {}
-                if not pd.Series([item.quantity, item.average_price]).map(pd.isna).any():
-                    result[item.symbol] = (item.quantity, item.average_price)
-                else:
-                    return {}
+                try:
+                    symbol = str(item.symbol).strip().upper()
+                    quantity = float(item.quantity)
+                    average_price = float(item.average_price)
+                except (AttributeError, TypeError, ValueError):
+                    return None
+
+                if not symbol:
+                    return None
+                if not math.isfinite(quantity) or not math.isfinite(average_price):
+                    return None
+                if quantity == 0.0:
+                    # Zero positions must not exist in an authoritative
+                    # position set; adapters should omit them.
+                    return None
+                if average_price <= 0.0:
+                    return None
+                if symbol in result:
+                    return None
+                result[symbol] = (quantity, average_price)
             return result
 
         local_map = canonical(local)
         broker_map = canonical(broker)
-        if not local_map and local:
+        if local_map is None or broker_map is None:
             return False
-        if not broker_map and broker:
+
+        # Signed quantity is intentionally compared exactly: +10 and -10 are
+        # different positions, and silently tolerating that sign error could
+        # turn a long/short reconciliation failure into false agreement.
+        if local_map.keys() != broker_map.keys():
             return False
-        return local_map == broker_map
+
+        quantity_tolerance = 1e-12
+        price_tolerance = 1e-12
+        return all(
+            abs(local_map[symbol][0] - broker_map[symbol][0]) <= quantity_tolerance
+            and abs(local_map[symbol][1] - broker_map[symbol][1]) <= price_tolerance
+            for symbol in local_map
+        )
 
 
 class ExecutionReadiness:
