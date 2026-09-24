@@ -459,5 +459,5 @@ def test_market_bot_emits_monitoring_telemetry() -> None:
     )
     dashboard = runtime.dashboard()
     assert context.benchmark == "NIFTY"
-    assert any(item["name"] == "market.quality" for item in dashboard["metrics"])
+    assert "market.quality" in dashboard["metrics"]
     assert any(item["component"] == "market_bot" for item in dashboard["health"])
