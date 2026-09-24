@@ -577,3 +577,52 @@ def test_partial_fill_cancellation_keeps_portfolio_at_actual_filled_quantity() -
     assert portfolio.positions[0].quantity == 6.0
     assert portfolio.gross_exposure == 6.0 * PRICE
     assert engine.reconcile_positions(positions)
+
+
+def test_cancel_fill_race_rebuilds_portfolio_from_final_broker_state() -> None:
+    """Final broker FILLED state wins over an earlier local cancellation."""
+    from execution.adapters.paper import PaperAdapterConfig, PaperBrokerAdapter
+    from execution.engine import ExecutionEngine
+
+    adapter = PaperBrokerAdapter(
+        config=PaperAdapterConfig(
+            partial_fill_ratio=0.6,
+            slippage_bps=0.0,
+            fee_bps=0.0,
+        ),
+        price_provider=lambda _order: PRICE,
+    )
+    engine = ExecutionEngine(adapter)
+    authorization = ExecutionAuthorization(
+        timestamp=TIMESTAMP,
+        symbol="ITC",
+        direction=StrategyDirection.LONG,
+        status=ExecutionAuthorizationStatus.AUTHORIZED,
+        reason="test approval",
+        risk_version="RISK-v1.0",
+        approved_quantity=10.0,
+        approved_notional=10.0 * PRICE,
+    )
+    request = engine.from_authorization(
+        authorization,
+        decision_id="cancel-fill-race",
+    )
+
+    engine.submit(request)
+    engine.cancel(request.client_order_id)
+    adapter.fill_remaining(request.client_order_id, after_cancel=True)
+
+    final_order = engine.refresh(request.client_order_id)
+    final_positions = adapter.positions()
+
+    assert final_order.status is OrderStatus.FILLED
+    assert final_order.filled_quantity == 10.0
+    assert final_positions[0].quantity == 10.0
+
+    portfolio = PortfolioSnapshot(
+        as_of=TIMESTAMP + pd.Timedelta(minutes=2),
+        equity=100_000.0,
+        positions=(PortfolioPosition("ITC", 10.0, PRICE),),
+    )
+    assert portfolio.gross_exposure == 10.0 * PRICE
+    assert engine.reconcile_positions(final_positions)
