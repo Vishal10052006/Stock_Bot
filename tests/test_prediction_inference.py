@@ -9,6 +9,7 @@ from ml.prediction.inference import (
     PredictionInferenceService,
 )
 from ml.prediction.storage import PredictionStore
+from monitoring.runtime import MonitoringRuntime
 
 
 class _FakePredictor:
@@ -69,3 +70,15 @@ def test_inference_request_rejects_row_mismatch() -> None:
             ),
             provenance=_request().provenance,
         )
+
+
+def test_prediction_inference_emits_monitoring_telemetry() -> None:
+    runtime = MonitoringRuntime()
+    service = PredictionInferenceService(_FakePredictor(), monitoring=runtime)
+
+    predictions = service.predict(_request())
+
+    assert len(predictions) == 1
+    dashboard = runtime.dashboard()
+    assert any(item["name"] == "model.prediction_count" for item in dashboard["metrics"])
+    assert any(item["name"] == "model.prediction_max_probability" for item in dashboard["metrics"])
