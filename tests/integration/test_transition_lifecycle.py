@@ -350,3 +350,116 @@ def test_reverse_preserves_actual_projected_position_provenance() -> None:
     position = next(p for p in actual.positions if p.symbol == "ITC")
     assert position.quantity == -5.0
     assert runtime.journal[-1].quantity == 15.0
+
+
+def test_partial_fill_builds_portfolio_from_actual_filled_quantity() -> None:
+    """Risk-approved 10 does not imply a 10-share Portfolio after a 6-share fill."""
+    from execution.adapters.paper import PaperAdapterConfig, PaperBrokerAdapter
+    from execution.engine import ExecutionEngine
+
+    adapter = PaperBrokerAdapter(
+        config=PaperAdapterConfig(
+            partial_fill_ratio=0.6,
+            slippage_bps=0.0,
+            fee_bps=0.0,
+        ),
+        price_provider=lambda _order: PRICE,
+    )
+    engine = ExecutionEngine(adapter)
+
+    authorization = ExecutionAuthorization(
+        timestamp=TIMESTAMP,
+        symbol="ITC",
+        direction=StrategyDirection.LONG,
+        status=ExecutionAuthorizationStatus.AUTHORIZED,
+        reason="test approval",
+        risk_version="RISK-v1.0",
+        approved_quantity=10.0,
+        approved_notional=10.0 * PRICE,
+    )
+    request = engine.from_authorization(
+        authorization,
+        decision_id="partial-fill",
+    )
+
+    result = engine.submit(request)
+
+    assert result.snapshot.status.value == "PARTIALLY_FILLED"
+    assert result.snapshot.requested_quantity == 10.0
+    assert result.snapshot.filled_quantity == 6.0
+
+    broker_positions = adapter.positions()
+    assert len(broker_positions) == 1
+    assert broker_positions[0].quantity == 6.0
+
+    actual_portfolio = PortfolioSnapshot(
+        as_of=TIMESTAMP,
+        equity=100_000.0,
+        positions=(
+            PortfolioPosition(
+                symbol=broker_positions[0].symbol,
+                quantity=broker_positions[0].quantity,
+                mark_price=PRICE,
+            ),
+        ),
+    )
+
+    assert actual_portfolio.positions[0].quantity == 6.0
+    assert actual_portfolio.gross_exposure == 6.0 * PRICE
+    assert actual_portfolio.gross_exposure < authorization.approved_notional
+    assert engine.reconcile_positions(broker_positions)
+
+
+def test_partial_short_fill_creates_actual_negative_portfolio_exposure() -> None:
+    """A partial SELL fill must create the actual signed short, not the request size."""
+    from execution.adapters.paper import PaperAdapterConfig, PaperBrokerAdapter
+    from execution.engine import ExecutionEngine
+
+    adapter = PaperBrokerAdapter(
+        config=PaperAdapterConfig(
+            partial_fill_ratio=0.4,
+            slippage_bps=0.0,
+            fee_bps=0.0,
+        ),
+        price_provider=lambda _order: PRICE,
+    )
+    engine = ExecutionEngine(adapter)
+
+    authorization = ExecutionAuthorization(
+        timestamp=TIMESTAMP,
+        symbol="ITC",
+        direction=StrategyDirection.SHORT,
+        status=ExecutionAuthorizationStatus.AUTHORIZED,
+        reason="test approval",
+        risk_version="RISK-v1.0",
+        approved_quantity=10.0,
+        approved_notional=10.0 * PRICE,
+    )
+    request = engine.from_authorization(
+        authorization,
+        decision_id="partial-short-fill",
+    )
+
+    result = engine.submit(request)
+
+    assert result.snapshot.status.value == "PARTIALLY_FILLED"
+    assert result.snapshot.filled_quantity == 4.0
+
+    broker_positions = adapter.positions()
+    assert broker_positions[0].quantity == -4.0
+
+    actual_portfolio = PortfolioSnapshot(
+        as_of=TIMESTAMP,
+        equity=100_000.0,
+        positions=(
+            PortfolioPosition(
+                symbol=broker_positions[0].symbol,
+                quantity=broker_positions[0].quantity,
+                mark_price=PRICE,
+            ),
+        ),
+    )
+
+    assert actual_portfolio.positions[0].quantity == -4.0
+    assert actual_portfolio.gross_exposure == 4.0 * PRICE
+    assert engine.reconcile_positions(broker_positions)
