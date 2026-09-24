@@ -124,3 +124,18 @@ only; it does not select a production model or authorize trades.
 The existing historical sector-context coverage limitation remains visible in
 the real-data benchmark. Walk-forward evaluation does not fabricate missing
 sector observations or relax causal boundaries.
+
+
+## Final OOS gate
+
+The final external-test return-forecast gate is implemented in
+`scripts/run_phase9_return_forecast_final_oos.py`. The protocol is frozen at
+70/15/15 chronological partitions with a 60-minute purge, a 10% chronological
+training calibration holdout, and 90% conformal intervals. The script records
+SHA-256 fingerprints for the dataset and target artifacts and explicitly
+asserts that final OOS observations are not used for preprocessing, model
+fitting, calibration, hyperparameter tuning, or model-family selection.
+
+By default the gate can report both pre-declared baseline families
+descriptively. This is not a model ranking or selection step; the final OOS
+artifact is evidence for the frozen protocol only.
