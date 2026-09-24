@@ -79,6 +79,9 @@ accepted execution state. It verifies:
 - fill quantities and prices are positive;
 - FILLED means the complete requested quantity was filled;
 - PARTIALLY_FILLED means a strictly positive but incomplete quantity was filled.
+- a filled order provides a positive average fill price;
+- fill fees are finite and non-negative;
+- position average prices are finite and strictly positive.
 
 The client order identifier is deterministic for the decision, symbol, direction,
 and Risk version. Re-submitting the same immutable request is therefore
@@ -87,6 +90,10 @@ second time.
 
 A malformed broker response must never be treated as a valid fill.
 
+
+UNKNOWN orders are unresolved rather than accepted in execution
+metrics, keeping `ExecutionResult.accepted` and aggregate accepted-order
+counts semantically aligned.
 
 ## Position reconciliation boundary
 
@@ -100,6 +107,16 @@ the local position snapshot before downstream state is considered synchronized.
 
 An UNKNOWN order state remains unresolved; it must not be treated as a
 successful fill or as evidence that the expected position exists.
+
+UNKNOWN recovery is explicitly fail-closed and idempotent. If the broker
+temporarily returns no order state, the local order remains UNKNOWN. Repeating
+the refresh does not create UNKNOWN -> UNKNOWN lifecycle events. A later
+authoritative broker snapshot may recover the order to OPEN,
+PARTIALLY_FILLED, FILLED, CANCELLED, or another valid lifecycle state without
+resubmitting the order. Re-submitting an already-journaled UNKNOWN request
+returns the unresolved state with `accepted=False`; reconciliation is the
+recovery path rather than a duplicate broker submission.
+
 
 
 ## Transition lifecycle provenance
