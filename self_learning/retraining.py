@@ -82,8 +82,10 @@ def retrain_candidate(
     else:
         raise ValueError(f"unsupported candidate trainer: {trainer}")
 
-    serializer = artifact_serializer or _default_artifact_serializer
-    serialized = serializer(result.model)
+    if artifact_serializer is None:
+        serialized = _default_artifact_serializer(result)
+    else:
+        serialized = artifact_serializer(result.model)
 
     if not isinstance(serialized, (bytes, bytearray)):
         raise TypeError("artifact serializer must return bytes")
@@ -99,14 +101,21 @@ def retrain_candidate(
     )
 
 
-def _default_artifact_serializer(model: Any) -> bytes:
-    """Serialize the fitted model state for candidate artifact identity.
+def _default_artifact_serializer(result: TrainingResult) -> bytes:
+    """Serialize the complete learned inference artifact for identity.
 
-    Pickle is used only to fingerprint the in-memory fitted artifact. It is
-    not a model deployment format and is never loaded by this module.
+    The deployable Phase-9 candidate depends on the fitted base model,
+    preprocessor, and probability calibrator together. Pickle is used only
+    to fingerprint that in-memory fitted state; it is not a deployment
+    format and is never loaded by this module.
     """
     try:
-        return pickle.dumps(model, protocol=5)
+        artifact = (
+            result.model,
+            result.preprocessor,
+            result.calibrator,
+        )
+        return pickle.dumps(artifact, protocol=5)
     except (pickle.PickleError, TypeError) as exc:
         raise TypeError(
             "fitted model could not be serialized for artifact identity"
