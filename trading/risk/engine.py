@@ -24,7 +24,7 @@ from trading.signals.models import TradeCandidate
 from trading.strategy.models import StrategyDirection
 
 from .concentration import check_sector_exposure, check_symbol_exposure
-from .contracts import RiskReasonCode
+from .contracts import RiskPositionContext, RiskReasonCode, RiskPositionTransition
 from .correlation import correlation_exposure_allowed
 from .daily_limits import DailyRiskState, daily_loss_limit_reached
 from .exposure import gross_exposure_after
@@ -125,6 +125,7 @@ class RiskInput:
     trades_today: int = 0
     gross_exposure: float = 0.0
     symbol_already_open: bool = False
+    position_context: RiskPositionContext | None = None
     liquidity_available: bool = True
     kill_switch_active: bool = False
 
@@ -191,6 +192,11 @@ class RiskInput:
 
         if self.gross_exposure < 0:
             raise ValueError("gross_exposure must be non-negative")
+
+        if self.position_context is not None and not isinstance(
+            self.position_context, RiskPositionContext
+        ):
+            raise TypeError("position_context must be a RiskPositionContext")
 
         if self.open_positions < 0:
             raise ValueError("open_positions must be non-negative")
@@ -328,7 +334,14 @@ class RiskEngine:
                 RiskReasonCode.MAX_TRADES_REACHED,
             )
 
-        if value.open_positions >= self.config.max_open_positions:
+        position_context = value.position_context
+        opens_position = (
+            position_context.opens_position
+            if position_context is not None
+            else not value.symbol_already_open
+        )
+
+        if opens_position and value.open_positions >= self.config.max_open_positions:
             return self._reject(
                 value,
                 "Maximum open positions reached.",
@@ -336,7 +349,7 @@ class RiskEngine:
                 RiskReasonCode.MAX_OPEN_POSITIONS,
             )
 
-        if value.symbol_already_open:
+        if value.symbol_already_open and position_context is None:
             return self._reject(
                 value,
                 "Symbol already has an open position.",
