@@ -804,6 +804,8 @@ class RiskEngine:
                 else RiskReasonCode.APPROVED
             ),
             resized=resized,
+            approved_quantity=quantity,
+            approved_notional=proposed_value,
         )
 
         return RiskAssessment(
