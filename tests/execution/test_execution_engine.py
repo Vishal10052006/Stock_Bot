@@ -405,3 +405,40 @@ def test_filled_status_requires_full_requested_quantity():
 
     with pytest.raises(ValueError, match="FILLED"):
         engine.submit(order_request())
+
+
+def test_position_reconciliation_rejects_duplicate_local_symbols():
+    adapter = PaperBrokerAdapter()
+    engine = ExecutionEngine(adapter)
+
+    duplicate = (
+        type("P", (), {"symbol": "ITC", "quantity": 10.0, "average_price": 100.0})(),
+        type("P", (), {"symbol": "ITC", "quantity": 20.0, "average_price": 100.0})(),
+    )
+
+    assert not engine.reconcile_positions(duplicate)
+
+
+def test_position_reconciliation_accepts_empty_broker_and_local_state():
+    engine = ExecutionEngine(PaperBrokerAdapter())
+    assert engine.reconcile_positions(())
+
+
+def test_partial_fill_position_is_authoritative_and_reconcilable():
+    adapter = PaperBrokerAdapter(
+        config=PaperAdapterConfig(
+            partial_fill_ratio=0.4,
+            slippage_bps=0.0,
+            fee_bps=0.0,
+        ),
+        price_provider=lambda _order: 100.0,
+    )
+    engine = ExecutionEngine(adapter)
+    request = order_request()
+
+    result = engine.submit(request)
+
+    assert result.snapshot.status is OrderStatus.PARTIALLY_FILLED
+    broker_positions = adapter.positions()
+    assert broker_positions[0].quantity == 40.0
+    assert engine.reconcile_positions(broker_positions)
