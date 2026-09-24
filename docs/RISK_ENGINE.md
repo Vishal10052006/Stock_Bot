@@ -26,7 +26,8 @@ It owns:
 - position-transition/direction consistency;
 - independent kill-switch state;
 - machine-readable risk reason codes;
-- immutable risk assessments.
+- immutable risk assessments;
+- approved projected position state after any risk-driven resizing.
 
 It does not place broker orders or bypass execution authorization.
 
@@ -116,7 +117,7 @@ increases the number of open symbols because they operate on an existing
 symbol. REVERSE remains subject to the duplicate-symbol exception because it
 replaces the existing direction.
 
-Risk economics now handle all three non-open transition classes explicitly. REDUCE and FLATTEN use the signed transition order quantity as exposure-release operations. REVERSE closes the existing signed position in full and risk-sizes only the newly opened directional quantity; the resulting broker order is the close quantity plus the new opening quantity. Gross exposure is calculated from the projected signed position rather than by blindly adding the full broker order value.
+Risk economics now handle all three non-open transition classes explicitly. REDUCE and FLATTEN use the signed transition order quantity as exposure-release operations. REVERSE closes the existing signed position in full and risk-sizes only the newly opened directional quantity; the resulting broker order is the close quantity plus the new opening quantity. Risk may reduce the Portfolio-requested opening quantity, but never enlarge it. Gross exposure is calculated from the projected signed position rather than by blindly adding the full broker order value.
 
 ## Hard vetoes
 
@@ -193,7 +194,9 @@ RiskAssessment additionally records:
 - final quantity;
 - gross exposure after the trade;
 - daily P&L;
-- volatility factor.
+- volatility factor;
+- requested projected quantity;
+- approved projected quantity after Risk sizing.
 
 ## Integration boundary
 
