@@ -104,3 +104,23 @@ created.
 Rejected prediction requests have a separate append-only failure contract.
 Missing/invalid inputs are recorded as failures rather than converted into
 synthetic prediction values.
+
+
+## Walk-forward validation
+
+The real-data return-forecast walk-forward stage is now implemented in
+`scripts/run_phase9_return_forecast_walk_forward.py`. It uses expanding
+chronological training windows with an explicit purge before each future test
+block. Within each fold, the latest 10% of the training observations are held
+out chronologically for conformal calibration; preprocessing is fit only on the
+earlier fold-training partition. Each future test block is evaluated once and
+is not used for model fitting or calibration.
+
+The walk-forward runner reports per-fold MAE, RMSE, directional accuracy,
+conformal interval coverage, and a zero-return point-forecast baseline, plus
+test-row-weighted aggregate diagnostics. The benchmark is empirical validation
+only; it does not select a production model or authorize trades.
+
+The existing historical sector-context coverage limitation remains visible in
+the real-data benchmark. Walk-forward evaluation does not fabricate missing
+sector observations or relax causal boundaries.
