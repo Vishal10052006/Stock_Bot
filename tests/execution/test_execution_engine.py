@@ -516,6 +516,56 @@ class _StaticAdapter:
         return ()
 
 
+class _MalformedSubmitAdapter(PaperBrokerAdapter):
+    def submit(self, order):
+        snapshot = super().submit(order)
+        return type(snapshot)(
+            broker_order_id=snapshot.broker_order_id,
+            client_order_id=snapshot.client_order_id,
+            status=OrderStatus.FILLED,
+            requested_quantity=snapshot.requested_quantity,
+            filled_quantity=snapshot.requested_quantity - 1.0,
+            average_fill_price=snapshot.average_fill_price,
+            reason="malformed broker state",
+            fills=snapshot.fills,
+        )
+
+
+def test_malformed_submission_state_is_journaled_unknown_before_error():
+    adapter = _MalformedSubmitAdapter()
+    engine = ExecutionEngine(adapter)
+    request = order_request()
+
+    with pytest.raises(ValueError, match="FILLED"):
+        engine.submit(request)
+
+    assert engine.get_order(request.client_order_id).status is OrderStatus.UNKNOWN
+    assert engine.events[-1].to_status is OrderStatus.UNKNOWN
+
+    with pytest.raises(ValueError, match="FILLED"):
+        engine.submit(request)
+
+    assert len(engine.journal) == 1
+
+
+class _CancelFailureAdapter(PaperBrokerAdapter):
+    def cancel(self, client_order_id):
+        raise RuntimeError("cancel transport failure")
+
+
+def test_cancel_transport_failure_becomes_unknown():
+    adapter = _CancelFailureAdapter()
+    engine = ExecutionEngine(adapter)
+    request = order_request()
+    engine.submit(request)
+
+    with pytest.raises(RuntimeError, match="cancel transport failure"):
+        engine.cancel(request.client_order_id)
+
+    assert engine.get_order(request.client_order_id).status is OrderStatus.UNKNOWN
+    assert engine.events[-1].to_status is OrderStatus.UNKNOWN
+
+
 def test_broker_response_rejects_filled_quantity_over_request():
     adapter = _StaticAdapter(
         lambda order: _snapshot_for(
