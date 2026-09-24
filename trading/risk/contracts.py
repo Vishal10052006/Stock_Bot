@@ -47,6 +47,88 @@ class RiskReasonCode(str, Enum):
     SYSTEM_NOT_READY = "SYSTEM_NOT_READY"
 
 
+class RiskPositionTransition(str, Enum):
+    """Position-state transition presented to Risk before trade evaluation."""
+
+    OPEN = "OPEN"
+    INCREASE = "INCREASE"
+    REDUCE = "REDUCE"
+    FLATTEN = "FLATTEN"
+    REVERSE = "REVERSE"
+
+
+@dataclass(frozen=True, slots=True)
+class RiskPositionContext:
+    """Immutable signed position context for deterministic Risk evaluation.
+
+    Quantities are signed from the account's perspective:
+    positive = long, negative = short, zero = flat.
+    """
+
+    transition: RiskPositionTransition
+    existing_quantity: float = 0.0
+    projected_quantity: float = 0.0
+
+    def __post_init__(self) -> None:
+        import math
+
+        if not all(
+            math.isfinite(float(value))
+            for value in (self.existing_quantity, self.projected_quantity)
+        ):
+            raise ValueError("position quantities must be finite")
+
+        if self.transition is RiskPositionTransition.OPEN:
+            if self.existing_quantity != 0.0:
+                raise ValueError("OPEN requires a flat existing position")
+            if self.projected_quantity == 0.0:
+                raise ValueError("OPEN requires a non-zero projected position")
+
+        elif self.transition is RiskPositionTransition.INCREASE:
+            if self.existing_quantity == 0.0:
+                raise ValueError("INCREASE requires an existing position")
+            if self.projected_quantity == 0.0:
+                raise ValueError("INCREASE requires a non-zero projected position")
+            if self.existing_quantity * self.projected_quantity <= 0:
+                raise ValueError("INCREASE cannot change position direction")
+            if abs(self.projected_quantity) <= abs(self.existing_quantity):
+                raise ValueError("INCREASE must increase absolute position size")
+
+        elif self.transition is RiskPositionTransition.REDUCE:
+            if self.existing_quantity == 0.0 or self.projected_quantity == 0.0:
+                raise ValueError("REDUCE requires non-zero existing and projected positions")
+            if self.existing_quantity * self.projected_quantity <= 0:
+                raise ValueError("REDUCE cannot change position direction")
+            if abs(self.projected_quantity) >= abs(self.existing_quantity):
+                raise ValueError("REDUCE must decrease absolute position size")
+
+        elif self.transition is RiskPositionTransition.FLATTEN:
+            if self.existing_quantity == 0.0 or self.projected_quantity != 0.0:
+                raise ValueError("FLATTEN requires an existing position and zero projection")
+
+        elif self.transition is RiskPositionTransition.REVERSE:
+            if self.existing_quantity == 0.0 or self.projected_quantity == 0.0:
+                raise ValueError("REVERSE requires non-zero existing and projected positions")
+            if self.existing_quantity * self.projected_quantity >= 0:
+                raise ValueError("REVERSE must change position direction")
+
+    @property
+    def opens_position(self) -> bool:
+        """Whether this transition creates a new directional position."""
+        return self.transition in {
+            RiskPositionTransition.OPEN,
+            RiskPositionTransition.REVERSE,
+        }
+
+    @property
+    def releases_position(self) -> bool:
+        """Whether this transition reduces or closes existing exposure."""
+        return self.transition in {
+            RiskPositionTransition.REDUCE,
+            RiskPositionTransition.FLATTEN,
+        }
+
+
 @dataclass(frozen=True, slots=True)
 class RiskCheck:
     """One auditable risk-control result."""
