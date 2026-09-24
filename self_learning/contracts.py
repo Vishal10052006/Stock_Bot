@@ -108,6 +108,17 @@ class CandidateLifecycle(str, Enum):
     RETIRED = "RETIRED"
 
 
+class CandidateLifecycleTransition(str, Enum):
+    """Lifecycle transitions accepted by the candidate controller."""
+
+    START_VALIDATION = "START_VALIDATION"
+    ENTER_PAPER = "ENTER_PAPER"
+    REQUEST_PROMOTION_REVIEW = "REQUEST_PROMOTION_REVIEW"
+    PROMOTE = "PROMOTE"
+    REJECT = "REJECT"
+    RETIRE = "RETIRE"
+
+
 class PromotionState(str, Enum):
     """Controlled champion/challenger transition states."""
 
