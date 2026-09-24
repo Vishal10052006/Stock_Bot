@@ -17,11 +17,11 @@ from .contracts import (
 )
 from .dataset import build_dataset_version, dataframe_fingerprint
 from .experiments import ExperimentArtifact, ExperimentRegistry
+from .orchestrator import LearningRunResult, SelfLearningOrchestrator
 from .promotion import PromotionController
 from .retraining import RetrainingResult, retrain_candidate
 from .store import AppendOnlyLearningStore, DuplicateArtifactError
 from .validation import ValidationPolicy, validate_candidate
-from .orchestrator import LearningRunResult, SelfLearningOrchestrator
 
 __all__ = [
     "AppendOnlyLearningStore",
@@ -39,8 +39,6 @@ __all__ = [
     "LearningEvidence",
     "LearningRunResult",
     "LearningTrigger",
-    "ModelCandidate",
-    "ModelCandidate",
     "ModelCandidate",
     "PromotionController",
     "PromotionDecision",
