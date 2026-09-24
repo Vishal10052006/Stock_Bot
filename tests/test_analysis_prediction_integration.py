@@ -137,5 +137,5 @@ def test_analysis_integration_emits_monitoring_telemetry() -> None:
     )
     dashboard = runtime.dashboard()
     assert context.symbol == "RELIANCE"
-    assert any(item["name"] == "analysis.completeness" for item in dashboard["metrics"])
+    assert "analysis.completeness" in dashboard["metrics"]
     assert any(item["component"] == "analysis_bot" for item in dashboard["health"])
