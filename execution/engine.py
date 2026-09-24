@@ -446,7 +446,25 @@ class ExecutionEngine:
             )
 
         latency_ms = (time.perf_counter() - start) * 1000.0
-        self._validate_broker_snapshot(order, snapshot)
+        try:
+            self._validate_broker_snapshot(order, snapshot)
+        except (TypeError, ValueError) as exc:
+            unknown = OrderSnapshot(
+                broker_order_id=snapshot.broker_order_id,
+                client_order_id=order.client_order_id,
+                status=OrderStatus.UNKNOWN,
+                requested_quantity=order.quantity,
+                filled_quantity=0.0,
+                reason=f"invalid broker submission state: {exc}",
+            )
+            self._transition(
+                order.client_order_id,
+                OrderStatus.UNKNOWN,
+                f"invalid broker submission state: {exc}",
+            )
+            self._orders[order.client_order_id] = unknown
+            self._fills[order.client_order_id] = ()
+            raise
 
         self._transition(
             order.client_order_id,
@@ -628,11 +646,38 @@ class ExecutionEngine:
             raise ValueError(f"cannot cancel order in state {prior.status.value}")
 
         self._transition(client_order_id, OrderStatus.CANCEL_PENDING, "cancellation requested")
-        snapshot = self.adapter.cancel(client_order_id)
         order = self._order_requests.get(client_order_id)
         if order is None:
             raise KeyError(f"order request not found: {client_order_id}")
-        self._validate_broker_snapshot(order, snapshot)
+
+        try:
+            snapshot = self.adapter.cancel(client_order_id)
+            self._validate_broker_snapshot(order, snapshot)
+        except Exception as exc:
+            # Cancellation is an ambiguous broker operation: a transport
+            # failure or malformed response does not prove cancellation.
+            # Preserve the broker uncertainty instead of leaving the order
+            # stuck in CANCEL_PENDING.
+            prior = self._orders[client_order_id]
+            unknown = OrderSnapshot(
+                broker_order_id=prior.broker_order_id,
+                client_order_id=prior.client_order_id,
+                status=OrderStatus.UNKNOWN,
+                requested_quantity=prior.requested_quantity,
+                filled_quantity=prior.filled_quantity,
+                average_fill_price=prior.average_fill_price,
+                reason=f"cancellation outcome unknown: {exc}",
+                fills=prior.fills,
+            )
+            self._transition(
+                client_order_id,
+                OrderStatus.UNKNOWN,
+                f"cancellation outcome unknown: {exc}",
+            )
+            self._orders[client_order_id] = unknown
+            self._fills[client_order_id] = tuple(unknown.fills)
+            raise
+
         if snapshot.status is not OrderStatus.CANCEL_PENDING:
             self._transition(client_order_id, snapshot.status, snapshot.reason or "cancellation result")
         self._orders[client_order_id] = snapshot
