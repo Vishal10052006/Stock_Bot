@@ -139,6 +139,7 @@ class PaperTradeLifecycle:
         quantity: float,
         exit_fees: float = 0.0,
         exit_slippage_cost: float = 0.0,
+        reference_price: float | None = None,
     ) -> TradeOutcome:
         """Close part or all of an open trade without losing lifecycle state."""
         symbol = symbol.upper()
@@ -159,6 +160,20 @@ class PaperTradeLifecycle:
         ):
             raise ValueError("exit costs must be finite and non-negative")
 
+        if reference_price is None:
+            reference_price = price
+        elif (
+            not math.isfinite(float(reference_price))
+            or reference_price <= 0
+        ):
+            raise ValueError("reference_price must be positive and finite")
+
+        if exit_slippage_cost > 0 and reference_price == price:
+            raise ValueError(
+                "reference_price must differ from execution price when "
+                "exit_slippage_cost is non-zero"
+            )
+
         timestamp = pd.Timestamp(timestamp)
         if timestamp.tzinfo is None:
             raise ValueError("exit timestamp must be timezone-aware")
@@ -173,9 +188,9 @@ class PaperTradeLifecycle:
             raise ValueError("exit timestamp must not precede entry")
 
         signed_unit_pnl = (
-            price - order.fill_price
+            reference_price - order.requested_price
             if order.direction is StrategyDirection.LONG
-            else order.fill_price - price
+            else order.requested_price - reference_price
         )
         gross_pnl = signed_unit_pnl * quantity
         entry_fee_share = float(record["entry_fees"]) * quantity / current_quantity
@@ -219,6 +234,7 @@ class PaperTradeLifecycle:
         price: float,
         exit_fees: float = 0.0,
         exit_slippage_cost: float = 0.0,
+        reference_price: float | None = None,
     ) -> TradeOutcome:
         """Close an open trade and create its immutable outcome record."""
         symbol = symbol.upper()
@@ -246,4 +262,5 @@ class PaperTradeLifecycle:
             quantity=float(record["quantity"]),
             exit_fees=exit_fees,
             exit_slippage_cost=exit_slippage_cost,
+            reference_price=reference_price,
         )
