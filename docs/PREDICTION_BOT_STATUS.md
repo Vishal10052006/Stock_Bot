@@ -201,3 +201,19 @@ The first empirical foundation-model experiment must use the same causal
 12-bar return target and chronological evaluation discipline as the existing
 baselines. Final OOS observations must not be used for model/configuration
 selection, and interval coverage must be measured rather than assumed.
+
+## Final foundation-model acceptance record
+
+The TimesFM 2.5 zero-shot causal walk-forward experiment completed on
+2026-09-24. The empirical results and limitations are recorded in
+`docs/FOUNDATION_MODEL_EXPERIMENT.md`, with the consolidated engineering
+acceptance audit in `docs/PREDICTION_BOT_ACCEPTANCE_AUDIT.md`.
+
+Dedicated foundation tests pass (8 tests), dedicated TimesFM walk-forward
+tests pass (6 tests), and the Prediction Bot GitHub Actions workflow for the
+latest foundation adapter fix completed successfully.
+
+The foundation-model stage remains research-only. Its measured directional
+accuracy and interval coverage do not justify a production-performance claim.
+The final repository-wide test suite is the remaining merge gate after the
+latest adapter fix.
