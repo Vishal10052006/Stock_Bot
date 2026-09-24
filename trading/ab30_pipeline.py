@@ -19,6 +19,9 @@ from market.features.validation import validate_feature_dataset
 from market.indicators.engine import IndicatorEngine
 from market.regime.detector import detect_market_regime
 from monitoring.runtime import MonitoringRuntime
+from ml.integration.analysis_prediction import PredictionContext, predict_from_analysis
+from ml.models.logistic import LogisticOutcomeModel
+from ml.preprocessing.pipeline import FeaturePreprocessor
 
 
 class MarketAnalysisPipelineError(ValueError):
@@ -144,3 +147,38 @@ def build_market_analysis(
         regime=regime,
         analysis=analysis,
     )
+
+
+def build_market_analysis_and_prediction(
+    candles: pd.DataFrame,
+    *,
+    symbol: str,
+    model: LogisticOutcomeModel,
+    preprocessor: FeaturePreprocessor,
+    market_context: pd.DataFrame,
+    sector_context: pd.DataFrame | None = None,
+    sector_mappings: tuple = (),
+    data_version: str = "market-v1",
+    feature_version: str = "v1.0",
+    model_version: str = "phase9-logistic-v1",
+    monitoring: MonitoringRuntime | None = None,
+) -> tuple[MarketAnalysisResult, PredictionContext]:
+    """Run the causal Market -> Analysis -> Prediction path on one shared runtime."""
+    result = build_market_analysis(
+        candles,
+        symbol=symbol,
+        market_context=market_context,
+        sector_context=sector_context,
+        sector_mappings=sector_mappings,
+        data_version=data_version,
+        feature_version=feature_version,
+        monitoring=monitoring,
+    )
+    prediction = predict_from_analysis(
+        result.analysis,
+        model=model,
+        preprocessor=preprocessor,
+        model_version=model_version,
+        monitoring=monitoring,
+    )
+    return result, prediction
