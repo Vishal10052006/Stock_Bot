@@ -130,6 +130,61 @@ class RiskPositionContext:
 
 
 @dataclass(frozen=True, slots=True)
+class RiskTransitionSizing:
+    """Deterministic order quantities implied by a signed transition.
+
+    order_quantity is the broker-order quantity for the transition.
+    closing_quantity is exposure being removed.
+    opening_quantity is newly created directional exposure.
+    """
+
+    order_quantity: float
+    closing_quantity: float
+    opening_quantity: float
+
+    def __post_init__(self) -> None:
+        import math
+
+        values = (
+            self.order_quantity,
+            self.closing_quantity,
+            self.opening_quantity,
+        )
+        if not all(math.isfinite(float(value)) for value in values):
+            raise ValueError("transition quantities must be finite")
+        if any(float(value) < 0.0 for value in values):
+            raise ValueError("transition quantities must be non-negative")
+
+    @classmethod
+    def from_context(
+        cls,
+        context: RiskPositionContext,
+    ) -> "RiskTransitionSizing":
+        existing = context.existing_quantity
+        projected = context.projected_quantity
+        delta = projected - existing
+
+        if existing == 0.0:
+            closing = 0.0
+            opening = abs(projected)
+        elif projected == 0.0:
+            closing = abs(existing)
+            opening = 0.0
+        elif existing * projected > 0:
+            closing = max(0.0, abs(existing) - abs(projected))
+            opening = max(0.0, abs(projected) - abs(existing))
+        else:
+            closing = abs(existing)
+            opening = abs(projected)
+
+        return cls(
+            order_quantity=abs(delta),
+            closing_quantity=closing,
+            opening_quantity=opening,
+        )
+
+
+@dataclass(frozen=True, slots=True)
 class RiskCheck:
     """One auditable risk-control result."""
 
