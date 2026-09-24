@@ -84,6 +84,33 @@ def analyze(rows: pd.DataFrame) -> dict[str, Any]:
         float(step.risk_assessment.gross_exposure_after) - float(step.risk_assessment.gross_exposure_limit)
         for step in exposure_rejections
     ]
+    exposure_constrained_quantities = []
+    quantity_reduction_ratios = []
+    zero_exposure_incompatible = 0
+    for step in exposure_rejections:
+        assessment = step.risk_assessment
+        if (
+            assessment.entry_price is None
+            or assessment.position_size is None
+            or assessment.gross_exposure_before is None
+            or assessment.gross_exposure_limit is None
+            or assessment.risk_budget is None
+        ):
+            continue
+        remaining = max(
+            0.0,
+            float(assessment.gross_exposure_limit)
+            - float(assessment.gross_exposure_before),
+        )
+        max_quantity = int(remaining // float(assessment.entry_price))
+        exposure_constrained_quantities.append(max_quantity)
+        if float(assessment.position_size) > 0:
+            quantity_reduction_ratios.append(
+                max_quantity / float(assessment.position_size)
+            )
+        if float(assessment.proposed_value) > float(assessment.gross_exposure_limit):
+            zero_exposure_incompatible += 1
+
     exposure_summary = {
         "rejections": len(exposure_rejections),
         "utilization_before": {
@@ -125,6 +152,11 @@ def analyze(rows: pd.DataFrame) -> dict[str, Any]:
                 for step in exposure_rejections
                 if step.risk_assessment.proposed_value is not None
             ],
+        },
+        "exposure_constraint": {
+            "zero_exposure_incompatible_count": zero_exposure_incompatible,
+            "exposure_constrained_quantity": exposure_constrained_quantities,
+            "risk_first_to_exposure_quantity_ratio": quantity_reduction_ratios,
         },
     }
 
