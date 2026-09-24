@@ -11,6 +11,7 @@ from .execution import ExecutionMonitoringSnapshot, evaluate_execution_monitorin
 from .strategy import StrategyMonitoringSnapshot, evaluate_strategy_monitoring
 from .system import SystemMonitoringSnapshot, evaluate_system_monitoring
 from .features import FeatureMonitoringSnapshot, evaluate_feature_monitoring
+from .orchestrator import AlertOrchestrator
 
 
 @dataclass(frozen=True, slots=True)
@@ -33,15 +34,26 @@ class MonitoringPipeline:
         self,
         engine: MonitoringEngine | None = None,
         policy: MonitoringPolicy | None = None,
+        orchestrator: AlertOrchestrator | None = None,
     ):
         self.engine = engine or MonitoringEngine()
         self.policy = policy or MonitoringPolicy()
+        self.orchestrator = orchestrator or AlertOrchestrator()
 
     def record_health(self, health: ComponentHealth) -> None:
         self.engine.record_health(health)
 
     def record_metric(self, name: str, value: float, **kwargs):
         return self.engine.record_metric(name, value, **kwargs)
+
+    def _alert(self, code: str, component: str, message: str, requested: AlertSeverity | None = None) -> None:
+        self.orchestrator.emit(
+            self.engine,
+            code=code,
+            message=message,
+            component=component,
+            requested_severity=requested,
+        )
 
     def evaluate_system(self, snapshot: SystemMonitoringSnapshot) -> None:
         metrics, alerts = evaluate_system_monitoring(
@@ -53,12 +65,7 @@ class MonitoringPipeline:
             if isinstance(value, (int, float)):
                 self.engine.record_metric(f"system.{name}", float(value))
         for code in alerts:
-            self.engine.emit_alert(
-                code=code,
-                severity=AlertSeverity.CRITICAL,
-                message=code,
-                component="system",
-            )
+            self._alert(code, "system", code, AlertSeverity.CRITICAL)
 
     def evaluate_features(self, snapshot: FeatureMonitoringSnapshot) -> None:
         metrics, drift, alerts = evaluate_feature_monitoring(
@@ -72,17 +79,8 @@ class MonitoringPipeline:
         for report in drift:
             self.engine.record_metric("feature.distribution_psi", report.psi)
         for code in alerts:
-            severity = (
-                AlertSeverity.CRITICAL
-                if "EXCEEDED" in code
-                else AlertSeverity.WARNING
-            )
-            self.engine.emit_alert(
-                code=code,
-                severity=severity,
-                message=code,
-                component="feature",
-            )
+            requested = AlertSeverity.CRITICAL if "EXCEEDED" in code else AlertSeverity.WARNING
+            self._alert(code, "feature", code, requested)
 
     def evaluate_model(self, snapshot: ModelMonitoringSnapshot) -> None:
         metrics, drift, alerts = evaluate_model_monitoring(
@@ -96,17 +94,8 @@ class MonitoringPipeline:
         for report in drift:
             self.engine.record_metric("model.prediction_psi", report.psi)
         for code in alerts:
-            severity = (
-                AlertSeverity.CRITICAL
-                if "EXCEEDED" in code
-                else AlertSeverity.WARNING
-            )
-            self.engine.emit_alert(
-                code=code,
-                severity=severity,
-                message=code,
-                component="model",
-            )
+            requested = AlertSeverity.CRITICAL if "EXCEEDED" in code else AlertSeverity.WARNING
+            self._alert(code, "model", code, requested)
 
     def evaluate_risk(self, snapshot: RiskMonitoringSnapshot) -> None:
         metrics, breaches = evaluate_risk_monitoring(snapshot)
@@ -114,31 +103,27 @@ class MonitoringPipeline:
             if isinstance(value, (int, float)):
                 self.engine.record_metric(f"risk.{name}", float(value))
         for code in breaches:
-            self.engine.emit_alert(
-                code=code,
-                severity=AlertSeverity.CRITICAL,
-                message=code,
-                component="risk",
-            )
+            self._alert(code, "risk", code, AlertSeverity.CRITICAL)
 
     def evaluate_execution(self, snapshot: ExecutionMonitoringSnapshot) -> None:
-        metrics, alerts = evaluate_execution_monitoring(snapshot)
+        metrics, alerts = evaluate_execution_monitoring(
+            snapshot,
+            max_rejection_rate=self.policy.max_execution_rejection_rate,
+        )
         for name, value in metrics.items():
             if isinstance(value, (int, float)):
                 self.engine.record_metric(f"execution.{name}", float(value))
         for code in alerts:
-            self.engine.emit_alert(
-                code=code,
-                severity=AlertSeverity.WARNING,
-                message=code,
-                component="execution",
-            )
+            self._alert(code, "execution", code, AlertSeverity.WARNING)
 
     def evaluate_strategy(self, snapshot: StrategyMonitoringSnapshot) -> None:
         metrics = evaluate_strategy_monitoring(snapshot)
         for name, value in metrics.items():
             if isinstance(value, (int, float)):
                 self.engine.record_metric(f"strategy.{name}", float(value))
+
+    def alert_summary(self):
+        return self.orchestrator.summary(self.engine.snapshot().alerts)
 
     def snapshot(self):
         return self.engine.snapshot()
