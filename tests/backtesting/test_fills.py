@@ -1,3 +1,5 @@
+import pytest
+
 from backtesting.fills import FillConfig, FillModel
 from trading.strategy.models import StrategyDirection
 
@@ -28,7 +30,6 @@ def test_short_fill_has_adverse_slippage() -> None:
     assert result.slippage_cost == 1.0
 
 
-import pytest
 
 @pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf")])
 def test_fill_config_rejects_non_finite_slippage(value: float) -> None:
