@@ -16,6 +16,7 @@ from portfolio.contracts import (
     PortfolioSnapshot,
     TradeIntent,
 )
+from portfolio.transition import classify_position_transition
 from portfolio.exposure import (
     position_count,
     projected_snapshot,
@@ -40,6 +41,8 @@ class PortfolioManager:
         """Evaluate one proposed trade against explicit portfolio policies."""
         projected = projected_snapshot(snapshot, intent)
         projected_count = position_count(projected)
+        existing_position = next((p for p in snapshot.positions if p.symbol == intent.symbol), None)
+        transition = classify_position_transition(existing_position, intent).transition
 
         # For an existing symbol, sector may already be part of portfolio
         # state. Preserve that authoritative context when the intent omits it.
@@ -73,6 +76,7 @@ class PortfolioManager:
                     action=PortfolioAction.REJECT,
                     reason_code=reason_code,
                     reason=reason,
+                    position_transition=transition,
                 )
 
         return self._decision(
@@ -82,6 +86,7 @@ class PortfolioManager:
             action=PortfolioAction.APPROVE,
             reason_code="PORTFOLIO_OK",
             reason="Portfolio-level constraints passed.",
+            position_transition=transition,
         )
 
     def _check_position_count(self, projected_count: int) -> tuple[str | None, str]:
@@ -130,6 +135,7 @@ class PortfolioManager:
         action: PortfolioAction,
         reason_code: str,
         reason: str,
+        position_transition,
     ) -> PortfolioDecision:
         return PortfolioDecision(
             action=action,
@@ -140,4 +146,5 @@ class PortfolioManager:
             current_gross_exposure_fraction=snapshot.gross_exposure_fraction,
             projected_gross_exposure_fraction=projected.gross_exposure_fraction,
             projected_position_count=position_count(projected),
+            position_transition=position_transition,
         )
