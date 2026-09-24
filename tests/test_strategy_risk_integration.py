@@ -109,3 +109,32 @@ def test_paper_run_has_deterministic_identity_and_persists_evidence(tmp_path) ->
     assert run.run_id == PaperDecisionLoop().run(rows).run_id
     assert journal.records() == (record,)
 
+
+
+def test_paper_decision_loop_emits_monitoring_telemetry():
+    import pandas as pd
+
+    rows = pd.DataFrame(
+        [
+            {
+                "timestamp": "2026-01-02T09:15:00Z",
+                "symbol": "ITC",
+                "close": 500.0,
+                "regime": "TREND",
+                "regime_probability": 0.9,
+                "vwap_distance_pct": 0.01,
+                "rvol_20": 1.5,
+                "higher_high": True,
+                "higher_low": True,
+                "lower_low": False,
+                "lower_high": False,
+                "liquidity_available": True,
+            }
+        ]
+    )
+    loop = PaperDecisionLoop()
+    run = loop.run(rows)
+    payload = loop.monitoring.dashboard()
+    assert len(run.steps) == 1
+    assert "strategy.decisions" in payload["metrics"]
+    assert "risk.equity" in payload["metrics"]
