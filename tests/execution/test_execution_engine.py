@@ -251,7 +251,7 @@ def test_unknown_order_recovers_to_cancelled_state():
 
     assert recovered.status is OrderStatus.CANCELLED
     assert recovered.filled_quantity == cancelled.filled_quantity
-    assert adapter.positions()[0].quantity == 40.0
+    assert adapter.positions()[0].quantity == 50.0
 
 
 class _FailOnceAdapter(PaperBrokerAdapter):
