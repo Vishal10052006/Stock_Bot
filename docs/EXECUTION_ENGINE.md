@@ -119,3 +119,23 @@ Supported transitions are:
 
 Risk remains responsible for deriving these quantities. Execution does not
 recompute transition sizing from the original Portfolio intent.
+
+
+## Authoritative broker-state validation
+
+Every broker snapshot accepted by the execution journal is validated for:
+
+- client-order identity and requested quantity;
+- finite cumulative filled quantity;
+- fill identity uniqueness;
+- fill quantities/prices and cumulative fill total;
+- consistency between lifecycle status and cumulative fills.
+
+The same validation is applied during initial submission, refresh, and
+cancellation responses. This prevents malformed or internally inconsistent
+broker state from becoming local execution state.
+
+Cancellation is not treated as proof that no further fill can occur. A broker
+race may produce a later authoritative FILLED snapshot after cancellation;
+the state machine permits that correction and portfolio reconciliation follows
+the final broker position.
