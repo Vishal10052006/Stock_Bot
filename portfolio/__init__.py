@@ -13,7 +13,8 @@ from portfolio.contracts import (
     TradeIntent,
 )
 from portfolio.manager import PortfolioManager
-from portfolio.transition import PositionTransition, PositionTransitionResult, classify_position_transition
+from portfolio.contracts import PositionTransition
+from portfolio.transition import PositionTransitionResult, classify_position_transition
 
 __all__ = [
     "PortfolioAction",
