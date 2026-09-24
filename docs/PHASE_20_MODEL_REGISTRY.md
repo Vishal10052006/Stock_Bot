@@ -163,6 +163,6 @@ The registry audit additionally verifies that:
 - non-finite metric values are rejected;
 - nested registry metadata remains immutable after caller-owned mappings change.
 
-The repository also contains separate `tests/backtesting` and
-`tests/execution` package markers so identically named test modules cannot
-collide during full pytest collection.
+The execution test suite was renamed to `test_execution_engine.py` so its
+module name cannot collide with the existing backtesting `test_engine.py`
+during full pytest collection.
