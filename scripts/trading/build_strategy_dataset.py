@@ -11,11 +11,16 @@ Pipeline:
 This module intentionally reuses the existing Phase 4/5/6 authorities.
 It does not implement a second indicator, feature, or regime formula.
 
-The output schema is exactly the decision-time schema consumed by the
-authoritative PaperDecisionLoop:
+The output schema contains the complete causal decision-time inputs consumed
+by the authoritative PaperDecisionLoop and Strategy -> Candidate -> Risk
+boundary:
     timestamp, symbol, close, regime, regime_probability,
     vwap_distance_pct, rvol_20, higher_high, higher_low,
-    lower_low, lower_high
+    lower_low, lower_high, atr_14, swing_high, swing_low,
+    support_20, resistance_20
+
+The candidate/risk columns are carried from the canonical Phase 4
+IndicatorEngine output. They are not recomputed in this script.
 
 No Phase 7 labels, model predictions, strategy decisions, or future outcome
 fields are included.
@@ -64,6 +69,11 @@ STRATEGY_READY_COLUMNS = (
     "higher_low",
     "lower_low",
     "lower_high",
+    "atr_14",
+    "swing_high",
+    "swing_low",
+    "support_20",
+    "resistance_20",
 )
 
 DEFAULT_MARKET_SYMBOL = "NIFTY 50"
@@ -275,30 +285,51 @@ def _build_strategy_rows(
         kind="stable",
     ).reset_index(drop=True)
 
-    # Phase 5 FeatureDataset intentionally does not include raw close.
-    # Carry the canonical decision-time close into this EMP-03 composition
-    # boundary without changing the frozen Phase 5 schema.
-    decision_close = (
-        indicators_all.loc[:, ["timestamp", "symbol", "close"]]
+    # Phase 5 FeatureDataset intentionally does not include raw close or
+    # candidate/risk construction inputs. Carry those canonical decision-time
+    # values into this composition boundary without changing Phase 5.
+    decision_inputs = (
+        indicators_all.loc[
+            :,
+            [
+                "timestamp",
+                "symbol",
+                "close",
+                "atr_14",
+                "swing_high",
+                "swing_low",
+                "support_20",
+                "resistance_20",
+            ],
+        ]
         .sort_values(["timestamp", "symbol"], kind="stable")
         .reset_index(drop=True)
     )
 
-    if decision_close.duplicated(["timestamp", "symbol"]).any():
+    if decision_inputs.duplicated(["timestamp", "symbol"]).any():
         raise ValueError(
-            "indicators contain duplicate timestamp/symbol decision prices"
+            "indicators contain duplicate timestamp/symbol decision inputs"
         )
 
     features = features.merge(
-        decision_close,
+        decision_inputs,
         on=["timestamp", "symbol"],
         how="left",
         validate="one_to_one",
     )
 
-    if features["close"].isna().any():
+    if features[
+        [
+            "close",
+            "atr_14",
+            "swing_high",
+            "swing_low",
+            "support_20",
+            "resistance_20",
+        ]
+    ].isna().any().any():
         raise ValueError(
-            "strategy feature rows contain missing decision-time close"
+            "strategy feature rows contain missing decision-time candidate inputs"
         )
 
     regime = detect_market_regime(features)
@@ -414,7 +445,7 @@ def write_strategy_dataset(
 
     manifest = {
         "manifest_version": "STRATEGY-DATASET-MANIFEST-v1",
-        "dataset_version": "strategy-ready-v1",
+        "dataset_version": "strategy-ready-v2",
         "source": {
             "ohlcv_path": str(ohlcv_path),
             "ohlcv_sha256": source_hash,
@@ -442,6 +473,7 @@ def write_strategy_dataset(
             "regime": "current_observation_plus_prior_volatility_baseline",
             "future_labels": False,
             "future_outcomes": False,
+            "candidate_inputs": "Phase4-decision-time",
         },
     }
     manifest_path = output_path.with_suffix(output_path.suffix + ".manifest.json")
