@@ -463,3 +463,67 @@ def test_partial_short_fill_creates_actual_negative_portfolio_exposure() -> None
     assert actual_portfolio.positions[0].quantity == -4.0
     assert actual_portfolio.gross_exposure == 4.0 * PRICE
     assert engine.reconcile_positions(broker_positions)
+
+
+def test_partial_fill_continuation_updates_portfolio_only_after_actual_fill() -> None:
+    """Portfolio tracks 6 shares first, then 10 only after the remaining 4 fill."""
+    from execution.adapters.paper import PaperAdapterConfig, PaperBrokerAdapter
+    from execution.engine import ExecutionEngine
+
+    adapter = PaperBrokerAdapter(
+        config=PaperAdapterConfig(
+            partial_fill_ratio=0.6,
+            slippage_bps=0.0,
+            fee_bps=0.0,
+        ),
+        price_provider=lambda _order: PRICE,
+    )
+    engine = ExecutionEngine(adapter)
+
+    authorization = ExecutionAuthorization(
+        timestamp=TIMESTAMP,
+        symbol="ITC",
+        direction=StrategyDirection.LONG,
+        status=ExecutionAuthorizationStatus.AUTHORIZED,
+        reason="test approval",
+        risk_version="RISK-v1.0",
+        approved_quantity=10.0,
+        approved_notional=10.0 * PRICE,
+    )
+    request = engine.from_authorization(
+        authorization,
+        decision_id="partial-lifecycle",
+    )
+
+    first = engine.submit(request)
+    assert first.snapshot.filled_quantity == 6.0
+
+    first_positions = adapter.positions()
+    assert first_positions[0].quantity == 6.0
+
+    first_portfolio = PortfolioSnapshot(
+        as_of=TIMESTAMP,
+        equity=100_000.0,
+        positions=(
+            PortfolioPosition("ITC", 6.0, PRICE),
+        ),
+    )
+    assert first_portfolio.positions[0].quantity == 6.0
+
+    adapter.fill_remaining(request.client_order_id)
+    final = engine.refresh(request.client_order_id)
+
+    assert final.status is not None
+    assert final.status.value == "FILLED"
+    final_positions = adapter.positions()
+    assert final_positions[0].quantity == 10.0
+
+    final_portfolio = PortfolioSnapshot(
+        as_of=TIMESTAMP + pd.Timedelta(minutes=1),
+        equity=100_000.0,
+        positions=(
+            PortfolioPosition("ITC", 10.0, PRICE),
+        ),
+    )
+    assert final_portfolio.positions[0].quantity == 10.0
+    assert engine.reconcile_positions(final_positions)
