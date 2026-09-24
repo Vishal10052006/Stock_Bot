@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import hashlib
-import json
+import pickle
 from typing import Any, Callable
 
 from ml.datasets.models import TrainingDataset
@@ -16,6 +16,7 @@ from ml.training.models import TrainingConfig, TrainingResult
 from ml.training.trainer import train_baseline, train_random_forest
 
 from .contracts import DatasetVersion, ExperimentSpec
+from .dataset import dataframe_fingerprint
 
 
 @dataclass(frozen=True, slots=True)
@@ -29,6 +30,18 @@ class RetrainingResult:
     artifact_fingerprint: str
     status: str = "CANDIDATE"
 
+    def __post_init__(self) -> None:
+        if not self.model_family.strip():
+            raise ValueError("model_family must not be empty")
+        if not self.dataset_version.strip():
+            raise ValueError("dataset_version must not be empty")
+        if len(self.experiment_fingerprint) != 64:
+            raise ValueError("experiment_fingerprint must be SHA-256")
+        if len(self.artifact_fingerprint) != 64:
+            raise ValueError("artifact_fingerprint must be SHA-256")
+        if self.status != "CANDIDATE":
+            raise ValueError("retraining output must remain a CANDIDATE")
+
 
 def retrain_candidate(
     dataset: TrainingDataset,
@@ -41,8 +54,9 @@ def retrain_candidate(
 ) -> RetrainingResult:
     """Run the existing chronological Phase-9 trainer for a candidate.
 
-    The trainer selection is explicit.  No automatic production replacement
-    happens here.
+    The trainer selection is explicit. No automatic production replacement
+    happens here. The supplied TrainingDataset must also match the immutable
+    source fingerprint recorded by DatasetVersion.
     """
     if not isinstance(dataset, TrainingDataset):
         raise TypeError("dataset must be a TrainingDataset")
@@ -53,6 +67,12 @@ def retrain_candidate(
     if experiment.dataset_version != dataset_version.dataset_version:
         raise ValueError("experiment and dataset versions do not match")
 
+    actual_fingerprint = dataframe_fingerprint(dataset.data)
+    if actual_fingerprint not in dataset_version.source_fingerprints:
+        raise ValueError(
+            "training dataset does not match DatasetVersion source fingerprint"
+        )
+
     config = config or TrainingConfig()
 
     if trainer == "logistic_regression":
@@ -62,11 +82,13 @@ def retrain_candidate(
     else:
         raise ValueError(f"unsupported candidate trainer: {trainer}")
 
-    serializer = artifact_serializer or _default_artifact_identity
-    artifact_fingerprint = serializer(result.model)
+    serializer = artifact_serializer or _default_artifact_serializer
+    serialized = serializer(result.model)
 
-    if not isinstance(artifact_fingerprint, str) or len(artifact_fingerprint) != 64:
-        raise ValueError("artifact serializer must return a SHA-256 fingerprint")
+    if not isinstance(serialized, (bytes, bytearray)):
+        raise TypeError("artifact serializer must return bytes")
+
+    artifact_fingerprint = hashlib.sha256(bytes(serialized)).hexdigest()
 
     return RetrainingResult(
         model_family=trainer,
@@ -77,14 +99,18 @@ def retrain_candidate(
     )
 
 
-def _default_artifact_identity(model: Any) -> str:
-    """Return stable identity for a fitted model's parameter representation."""
-    if hasattr(model, "get_params"):
-        payload = model.get_params(deep=True)
-    else:
-        payload = repr(model)
-    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
-    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+def _default_artifact_serializer(model: Any) -> bytes:
+    """Serialize the fitted model state for candidate artifact identity.
+
+    Pickle is used only to fingerprint the in-memory fitted artifact. It is
+    not a model deployment format and is never loaded by this module.
+    """
+    try:
+        return pickle.dumps(model, protocol=5)
+    except (pickle.PickleError, TypeError) as exc:
+        raise TypeError(
+            "fitted model could not be serialized for artifact identity"
+        ) from exc
 
 
 __all__ = ["RetrainingResult", "retrain_candidate"]
