@@ -120,6 +120,12 @@ SL-23 does not select datasets, automatically retrain from losses, promote
 models, mutate production models, modify risk controls, or access execution.
 
 
+## SL-25 — Validation Evidence Orchestration
+
+SL-25 adds `ValidationOrchestrator` and immutable `ValidationRun` records. The orchestrator binds existing `ValidationSummary` evidence to one `ModelCandidate`, requires the candidate to enter `VALIDATING`, rejects unknown or mismatched stage keys, and preserves missing-stage failures rather than treating them as passes. Required evidence remains BACKTEST, LEAKAGE_AUDIT, OOS, WALK_FORWARD, and PAPER.
+
+The orchestrator delegates structural gating to the existing `validate_candidate()` function. A valid gate may advance the candidate from VALIDATING through PAPER to PROMOTION_REVIEW; it never creates a promotion decision, deploys a model, accesses a broker, or changes risk/execution controls. Stage evidence is supplied by existing validation boundaries rather than by a second backtest or validation engine.
+
 ## SL-24 — Candidate Model Lifecycle
 
 SL-24 converts a verified RetrainingResult into an immutable ModelCandidate,
