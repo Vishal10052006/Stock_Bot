@@ -5,12 +5,21 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import Enum
 
-from portfolio.transition import PositionTransition
 import hashlib
 import json
 import math
 
 import pandas as pd
+
+
+class PositionTransition(str, Enum):
+    """Semantic transition of a signed position."""
+
+    OPEN = "OPEN"
+    INCREASE = "INCREASE"
+    REDUCE = "REDUCE"
+    FLATTEN = "FLATTEN"
+    REVERSE = "REVERSE"
 
 
 class PortfolioAction(str, Enum):
