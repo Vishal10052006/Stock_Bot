@@ -529,18 +529,9 @@ class ExecutionEngine:
         ):
             raise ValueError("broker response filled quantity exceeds requested quantity")
 
-        # Validate lifecycle semantics before cumulative-fill accounting so
-        # a terminal-status contradiction is reported as such even when the
-        # accompanying fill list is also malformed.
-        if status is OrderStatus.FILLED and abs(filled_quantity - order.quantity) > 1e-12:
-            raise ValueError("FILLED broker response must fill the requested quantity")
-        if status is OrderStatus.PARTIALLY_FILLED and not (
-            0.0 < filled_quantity < order.quantity
-        ):
-            raise ValueError("PARTIALLY_FILLED broker response has invalid fill quantity")
-        if status is OrderStatus.CANCELLED and filled_quantity >= order.quantity:
-            raise ValueError("CANCELLED broker response cannot represent a fully filled order")
-
+        # Validate fill identity/shape before lifecycle semantics. This makes
+        # duplicate-fill corruption explicit rather than masking it behind a
+        # status-level contradiction.
         fill_total = 0.0
         seen_fill_ids: set[str] = set()
         for fill in snapshot.fills:
@@ -561,11 +552,13 @@ class ExecutionEngine:
         if abs(fill_total - snapshot.filled_quantity) > 1e-12:
             raise ValueError("broker response fill total does not match filled quantity")
 
+        # Validate lifecycle semantics after fill structure is known-good.
+        if status is OrderStatus.FILLED and abs(filled_quantity - order.quantity) > 1e-12:
+            raise ValueError("FILLED broker response must fill the requested quantity")
         if status is OrderStatus.PARTIALLY_FILLED and not (
             0.0 < filled_quantity < order.quantity
         ):
             raise ValueError("PARTIALLY_FILLED broker response has invalid fill quantity")
-
         if status is OrderStatus.CANCELLED and filled_quantity >= order.quantity:
             raise ValueError("CANCELLED broker response cannot represent a fully filled order")
 
@@ -597,17 +590,38 @@ class ExecutionEngine:
         snapshot = self.adapter.get_order(client_order_id)
         if snapshot is None:
             prior = self._orders.get(client_order_id)
-            if prior is None:
+            request = self._order_requests.get(client_order_id)
+            if prior is None and request is None:
                 raise KeyError(f"order not found: {client_order_id}")
+
+            # A broker may lose/omit the order record while the local process
+            # still knows the immutable request. Preserve the uncertainty
+            # without manufacturing a broker fill or inventing a terminal
+            # state. If a prior snapshot exists, retain its broker identity
+            # and broker-reported fills; otherwise use an explicit UNKNOWN
+            # identity until provider-side reconciliation recovers it.
+            if prior is not None:
+                broker_order_id = prior.broker_order_id
+                requested_quantity = prior.requested_quantity
+                filled_quantity = prior.filled_quantity
+                average_fill_price = prior.average_fill_price
+                fills = prior.fills
+            else:
+                broker_order_id = f"UNKNOWN:{client_order_id}"
+                requested_quantity = request.quantity
+                filled_quantity = 0.0
+                average_fill_price = None
+                fills = ()
+
             unknown = OrderSnapshot(
-                broker_order_id=prior.broker_order_id,
-                client_order_id=prior.client_order_id,
+                broker_order_id=broker_order_id,
+                client_order_id=client_order_id,
                 status=OrderStatus.UNKNOWN,
-                requested_quantity=prior.requested_quantity,
-                filled_quantity=prior.filled_quantity,
-                average_fill_price=prior.average_fill_price,
+                requested_quantity=requested_quantity,
+                filled_quantity=filled_quantity,
+                average_fill_price=average_fill_price,
                 reason="broker returned no order state",
-                fills=prior.fills,
+                fills=fills,
             )
             # Repeated broker unavailability is not a new lifecycle
             # transition. UNKNOWN is already the authoritative local state for
