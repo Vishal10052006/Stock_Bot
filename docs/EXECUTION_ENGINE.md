@@ -100,6 +100,15 @@ UNKNOWN orders are unresolved rather than accepted in execution
 metrics, keeping `ExecutionResult.accepted` and aggregate accepted-order
 counts semantically aligned.
 
+## Paper-runtime accounting boundary
+
+The deterministic Paper Runtime is downstream of ExecutionAuthorization. For
+authorized fills, execution fees reduce account realized P&L exactly once and
+the same fee is allocated into the symbol's position-level realized P&L.
+Mark-to-market therefore includes the execution costs already incurred by the
+open position. Paper orders, positions, and trade outcomes reject non-finite
+numeric accounting values.
+
 ## Position reconciliation boundary
 
 Broker positions are authoritative for reconciliation. The comparison is
