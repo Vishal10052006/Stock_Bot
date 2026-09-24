@@ -160,3 +160,21 @@ conformal coverage guarantee and is not recalibrated on final OOS data.
 Weights are configuration, not learned from the final OOS partition. No final
 OOS observation is consumed by the ensemble implementation. Ensemble quality
 must be evaluated later under the same chronological validation discipline.
+
+
+## Fixed-weight ensemble validation
+
+A real-data walk-forward benchmark for the return ensemble is implemented in
+`scripts/run_phase9_return_forecast_ensemble_walk_forward.py`. The current
+default is a fixed 50/50 Ridge + Random Forest weighting. The weights are
+explicit configuration and are **not** learned from or optimized against the
+final OOS partition.
+
+Each fold independently fits and conformal-calibrates the two components on
+chronologically earlier observations, then evaluates the fixed-weight ensemble
+on the future fold. Ensemble point forecasts are weighted averages; interval
+evaluation uses the conservative component-envelope interval. That envelope
+does not inherit a formal conformal coverage guarantee.
+
+The benchmark is validation evidence for the ensemble architecture. It must
+not be used to retroactively tune the final OOS result.
