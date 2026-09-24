@@ -54,9 +54,15 @@ Each prediction uses only closes satisfying:
 
 `same symbol AND same trading date AND timestamp < decision timestamp`
 
+The walk-forward test fold is allowed to supply earlier *observed* rows from
+the same trading session. This is sequential inference, not label leakage:
+the context selector enforces the strict timestamp inequality and never reads
+a future test observation for the current prediction.
+
 The context is capped at 64 bars, with 32 bars as the minimum usable history.
 This prevents overnight gaps from being silently interpreted as consecutive
-5-minute observations.
+5-minute observations. The fold split still protects all future observations
+from entering an earlier prediction.
 
 The TimesFM 2.5 horizon is fixed at 12 bars so that the endpoint forecast can
 be compared with the existing 12-bar close-to-close return target.
