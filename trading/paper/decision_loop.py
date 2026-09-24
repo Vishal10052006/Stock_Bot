@@ -351,6 +351,13 @@ def _canonical_value(value: object) -> object:
         return value.isoformat()
     if isinstance(value, Enum):
         return value.value
+    if isinstance(value, PaperDecisionStep):
+        return {
+            "strategy": _canonical_value(value.strategy),
+            "risk": _canonical_value(value.risk),
+            "authorization": _canonical_value(value.authorization),
+            "order": _canonical_value(value.order),
+        }
     if is_dataclass(value):
         return {
             field.name: _canonical_value(getattr(value, field.name))
