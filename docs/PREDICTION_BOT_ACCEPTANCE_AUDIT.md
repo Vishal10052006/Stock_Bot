@@ -1,6 +1,6 @@
 # Prediction Bot — Final Acceptance Audit
 
-Updated: 2026-09-24
+Updated: 2026-09-25
 
 ## Scope
 
@@ -68,9 +68,17 @@ Dedicated TimesFM causal walk-forward tests: `6 passed`
 GitHub Actions Prediction Bot workflow for `0e1c115b`: `completed /
 success`
 
-The complete repository suite must still be run from the synchronized
-Prediction Bot branch after this final foundation fix before the branch is
-considered merge-ready.
+Final synchronized Prediction Bot branch regression:
+
+- branch: `feat/prediction-complete-model`
+- HEAD: `15823834cbfcceed548d1839f45a4d25016a56af`
+- repository suite: `1418 passed, 11 warnings`
+- failures: `0`
+- working tree: clean after protecting local memory
+- local branch synchronization: `0 ahead / 0 behind`
+
+The full repository regression is therefore complete for the current
+Prediction Bot head.
 
 ## Real-data TimesFM evidence
 
@@ -108,6 +116,48 @@ intervals, profitability, or production superiority over existing baselines.
 The large fold-to-fold variation in usable context is itself a data/context
 coverage limitation and must remain visible.
 
+## Final locked OOS evidence
+
+The frozen Phase 9 final external-test return-forecast gate was executed on
+the real-data benchmark artifacts.
+
+Protocol:
+
+- 70% chronological training partition
+- 15% chronological validation partition
+- 15% final external OOS partition
+- 60-minute purge
+- 10% chronological calibration holdout within training
+- 90% conformal interval confidence
+- 12-bar return horizon
+- final OOS excluded from preprocessing, fitting, calibration, tuning, and
+  model-family selection
+- both pre-declared Ridge and Random Forest families scored descriptively
+
+Final OOS counts:
+
+- merged observations: `7147`
+- fit: `4225`
+- calibration: `475`
+- validation: `511`
+- final OOS: `817`
+
+Final OOS measurements:
+
+| Model | MAE | RMSE | Direction | 90% Coverage |
+|---|---:|---:|---:|---:|
+| Ridge | 0.00439895 | 0.00735287 | 0.5288 | 0.8960 |
+| Random Forest | 0.00505374 | 0.00828373 | 0.4492 | 0.8996 |
+
+Artifact:
+
+`data/research/phase9_return_forecast_final_oos_h12.json`
+
+The final OOS artifact remains local-only. These measurements are descriptive
+evaluation evidence for the frozen protocol; they do not constitute
+profitability evidence, future-performance guarantees, or a model-selection
+decision.
+
 ## Production disposition
 
 TimesFM 2.5 remains **research-only** in this stage.
@@ -123,13 +173,13 @@ validation protocol and must not tune against already-scored final OOS data.
 
 Before merging this Prediction Bot branch:
 
-1. run the complete repository test suite from
-   `feat/prediction-complete-model`;
-2. verify the protected `memory/long_term_memory.json` remains untouched by
+1. verify the protected `memory/long_term_memory.json` remains untouched by
    the Prediction Bot commits;
-3. verify the generated research artifact remains local-only unless explicitly
+2. verify the generated research artifact remains local-only unless explicitly
    approved for repository storage;
-4. review the final diff and CI result;
-5. keep the branch unmerged until those checks pass.
+3. review the final documentation diff and CI result;
+4. keep the branch unmerged until those checks pass.
+
+The complete repository regression and locked final OOS gate are now complete.
 
 No performance or profitability claim is made by this audit.
