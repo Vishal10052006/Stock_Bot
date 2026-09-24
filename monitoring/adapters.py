@@ -7,8 +7,9 @@ from typing import Mapping
 
 def prediction_payload(telemetry: object) -> Mapping[str, object]:
     """Convert Phase-9 PredictionTelemetry into a monitoring payload."""
+    timestamp = telemetry.timestamp
     return {
-        "timestamp": telemetry.timestamp.isoformat(),
+        "timestamp": timestamp.isoformat(),
         "symbol": telemetry.symbol,
         "model_version": telemetry.model_version,
         "feature_version": telemetry.feature_version,
@@ -61,7 +62,7 @@ def safety_payload(decision: object) -> Mapping[str, object]:
     block = getattr(decision.block, "value", decision.block)
     return {
         "allowed": bool(decision.allowed),
-        "block": block,
+        "block": str(block),
         "reason": decision.reason,
     }
 
@@ -70,7 +71,7 @@ def reconciliation_payload(report: object) -> Mapping[str, object]:
     """Convert a BrokerReconciler report."""
     status = getattr(report.status, "value", report.status)
     return {
-        "status": status,
+        "status": str(status),
         "safe": bool(report.safe),
         "mismatches": list(report.mismatches),
     }
