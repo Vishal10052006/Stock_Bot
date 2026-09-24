@@ -75,17 +75,25 @@ def _load_merged(
     if not isinstance(targets["timestamp"].dtype, pd.DatetimeTZDtype):
         raise ValueError("target timestamps must be timezone-aware")
 
-    required = {
+    required_dataset = {"timestamp", "symbol"}
+    required_targets = {
         "timestamp",
         "symbol",
-        "close",
+        "decision_close",
         "future_timestamp",
         "future_return",
         "horizon_bars",
     }
-    missing = required.difference(dataset.columns.union(targets.columns))
-    if missing:
-        raise ValueError(f"inputs missing required columns: {sorted(missing)}")
+    missing_dataset = required_dataset.difference(dataset.columns)
+    if missing_dataset:
+        raise ValueError(
+            f"dataset missing required columns: {sorted(missing_dataset)}"
+        )
+    missing_targets = required_targets.difference(targets.columns)
+    if missing_targets:
+        raise ValueError(
+            f"targets missing required columns: {sorted(missing_targets)}"
+        )
 
     horizons = targets["horizon_bars"].dropna().astype(int).unique()
     if len(horizons) != 1 or int(horizons[0]) != FROZEN_HORIZON_BARS:
@@ -104,6 +112,7 @@ def _load_merged(
             [
                 "timestamp",
                 "symbol",
+                "decision_close",
                 "future_timestamp",
                 "future_return",
                 "horizon_bars",
@@ -122,10 +131,10 @@ def _load_merged(
     if not (merged["future_timestamp"] > merged["timestamp"]).all():
         raise ValueError("Return target contains a non-future timestamp")
 
-    if not np.isfinite(merged["close"].to_numpy(dtype=float)).all():
-        raise ValueError("close contains non-finite values")
-    if (merged["close"] <= 0).any():
-        raise ValueError("close must be strictly positive")
+    if not np.isfinite(merged["decision_close"].to_numpy(dtype=float)).all():
+        raise ValueError("decision_close contains non-finite values")
+    if (merged["decision_close"] <= 0).any():
+        raise ValueError("decision_close must be strictly positive")
 
     merged = merged.sort_values(
         ["symbol", "timestamp"], kind="stable"
@@ -184,7 +193,7 @@ def _forecast_rows(
         point, quantiles = model.forecast(inputs, horizon=horizon)
 
         for offset, (_, row, context) in enumerate(batch):
-            last_close = float(context[-1])
+            last_close = float(row["decision_close"])
             predicted_price = float(point[offset, horizon - 1])
             lower_price = float(quantiles[offset, horizon - 1, 1])
             upper_price = float(quantiles[offset, horizon - 1, 9])
