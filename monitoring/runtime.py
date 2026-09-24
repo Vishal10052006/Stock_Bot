@@ -43,22 +43,24 @@ class MonitoringRuntime:
         return self.pipeline.engine
 
     def observe_market(self, metrics: Any) -> RuntimeTelemetryResult:
-        before = len(self.engine.snapshot().alerts)
+        before_metrics = len(self.engine.snapshot().metrics)
+        before_alerts = len(self.engine.snapshot().alerts)
         self.pipeline.record_health(market_health(metrics))
         if getattr(metrics, "quality", None) is not None:
             self.pipeline.record_metric("market.quality", float(metrics.quality))
         self.pipeline.record_metric("market.latency_seconds", float(metrics.latency_seconds))
-        after = len(self.engine.snapshot().alerts)
-        return RuntimeTelemetryResult("market_bot", True, 2, after - before)
+        current = self.engine.snapshot()
+        return RuntimeTelemetryResult("market_bot", True, len(current.metrics) - before_metrics, len(current.alerts) - before_alerts)
 
     def observe_analysis(self, metrics: Any) -> RuntimeTelemetryResult:
-        before = len(self.engine.snapshot().alerts)
+        before_metrics = len(self.engine.snapshot().metrics)
+        before_alerts = len(self.engine.snapshot().alerts)
         self.pipeline.record_health(analysis_health(metrics))
         self.pipeline.record_metric("analysis.feature_count", float(metrics.feature_count))
         self.pipeline.record_metric("analysis.missing_or_invalid", float(metrics.missing_or_invalid))
         self.pipeline.record_metric("analysis.completeness", float(metrics.completeness))
-        after = len(self.engine.snapshot().alerts)
-        return RuntimeTelemetryResult("analysis_bot", True, 3, after - before)
+        current = self.engine.snapshot()
+        return RuntimeTelemetryResult("analysis_bot", True, len(current.metrics) - before_metrics, len(current.alerts) - before_alerts)
 
     def observe_data_quality(self, snapshot: Any) -> RuntimeTelemetryResult:
         before = len(self.engine.snapshot().alerts)
@@ -112,7 +114,9 @@ class MonitoringRuntime:
             if isinstance(value, (int, float)):
                 self.pipeline.record_metric(f"regime.{name}", float(value))
         for code in alerts:
-            self.pipeline._alert(code, "regime", code)
+            requested = None
+            requested = __import__("monitoring").AlertSeverity.CRITICAL if code == "NEW_REGIME_DOMINANCE" else __import__("monitoring").AlertSeverity.WARNING
+            self.pipeline._alert(code, "regime", code, requested)
         after = len(self.engine.snapshot().alerts)
         return RuntimeTelemetryResult("regime", True, len(metrics), after - before)
 
