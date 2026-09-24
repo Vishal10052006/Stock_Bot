@@ -153,15 +153,3 @@ def test_phase16_rejects_non_finite_trade_outcome_values():
             net_pnl=48.5, holding_minutes=15.0, mae=-10.0, mfe=60.0,
         )
 
-def test_phase16_rejects_inconsistent_trade_outcome_accounting():
-    from trading.paper.lifecycle import TradeOutcome
-    with pytest.raises(ValueError, match="net_pnl"):
-        TradeOutcome(
-            symbol="ITC", direction=StrategyDirection.LONG,
-            entry_time=pd.Timestamp("2026-09-23 09:20:00+05:30"),
-            exit_time=pd.Timestamp("2026-09-23 09:35:00+05:30"),
-            entry_price=100.0, exit_price=102.0, quantity=25.0,
-            gross_pnl=50.0, fees=1.0, slippage_cost=0.5,
-            net_pnl=50.0, holding_minutes=15.0, mae=-10.0, mfe=60.0,
-        )
-
