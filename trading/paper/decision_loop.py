@@ -25,6 +25,12 @@ from trading.risk.gate import RiskDecision, RiskDecisionStatus
 from trading.risk.pipeline import evaluate_strategy_candidate_risk
 from trading.strategy.engine import StrategyEngine
 from trading.strategy.models import BaselineStrategyConfig, StrategyConfig, StrategyDecision, StrategyInput
+from monitoring import (
+    ExecutionMonitoringSnapshot,
+    MonitoringRuntime,
+    RiskMonitoringSnapshot,
+    StrategyMonitoringSnapshot,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -65,6 +71,7 @@ class PaperDecisionLoop:
         runtime: PaperTradingRuntime | None = None,
         strategy_config: StrategyConfig | BaselineStrategyConfig | None = None,
         risk_enabled: bool = True,
+        monitoring: MonitoringRuntime | None = None,
     ) -> None:
         self.runtime = runtime or PaperTradingRuntime()
         self.strategy_engine = StrategyEngine(
@@ -72,6 +79,7 @@ class PaperDecisionLoop:
         )
         self.risk_engine = RiskEngine()
         self.risk_enabled = risk_enabled
+        self.monitoring = monitoring or MonitoringRuntime()
 
     @staticmethod
     def _coerce_strategy_config(
@@ -125,6 +133,15 @@ class PaperDecisionLoop:
         day_start_equity = self.runtime.config.initial_equity
         day_start_realized = self.runtime.realized_pnl
         trades_today = 0
+        monitoring_decisions = 0
+        monitoring_trades = 0
+        monitoring_long_trades = 0
+        monitoring_short_trades = 0
+        monitoring_no_trade = 0
+        monitoring_orders = 0
+        monitoring_filled = 0
+        monitoring_rejected = 0
+        monitoring_slippage = 0.0
 
         for _, row in working.iterrows():
             price = float(row[price_column])
@@ -152,6 +169,25 @@ class PaperDecisionLoop:
             strategy_input = self._strategy_input_from_row(row)
             strategy, _trace = self.strategy_engine.decide(strategy_input)
 
+            monitoring_decisions += 1
+            if strategy.direction.value == "NO_TRADE":
+                monitoring_no_trade += 1
+            elif strategy.direction.value == "LONG":
+                monitoring_long_trades += 1
+            elif strategy.direction.value == "SHORT":
+                monitoring_short_trades += 1
+
+            self.monitoring.observe_strategy(
+                StrategyMonitoringSnapshot(
+                    decisions=monitoring_decisions,
+                    trades=monitoring_trades,
+                    long_trades=monitoring_long_trades,
+                    short_trades=monitoring_short_trades,
+                    no_trade=monitoring_no_trade,
+                    net_pnl=float(self.runtime.realized_pnl),
+                )
+            )
+
             liquidity_available = bool(
                 row["liquidity_available"]
             ) if "liquidity_available" in row.index else True
@@ -172,6 +208,25 @@ class PaperDecisionLoop:
                 risk_enabled=self.risk_enabled,
             )
             risk = assessment.decision
+            daily_monitoring_pnl = (
+                float(equity - day_start_equity)
+            )
+            self.monitoring.observe_risk(
+                RiskMonitoringSnapshot(
+                    equity=float(equity),
+                    daily_pnl=daily_monitoring_pnl,
+                    open_positions=open_positions,
+                    gross_exposure=float(gross_exposure),
+                    daily_loss_limit=float(
+                        day_start_equity * self.risk_engine.config.max_daily_loss
+                    ),
+                    max_open_positions=self.risk_engine.config.max_open_positions,
+                    max_gross_exposure=self.risk_engine.config.max_gross_exposure,
+                    risk_per_trade=self.risk_engine.config.risk_per_trade,
+                    realized_pnl=float(realized_total - day_start_realized),
+                    unrealized_pnl=float(unrealized_pnl),
+                )
+            )
             authorization = authorize_risk_decision(
                 risk,
                 approved_quantity=(
@@ -190,6 +245,7 @@ class PaperDecisionLoop:
             )
 
             order = None
+            monitoring_orders += 1
             if authorization.status.value == "AUTHORIZED":
                 position_size = assessment.position_size
                 if position_size is None:
@@ -210,6 +266,32 @@ class PaperDecisionLoop:
                     )
                     if order.status.value == "FILLED":
                         trades_today += 1
+
+            if order is not None:
+                if order.status.value == "FILLED":
+                    monitoring_filled += 1
+                    monitoring_trades += 1
+                    monitoring_slippage += float(order.slippage_cost)
+                else:
+                    monitoring_rejected += 1
+                self.monitoring.observe_execution(
+                    ExecutionMonitoringSnapshot(
+                        order_count=monitoring_orders,
+                        filled_count=monitoring_filled,
+                        rejected_count=monitoring_rejected,
+                        total_slippage=monitoring_slippage,
+                    )
+                )
+                self.monitoring.observe_strategy(
+                    StrategyMonitoringSnapshot(
+                        decisions=monitoring_decisions,
+                        trades=monitoring_trades,
+                        long_trades=monitoring_long_trades,
+                        short_trades=monitoring_short_trades,
+                        no_trade=monitoring_no_trade,
+                        net_pnl=float(self.runtime.realized_pnl),
+                    )
+                )
 
             steps.append(
                 PaperDecisionStep(
