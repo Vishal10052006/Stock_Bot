@@ -68,7 +68,7 @@ def test_protocol_constants_are_frozen() -> None:
     assert FROZEN_CONFIDENCE == 0.80
 
 
-def test_loader_requires_positive_close_and_future_target(tmp_path: Path) -> None:
+def test_loader_requires_positive_decision_close_and_future_target(tmp_path: Path) -> None:
     dataset_path, target_path = _write_inputs(tmp_path)
     merged, features, horizon = _load_merged(dataset_path, target_path)
 
