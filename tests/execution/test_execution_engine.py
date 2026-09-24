@@ -883,3 +883,71 @@ def test_position_reconciliation_rejects_duplicate_broker_symbols():
     )
 
     assert not engine.reconcile_positions(local)
+
+
+def test_order_reconciliation_requires_validated_authoritative_snapshot():
+    adapter = PaperBrokerAdapter()
+    engine = ExecutionEngine(adapter)
+    request = order_request()
+    engine.submit(request)
+
+    good = adapter.get_order(request.client_order_id)
+    assert good is not None
+    assert engine.reconcile_order(request.client_order_id)
+
+    from execution.engine import OrderSnapshot
+    adapter._orders[request.client_order_id] = OrderSnapshot(
+        broker_order_id=good.broker_order_id,
+        client_order_id=request.client_order_id,
+        status=good.status,
+        requested_quantity=good.requested_quantity,
+        filled_quantity=good.filled_quantity,
+        average_fill_price=good.average_fill_price,
+        fills=(),
+    )
+
+    assert not engine.reconcile_order(request.client_order_id)
+
+
+def test_order_reconciliation_detects_average_price_rounding_but_allows_tiny_noise():
+    adapter = PaperBrokerAdapter()
+    engine = ExecutionEngine(adapter)
+    request = order_request()
+    engine.submit(request)
+
+    from execution.engine import OrderSnapshot
+    good = adapter.get_order(request.client_order_id)
+    assert good is not None
+
+    adapter._orders[request.client_order_id] = OrderSnapshot(
+        broker_order_id=good.broker_order_id,
+        client_order_id=good.client_order_id,
+        status=good.status,
+        requested_quantity=good.requested_quantity,
+        filled_quantity=good.filled_quantity,
+        average_fill_price=good.average_fill_price + 5e-13,
+        fills=good.fills,
+    )
+    assert engine.reconcile_order(request.client_order_id)
+
+    adapter._orders[request.client_order_id] = OrderSnapshot(
+        broker_order_id=good.broker_order_id,
+        client_order_id=good.client_order_id,
+        status=good.status,
+        requested_quantity=good.requested_quantity,
+        filled_quantity=good.filled_quantity,
+        average_fill_price=good.average_fill_price + 1e-4,
+        fills=good.fills,
+    )
+    assert not engine.reconcile_order(request.client_order_id)
+
+
+def test_order_reconciliation_rejects_missing_local_request():
+    adapter = PaperBrokerAdapter()
+    engine = ExecutionEngine(adapter)
+    request = order_request()
+    engine.submit(request)
+
+    engine._order_requests.pop(request.client_order_id)
+
+    assert not engine.reconcile_order(request.client_order_id)
