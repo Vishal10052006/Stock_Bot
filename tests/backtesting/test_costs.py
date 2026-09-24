@@ -1,3 +1,5 @@
+import pytest
+
 from backtesting.costs import CostConfig, TransactionCostModel
 
 
@@ -27,7 +29,6 @@ def test_cost_model_is_deterministic() -> None:
     assert result.total == 1.5
 
 
-import pytest
 
 @pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf")])
 def test_cost_config_rejects_non_finite_rates(value: float) -> None:
