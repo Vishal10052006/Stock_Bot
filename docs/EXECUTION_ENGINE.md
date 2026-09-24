@@ -100,3 +100,22 @@ the local position snapshot before downstream state is considered synchronized.
 
 An UNKNOWN order state remains unresolved; it must not be treated as a
 successful fill or as evidence that the expected position exists.
+
+
+## Transition lifecycle provenance
+
+Risk decisions carry the transition classification and approved projected
+quantity when Portfolio position context is available. The immutable
+ExecutionAuthorization preserves that provenance.
+
+Supported transitions are:
+
+- OPEN — broker order creates the new directional position.
+- INCREASE — broker order adds only the approved incremental quantity.
+- REDUCE — broker order releases the approved reduction quantity.
+- FLATTEN — broker order releases the full existing quantity.
+- REVERSE — broker order quantity contains the full closing leg plus the
+  Risk-approved opening leg; the order side is the new direction.
+
+Risk remains responsible for deriving these quantities. Execution does not
+recompute transition sizing from the original Portfolio intent.
