@@ -140,10 +140,11 @@ class PaperBrokerAdapter:
         return snapshot
 
     def positions(self) -> tuple[PositionSnapshot, ...]:
+        """Return all non-zero signed positions, including shorts."""
         return tuple(
             position
             for position in self._positions.values()
-            if position.quantity > 0
+            if position.quantity != 0
         )
 
     def _apply_fill(self, order: OrderRequest, fill: Fill) -> None:
