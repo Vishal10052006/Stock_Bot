@@ -232,3 +232,69 @@ def test_short_authorization_maps_to_sell():
 
     assert request.side is OrderSide.SELL
     assert request.quantity == 25.0
+
+
+
+def test_short_paper_execution_creates_signed_short_position():
+    adapter = PaperBrokerAdapter(
+        config=PaperAdapterConfig(
+            slippage_bps=0.0,
+            fee_bps=0.0,
+        ),
+        price_provider=lambda _order: 150.0,
+    )
+    engine = ExecutionEngine(adapter)
+    auth = authorization(
+        direction=StrategyDirection.SHORT,
+        quantity=20.0,
+    )
+    request = ExecutionEngine.from_authorization(
+        auth,
+        decision_id="short-paper",
+    )
+
+    result = engine.submit(request)
+
+    assert result.filled
+    positions = adapter.positions()
+    assert len(positions) == 1
+    assert positions[0].symbol == "ITC"
+    assert positions[0].quantity == -20.0
+    assert positions[0].average_price == 150.0
+
+
+def test_lifecycle_events_are_recorded_in_order():
+    adapter = PaperBrokerAdapter()
+    engine = ExecutionEngine(adapter)
+
+    result = engine.submit(order_request())
+
+    events = engine.events
+
+    assert [event.to_status for event in events] == [
+        OrderStatus.VALIDATED,
+        OrderStatus.SUBMITTING,
+        OrderStatus.FILLED,
+    ]
+    assert result.snapshot.status is OrderStatus.FILLED
+
+
+def test_execution_metrics_include_fills_and_fees():
+    adapter = PaperBrokerAdapter(
+        config=PaperAdapterConfig(
+            slippage_bps=0.0,
+            fee_bps=2.0,
+        ),
+        price_provider=lambda _order: 100.0,
+    )
+    engine = ExecutionEngine(adapter)
+
+    engine.submit(order_request())
+    metrics = engine.metrics()
+
+    assert metrics.orders == 1
+    assert metrics.filled_orders == 1
+    assert metrics.requested_quantity == 100.0
+    assert metrics.filled_quantity == 100.0
+    assert metrics.fill_ratio == 1.0
+    assert metrics.total_fees > 0.0
