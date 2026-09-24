@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
+import math
 
 import pandas as pd
 
@@ -32,6 +33,13 @@ class PaperTradingConfig:
     initial_equity: float = 100_000.0
 
     def __post_init__(self) -> None:
+        for name, value in (
+            ("slippage_bps", self.slippage_bps),
+            ("fee_bps", self.fee_bps),
+            ("initial_equity", self.initial_equity),
+        ):
+            if not math.isfinite(float(value)):
+                raise ValueError(f"{name} must be finite")
         if self.slippage_bps < 0 or self.fee_bps < 0:
             raise ValueError("slippage_bps and fee_bps must be non-negative")
         if self.initial_equity <= 0:
@@ -56,10 +64,19 @@ class PaperOrder:
     def __post_init__(self) -> None:
         if pd.Timestamp(self.timestamp).tzinfo is None:
             raise ValueError("paper order timestamp must be timezone-aware")
-        if self.quantity <= 0:
-            raise ValueError("quantity must be positive")
-        if self.requested_price <= 0 or self.fill_price <= 0:
-            raise ValueError("prices must be positive")
+        if not math.isfinite(float(self.quantity)) or self.quantity <= 0:
+            raise ValueError("quantity must be positive and finite")
+        if (
+            not math.isfinite(float(self.requested_price))
+            or not math.isfinite(float(self.fill_price))
+            or self.requested_price <= 0
+            or self.fill_price <= 0
+        ):
+            raise ValueError("prices must be positive and finite")
+        if not math.isfinite(float(self.fees)) or self.fees < 0:
+            raise ValueError("fees must be finite and non-negative")
+        if not math.isfinite(float(self.slippage_cost)) or self.slippage_cost < 0:
+            raise ValueError("slippage_cost must be finite and non-negative")
 
 
 @dataclass(frozen=True, slots=True)
@@ -75,8 +92,12 @@ class PaperPosition:
     def __post_init__(self) -> None:
         if self.direction is StrategyDirection.NO_TRADE:
             raise ValueError("paper position direction cannot be NO_TRADE")
-        if self.quantity < 0:
-            raise ValueError("position quantity cannot be negative")
+        if not math.isfinite(float(self.quantity)) or self.quantity < 0:
+            raise ValueError("position quantity must be finite and non-negative")
+        if not math.isfinite(float(self.average_price)) or self.average_price < 0:
+            raise ValueError("average_price must be finite and non-negative")
+        if not math.isfinite(float(self.realized_pnl)):
+            raise ValueError("realized_pnl must be finite")
         if self.quantity > 0 and self.average_price <= 0:
             raise ValueError("average_price must be positive for open positions")
 
@@ -133,9 +154,9 @@ class PaperTradingRuntime:
                 )
 
             price = float(prices[symbol])
-            if price <= 0:
+            if not math.isfinite(price) or price <= 0:
                 raise ValueError(
-                    f"mark price for {symbol} must be positive"
+                    f"mark price for {symbol} must be positive and finite"
                 )
 
             if position.direction is StrategyDirection.LONG:
@@ -176,8 +197,9 @@ class PaperTradingRuntime:
         """Simulate a fill only when ExecutionAuthorization is approved."""
         if not isinstance(authorization, ExecutionAuthorization):
             raise TypeError("authorization must be an ExecutionAuthorization")
-        if price <= 0:
-            raise ValueError("price must be positive")
+        price = float(price)
+        if not math.isfinite(price) or price <= 0:
+            raise ValueError("price must be positive and finite")
 
         if authorization.status is ExecutionAuthorizationStatus.AUTHORIZED:
             if authorization.approved_quantity <= 0:
@@ -230,6 +252,7 @@ class PaperTradingRuntime:
                 direction=order_direction,
                 quantity=quantity,
                 average_price=fill_price,
+                realized_pnl=-fees,
             )
         elif current.direction is order_direction:
             new_quantity = current.quantity + quantity
@@ -242,7 +265,7 @@ class PaperTradingRuntime:
                 direction=current.direction,
                 quantity=new_quantity,
                 average_price=weighted_price,
-                realized_pnl=current.realized_pnl,
+                realized_pnl=current.realized_pnl - fees,
             )
         else:
             # An opposite-side order first closes the existing exposure.
