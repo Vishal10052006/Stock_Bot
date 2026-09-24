@@ -252,8 +252,13 @@ class OrderStateMachine:
     _ALLOWED = {
         OrderStatus.CREATED: {OrderStatus.VALIDATED, OrderStatus.REJECTED_LOCAL},
         OrderStatus.VALIDATED: {OrderStatus.SUBMITTING, OrderStatus.REJECTED_LOCAL},
+        # Simulated brokers may return immediate terminal states; real
+        # brokers may acknowledge first and transition later via refresh().
         OrderStatus.SUBMITTING: {
             OrderStatus.SUBMITTED,
+            OrderStatus.OPEN,
+            OrderStatus.PARTIALLY_FILLED,
+            OrderStatus.FILLED,
             OrderStatus.REJECTED_BROKER,
             OrderStatus.FAILED,
             OrderStatus.UNKNOWN,
@@ -281,6 +286,9 @@ class OrderStateMachine:
             OrderStatus.UNKNOWN,
         },
         OrderStatus.CANCEL_PENDING: {OrderStatus.CANCELLED, OrderStatus.FILLED, OrderStatus.UNKNOWN},
+        # UNKNOWN is intentionally recoverable in both directions:
+        # broker state can disappear after a terminal local observation, and
+        # an unavailable broker can later return an authoritative state.
         OrderStatus.UNKNOWN: {
             OrderStatus.SUBMITTED,
             OrderStatus.OPEN,
@@ -291,6 +299,7 @@ class OrderStateMachine:
             OrderStatus.REJECTED_BROKER,
             OrderStatus.FAILED,
         },
+        OrderStatus.FILLED: {OrderStatus.UNKNOWN},
     }
 
     @classmethod
