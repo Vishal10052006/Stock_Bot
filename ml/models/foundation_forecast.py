@@ -141,6 +141,13 @@ class FoundationForecastModel:
                 raise ValueError(f"input series {index} contains non-finite values")
             prepared.append(array)
 
+        # Capture the caller-visible batch size before invoking the backend.
+        # Some compiled inference backends may pad or otherwise mutate the
+        # input container internally; the adapter contract is defined by the
+        # number of series supplied by the caller, not by post-call container
+        # state.
+        expected_batch_size = len(prepared)
+
         point, quantiles = self._model.forecast(
             horizon=horizon,
             inputs=prepared,
@@ -148,8 +155,8 @@ class FoundationForecastModel:
         point_array = np.asarray(point, dtype=float)
         quantile_array = np.asarray(quantiles, dtype=float)
 
-        expected_point_shape = (len(prepared), horizon)
-        expected_quantile_shape = (len(prepared), horizon, 10)
+        expected_point_shape = (expected_batch_size, horizon)
+        expected_quantile_shape = (expected_batch_size, horizon, 10)
         if point_array.shape != expected_point_shape:
             raise RuntimeError(
                 f"unexpected TimesFM point shape: {point_array.shape}; "
