@@ -220,6 +220,35 @@ def test_invalid_order_state_transition_rejected():
         )
 
 
+def test_synchronous_broker_fill_is_valid_from_submitting():
+    """Paper/synchronous adapters may return a terminal fill immediately."""
+    assert (
+        OrderStateMachine.transition(
+            OrderStatus.SUBMITTING,
+            OrderStatus.FILLED,
+        )
+        is OrderStatus.FILLED
+    )
+    assert (
+        OrderStateMachine.transition(
+            OrderStatus.SUBMITTING,
+            OrderStatus.PARTIALLY_FILLED,
+        )
+        is OrderStatus.PARTIALLY_FILLED
+    )
+
+
+def test_terminal_state_can_become_unknown_during_reconciliation():
+    """Missing broker state must be represented as uncertainty, not a crash."""
+    assert (
+        OrderStateMachine.transition(
+            OrderStatus.FILLED,
+            OrderStatus.UNKNOWN,
+        )
+        is OrderStatus.UNKNOWN
+    )
+
+
 def test_short_authorization_maps_to_sell():
     auth = authorization(
         direction=StrategyDirection.SHORT,
