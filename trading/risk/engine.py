@@ -24,10 +24,11 @@ from trading.signals.models import TradeCandidate
 from trading.strategy.models import StrategyDirection
 
 from .concentration import check_sector_exposure, check_symbol_exposure
-from .contracts import RiskPositionContext, RiskReasonCode
+from .contracts import RiskPositionContext, RiskPositionTransition, RiskReasonCode
+from .contracts import RiskTransitionSizing
 from .correlation import correlation_exposure_allowed
 from .daily_limits import DailyRiskState, daily_loss_limit_reached
-from .exposure import gross_exposure_after
+from .exposure import gross_exposure_after, projected_gross_exposure
 from .kill_switch import KillSwitchState
 from .position_sizing import calculate_position_size, floor_to_step
 from .stop_loss import validate_stop
@@ -243,6 +244,8 @@ class RiskAssessment:
     gross_exposure_after: float | None = None
     daily_pnl: float | None = None
     volatility_factor: float | None = None
+    closing_quantity: float | None = None
+    opening_quantity: float | None = None
 
 
 def _strategy_direction(candidate: TradeCandidate) -> StrategyDirection:
@@ -400,7 +403,19 @@ class RiskEngine:
                 code,
             )
 
-        # 4. Risk-first sizing.
+        # 4. Risk-first sizing. Existing-position reductions and flattening
+        # are exposure releases, not new risk-budget entries. Their broker
+        # quantity comes from the signed transition context.
+        transition_sizing = (
+            RiskTransitionSizing.from_context(position_context)
+            if position_context is not None
+            else None
+        )
+        release_only = position_context is not None and position_context.transition in {
+            RiskPositionTransition.REDUCE,
+            RiskPositionTransition.FLATTEN,
+        }
+
         sizing = calculate_position_size(
             available_equity=value.available_equity,
             risk_per_trade=self.config.risk_per_trade,
@@ -408,7 +423,18 @@ class RiskEngine:
             quantity_step=self.config.quantity_step,
         )
 
-        requested_quantity = sizing.quantity
+        if release_only:
+            requested_quantity = transition_sizing.order_quantity
+            if requested_quantity <= 0:
+                return self._reject(
+                    value,
+                    "Position transition produces no releasable quantity.",
+                    daily_pnl,
+                    RiskReasonCode.ZERO_POSITION_SIZE,
+                )
+        else:
+            requested_quantity = sizing.quantity
+
         cash_resized = False
 
         # Available cash is an optional account-level constraint. It can only
@@ -503,17 +529,28 @@ class RiskEngine:
 
         proposed_value = entry * quantity
 
+        # A release-only transition replaces this symbol's existing gross
+        # contribution with its projected contribution. No new gross budget
+        # is consumed by REDUCE/FLATTEN.
+        if release_only and position_context is not None:
+            gross_after = projected_gross_exposure(
+                current_gross_exposure=value.gross_exposure,
+                existing_quantity=position_context.existing_quantity,
+                projected_quantity=position_context.projected_quantity,
+                mark_price=entry,
+            )
+        else:
+            gross_after = gross_exposure_after(
+                current_gross_exposure=value.gross_exposure,
+                entry_price=entry,
+                quantity=quantity,
+            )
+
         # 7. Gross exposure is a frozen hard v1 control. A violation remains
         # NO_TRADE unless an explicitly validated resize policy is enabled.
         exposure_limit = (
             value.available_equity * self.config.max_gross_exposure
         )
-        gross_after = gross_exposure_after(
-            current_gross_exposure=value.gross_exposure,
-            entry_price=entry,
-            quantity=quantity,
-        )
-
         if gross_after > exposure_limit + 1e-12:
             if self.config.allow_resize:
                 remaining_exposure = max(
@@ -623,6 +660,8 @@ class RiskEngine:
             gross_exposure_after=gross_after,
             daily_pnl=daily_pnl,
             volatility_factor=vol_factor,
+            closing_quantity=(transition_sizing.closing_quantity if transition_sizing else None),
+            opening_quantity=(transition_sizing.opening_quantity if transition_sizing else None),
         )
 
     def _reject(
