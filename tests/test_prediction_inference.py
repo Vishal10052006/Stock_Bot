@@ -80,5 +80,5 @@ def test_prediction_inference_emits_monitoring_telemetry() -> None:
 
     assert len(predictions) == 1
     dashboard = runtime.dashboard()
-    assert any(item["name"] == "model.prediction_count" for item in dashboard["metrics"])
-    assert any(item["name"] == "model.prediction_max_probability" for item in dashboard["metrics"])
+    assert "model.prediction_count" in dashboard["metrics"]
+    assert "model.prediction_max_probability" in dashboard["metrics"]
