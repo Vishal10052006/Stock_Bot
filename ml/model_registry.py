@@ -316,6 +316,8 @@ class ModelRegistry:
     def approve(self, model_version: str, approval: ModelApproval) -> ModelRegistryRecord:
         """Create an approved immutable record from explicit governance evidence."""
         current = self.get(model_version)
+        if current.approval_status == ModelRegistryStatus.RETIRED.value:
+            raise ValueError("retired model cannot be approved")
         if current.approval_status != ModelRegistryStatus.CANDIDATE.value:
             raise ValueError("only CANDIDATE models can be approved")
         if not current.artifact_fingerprint:
