@@ -1,4 +1,4 @@
-# STOCK_BOT — SELF-LEARNING ENGINE SL-00..SL-23
+# STOCK_BOT — SELF-LEARNING ENGINE SL-00..SL-24
 
 ## Objective
 
@@ -51,6 +51,7 @@ execution, or mutates production code.
 | 21 | Real Phase-9 dataset adapter | real_dataset.py |
 | 22 | Dataset provenance builder | build_phase9_dataset_version |
 | 23 | Controlled candidate retraining | retrain_candidate |
+| 24 | Candidate model lifecycle | CandidateLifecycleController |
 
 ## Promotion policy
 
@@ -117,3 +118,20 @@ derived from the serialized fitted model state and SHA-256 hashed.
 
 SL-23 does not select datasets, automatically retrain from losses, promote
 models, mutate production models, modify risk controls, or access execution.
+
+
+## SL-24 — Candidate Model Lifecycle
+
+SL-24 converts a verified RetrainingResult into an immutable ModelCandidate,
+binding dataset, experiment, artifact, evaluation, parent-model and lineage
+identities. Lifecycle transitions are explicit and fail closed.
+
+Allowed progression is CANDIDATE -> VALIDATING -> PAPER ->
+PROMOTION_REVIEW. Rejection is terminal. PROMOTED can only be applied from an
+explicit PROMOTION_REVIEW state using a matching PROMOTION decision; it is not
+a direct lifecycle transition. PROMOTED may later transition to RETIRED.
+
+Every candidate state is persisted through the existing append-only
+LearningStore when a store is supplied. No model is deployed, broker action is
+performed, risk control is changed, or Phase-20 model approval is invoked by
+this lifecycle controller.
