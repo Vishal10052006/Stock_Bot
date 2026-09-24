@@ -616,3 +616,93 @@ def test_reverse_gross_limit_resizes_only_new_direction() -> None:
     assert assessment.opening_position_size == 10.0
     assert assessment.position_size == 20.0
     assert assessment.gross_exposure_after == 75_000.0
+
+
+def test_reverse_does_not_consume_an_open_position_slot() -> None:
+    context = RiskPositionContext(
+        transition=RiskPositionTransition.REVERSE,
+        existing_quantity=10.0,
+        projected_quantity=-5.0,
+    )
+
+    assessment = RiskEngine().evaluate(
+        make_input(
+            candidate=make_candidate(CandidateDirection.SHORT),
+            open_positions=3,
+            symbol_already_open=True,
+            position_context=context,
+        )
+    )
+
+    assert assessment.decision.status.value == "APPROVED"
+
+
+def test_entry_budget_blocks_reverse_but_not_flatten() -> None:
+    reverse_context = RiskPositionContext(
+        transition=RiskPositionTransition.REVERSE,
+        existing_quantity=10.0,
+        projected_quantity=-5.0,
+    )
+    reverse = RiskEngine().evaluate(
+        make_input(
+            candidate=make_candidate(CandidateDirection.SHORT),
+            trades_today=5,
+            symbol_already_open=True,
+            position_context=reverse_context,
+        )
+    )
+
+    assert reverse.decision.status.value == "REJECTED"
+    assert reverse.decision.reason_code is RiskReasonCode.MAX_TRADES_REACHED
+
+    flatten_context = RiskPositionContext(
+        transition=RiskPositionTransition.FLATTEN,
+        existing_quantity=10.0,
+        projected_quantity=0.0,
+    )
+    flatten = RiskEngine().evaluate(
+        make_input(
+            trades_today=5,
+            symbol_already_open=True,
+            position_context=flatten_context,
+        )
+    )
+
+    assert flatten.decision.status.value == "APPROVED"
+
+
+def test_position_context_rejects_direction_mismatch() -> None:
+    context = RiskPositionContext(
+        transition=RiskPositionTransition.REDUCE,
+        existing_quantity=10.0,
+        projected_quantity=5.0,
+    )
+
+    assessment = RiskEngine().evaluate(
+        make_input(
+            candidate=make_candidate(CandidateDirection.LONG),
+            symbol_already_open=True,
+            position_context=context,
+        )
+    )
+
+    assert assessment.decision.status.value == "REJECTED"
+    assert assessment.decision.reason_code is RiskReasonCode.POSITION_CONTEXT_MISMATCH
+
+
+def test_position_context_accepts_correct_flatten_direction_for_short() -> None:
+    context = RiskPositionContext(
+        transition=RiskPositionTransition.FLATTEN,
+        existing_quantity=-10.0,
+        projected_quantity=0.0,
+    )
+
+    assessment = RiskEngine().evaluate(
+        make_input(
+            candidate=make_candidate(CandidateDirection.LONG),
+            symbol_already_open=True,
+            position_context=context,
+        )
+    )
+
+    assert assessment.decision.status.value == "APPROVED"
