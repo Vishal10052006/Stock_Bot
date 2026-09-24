@@ -18,5 +18,13 @@ M-15 Validation gate — COMPLETE
 M-16 Runtime integration facade — COMPLETE
 M-17 Stable monitoring contract — COMPLETE
 M-18 Completion documentation — COMPLETE
+M-19 Runtime telemetry bridge — COMPLETE
 
 Remaining requirement: empirical validation with chronological real/paper observations. This is evidence work, not another monitoring code module.
+
+
+## M-19 runtime boundary
+
+`monitoring/runtime.py` now provides the concrete one-way runtime collection boundary for Market, Data Quality, Analysis, Model, Strategy, Risk, Execution, Performance, and Regime telemetry. It feeds the existing pipeline and central engine and exposes readiness/report/dashboard state.
+
+M-19 does not mean every application producer loop has already been wired to call the bridge. That final application-entry-point wiring is deployment-specific and must be completed where the actual paper/live orchestration loop is defined. Monitoring remains observational and never replaces Risk or Independent Safety.
