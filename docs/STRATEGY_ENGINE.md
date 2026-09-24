@@ -214,3 +214,18 @@ and pass measurement-integrity checks before it can enter another validation exp
 
 A valid proposal returns `VALIDATION_REQUIRED`; it never mutates frozen configuration and
 there is no automatic promotion path in this boundary.
+
+
+### Controlled strategy mutation and promotion
+
+Strategy mutation is now represented as an explicit versioned registry lifecycle rather than an
+implicit in-place configuration change. Research evidence may produce a candidate StrategyConfig,
+which is registered as CANDIDATE with validation/evaluation/lineage provenance. Approval requires
+explicit governance evidence tied to the exact configuration fingerprint. Approved strategies retain
+their provenance when retired, and retired strategies cannot be re-approved.
+
+The registry supports deterministic identity, idempotent registration of identical strategy versions,
+rejection of conflicting duplicate versions, explicit approval, retirement, and an ambiguity guard when
+more than one approved version exists. There is no automatic live promotion and no broker authority in
+the Strategy Engine. A selected approved strategy still flows through Risk, Execution Authorization,
+Safety Gate, and the configured execution environment.
