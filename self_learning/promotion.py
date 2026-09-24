@@ -1,22 +1,19 @@
 """Champion/challenger promotion and rollback controller.
 
-This controller is deliberately independent from Risk, Safety, Broker and
-Execution.  Promotion is explicit and reversible; it is never inferred from
-one metric.
+This controller is independent from risk, safety, and execution. Promotion is
+explicit and reversible; it is never inferred from one metric.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from .contracts import ModelCandidate, PromotionDecision, PromotionState, ValidationSummary
 from .validation import validate_candidate, ValidationPolicy
 
 
-@dataclass(frozen=True, slots=True)
 class PromotionController:
-    """Govern candidate review without modifying broker or risk state."""
+    """Govern candidate review without trading execution authority."""
 
     def review(
         self,
@@ -26,11 +23,7 @@ class PromotionController:
         validations: dict[str, ValidationSummary],
         policy: ValidationPolicy | None = None,
     ) -> PromotionDecision:
-        """Create a deterministic promotion-review decision.
-
-        A structurally complete candidate becomes ELIGIBLE for explicit
-        approval. It does not become production automatically.
-        """
+        """Create a deterministic promotion-review decision."""
         gate = validate_candidate(challenger, validations, policy=policy)
 
         if not gate.valid:
@@ -42,7 +35,8 @@ class PromotionController:
                 state=PromotionState.BLOCKED,
                 reasons=gate.issues,
                 validation_fingerprints=tuple(
-                    fingerprint for result in validations.values()
+                    fingerprint
+                    for result in validations.values()
                     for fingerprint in result.artifact_fingerprints
                 ),
             )
@@ -53,9 +47,10 @@ class PromotionController:
             champion_version=champion_version,
             challenger_version=challenger.candidate_version,
             state=PromotionState.ELIGIBLE,
-            reasons=("All required validation evidence is structurally present.",),
+            reasons=("Required validation evidence is structurally present.",),
             validation_fingerprints=tuple(
-                fingerprint for result in validations.values()
+                fingerprint
+                for result in validations.values()
                 for fingerprint in result.artifact_fingerprints
             ),
         )
@@ -67,7 +62,7 @@ class PromotionController:
         approval_reference: str,
         evaluator: str,
     ) -> PromotionDecision:
-        """Record explicit human/governance approval of an eligible review."""
+        """Record explicit governance approval of an eligible review."""
         if review.state is not PromotionState.ELIGIBLE:
             raise ValueError("only ELIGIBLE reviews can be promoted")
         if not approval_reference.strip() or not evaluator.strip():
@@ -79,7 +74,7 @@ class PromotionController:
             champion_version=review.champion_version,
             challenger_version=review.challenger_version,
             state=PromotionState.PROMOTED,
-            reasons=review.reasons,
+            reasons=review.reasons + (f"Approved by {evaluator.strip()}.",),
             validation_fingerprints=review.validation_fingerprints,
             approval_reference=approval_reference.strip(),
             created_at=datetime.now(timezone.utc).isoformat(),
@@ -94,11 +89,14 @@ class PromotionController:
         previous_verified_version: str,
         reason: str,
     ) -> PromotionDecision:
-        """Create a rollback record without retraining or executing trades."""
+        """Create a rollback record without retraining or execution."""
         if current_version.strip() == previous_verified_version.strip():
             raise ValueError("previous_verified_version must differ from current_version")
+        if len(candidate_fingerprint) != 64:
+            raise ValueError("candidate_fingerprint must be SHA-256")
         if not reason.strip():
             raise ValueError("rollback reason is required")
+
         return PromotionDecision(
             candidate_id=candidate_id,
             candidate_fingerprint=candidate_fingerprint,
