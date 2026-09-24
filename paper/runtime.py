@@ -64,6 +64,8 @@ class PaperOrder:
     def __post_init__(self) -> None:
         if pd.Timestamp(self.timestamp).tzinfo is None:
             raise ValueError("paper order timestamp must be timezone-aware")
+        if not self.symbol.strip():
+            raise ValueError("paper order symbol must not be empty")
         if not math.isfinite(float(self.quantity)) or self.quantity <= 0:
             raise ValueError("quantity must be positive and finite")
         if (
@@ -90,6 +92,8 @@ class PaperPosition:
     realized_pnl: float = 0.0
 
     def __post_init__(self) -> None:
+        if not self.symbol.strip():
+            raise ValueError("paper position symbol must not be empty")
         if self.direction is StrategyDirection.NO_TRADE:
             raise ValueError("paper position direction cannot be NO_TRADE")
         if not math.isfinite(float(self.quantity)) or self.quantity < 0:
@@ -335,8 +339,9 @@ class PaperTradingRuntime:
         position = self._positions.get(symbol)
         if position is None:
             return 0.0
-        if price <= 0:
-            raise ValueError("mark price must be positive")
+        price = float(price)
+        if not math.isfinite(price) or price <= 0:
+            raise ValueError("mark price must be positive and finite")
         if position.direction is StrategyDirection.LONG:
             unrealized = (
                 price - position.average_price
