@@ -304,7 +304,7 @@ The supplied STOCK BOT roadmap defines later phases for:
 - Phase 23 — Continuous Model Monitoring (engineering boundary implemented; operational evidence-dependent)
 - Phase 24 — Safety / Kill-Switch (engineering boundary implemented; operational exercise evidence-dependent)
 - Phase 25 — Broker Integration (sandbox engineering boundary implemented; live integration locked)
-- Phase 26 — Controlled Live Deployment
+- Phase 26 — Controlled Live Deployment (governance infrastructure implemented; live execution remains locked)
 - Phase 27 — Advanced Intelligence
 
 Several control primitives for these later phases already exist in the repository (monitoring, safety, reconciliation, model-registry metadata, paper evidence, and research learning proposals), but that does **not** mean the complete phase objectives are empirically or operationally complete.
