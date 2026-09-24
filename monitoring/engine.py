@@ -9,13 +9,12 @@ mutate strategy/model state, promote models, or enable live execution.
 References:
     STOCK_BOT Phase 23 Continuous Model Monitoring.
     TRADING_SPECIFICATION.md.
-    execution.safety / execution.control.
-    journal.models.
 """
 from __future__ import annotations
 
 from collections import Counter
 from datetime import datetime, timezone
+from math import inf
 from typing import Iterable, Mapping, Sequence
 import uuid
 
@@ -42,7 +41,6 @@ from monitoring.models import (
     SystemHealth,
 )
 from monitoring.performance import performance_from_records, grouped_net_pnl
-from monitoring.reporting import build_trade_report
 from monitoring.rules import MonitoringPolicy
 from monitoring.store import MonitoringStore
 
@@ -68,24 +66,19 @@ class MonitoringEngine:
     # ------------------------------------------------------------------
     # M-1 SYSTEM
     # ------------------------------------------------------------------
-    def heartbeat(
-        self,
-        component: str,
-        *,
-        timestamp: datetime | None = None,
-    ) -> SystemHealth:
+    def heartbeat(self, component: str, *, timestamp: datetime | None = None) -> SystemHealth:
         """Record a component heartbeat and return current aggregate health."""
-        heartbeat = self.health_monitor.heartbeat(
-            component,
-            timestamp=timestamp,
-        )
+        heartbeat = self.health_monitor.heartbeat(component, timestamp=timestamp)
         self.emit(
             event_type="SYSTEM_HEARTBEAT",
             source=heartbeat.component,
             timestamp=heartbeat.timestamp,
             payload={"component": heartbeat.component},
         )
-        return self.health_monitor.health(timestamp=heartbeat.timestamp)
+        return self.health_monitor.health(
+            now=heartbeat.timestamp,
+            timeout_seconds=self.policy.max_heartbeat_age_seconds,
+        )
 
     def build_health(
         self,
@@ -94,20 +87,23 @@ class MonitoringEngine:
         heartbeat_age_seconds: float | None = None,
         timestamp: datetime | None = None,
         expected_components: tuple[str, ...] = (),
-        heartbeat_timeout_seconds: float = 30.0,
+        heartbeat_timeout_seconds: float | None = None,
     ) -> SystemHealth:
         """Build aggregate M-1 health from explicit states or heartbeats."""
         if components is None:
             health = self.health_monitor.health(
                 now=timestamp,
-                timeout_seconds=heartbeat_timeout_seconds,
+                timeout_seconds=(
+                    self.policy.max_heartbeat_age_seconds
+                    if heartbeat_timeout_seconds is None
+                    else heartbeat_timeout_seconds
+                ),
                 expected_components=expected_components,
             )
         else:
             normalized = {
                 name: (
-                    value
-                    if isinstance(value, ComponentHealth)
+                    value if isinstance(value, ComponentHealth)
                     else ComponentHealth(str(value))
                 )
                 for name, value in components.items()
@@ -163,12 +159,14 @@ class MonitoringEngine:
         correlation_id: str | None = None,
     ) -> tuple[Alert, ...]:
         """Observe one market-data health sample."""
-        self.metrics.increment("market_data_observations")
-        self.metrics.increment("missing_candles", missing_candles)
-        self.metrics.increment("duplicate_events", duplicate_events)
-        self.metrics.increment("invalid_ohlc", invalid_ohlc_count)
-        self.metrics.increment("connection_failures", connection_failures)
-        self.metrics.increment("reconnects", reconnect_count)
+        for name, value in (
+            ("missing_candles", missing_candles),
+            ("duplicate_events", duplicate_events),
+            ("invalid_ohlc", invalid_ohlc_count),
+            ("connection_failures", connection_failures),
+            ("reconnects", reconnect_count),
+        ):
+            self.metrics.increment(name, value)
         if feed_latency_ms is not None:
             self.metrics.observe("feed_latency_ms", feed_latency_ms)
 
@@ -183,6 +181,7 @@ class MonitoringEngine:
             reconnect_count=reconnect_count,
             clock_drift_ms=clock_drift_ms,
         )
+        self.metrics.increment("market_data_observations")
         return self.inspect_snapshot(
             snapshot,
             source="market_data",
@@ -214,7 +213,6 @@ class MonitoringEngine:
             value=value,
             threshold=selected_threshold,
             exceeded=value > selected_threshold,
-            method="PSI",
         )
         self.metrics.increment("feature_drift_checks")
         if report.exceeded:
@@ -228,18 +226,16 @@ class MonitoringEngine:
         *,
         threshold: float | None = None,
     ) -> tuple[DriftReport, ...]:
-        """Measure every feature present in both reference and current data."""
-        reports: list[DriftReport] = []
-        for name in sorted(set(reference) & set(current)):
-            reports.append(
-                self.feature_drift(
-                    name,
-                    reference[name],
-                    current[name],
-                    threshold=threshold,
-                )
+        """Measure all shared feature distributions."""
+        return tuple(
+            self.feature_drift(
+                name,
+                reference[name],
+                current[name],
+                threshold=threshold,
             )
-        return tuple(reports)
+            for name in sorted(set(reference) & set(current))
+        )
 
     def observe_features(
         self,
@@ -296,7 +292,7 @@ class MonitoringEngine:
         *,
         threshold: float | None = None,
     ) -> dict[str, float | bool | int]:
-        """Measure prediction distribution drift using PSI."""
+        """Measure model prediction-distribution drift using PSI."""
         value = population_stability_index(reference, current)
         selected_threshold = (
             self.policy.max_prediction_psi
@@ -327,36 +323,40 @@ class MonitoringEngine:
         model_brier_score: float | None = None,
         calibration_error: float | None = None,
     ) -> tuple[Alert, ...]:
-        """Record Phase-9 prediction telemetry in the common monitoring stream."""
+        """Record Phase-9 PredictionTelemetry in the common stream."""
         payload = prediction_payload(telemetry)
         timestamp = telemetry.timestamp
-        symbol = telemetry.symbol
-        correlation_id = f"{symbol}:{telemetry.model_version}:{telemetry.timestamp.isoformat()}"
+        event_timestamp = (
+            timestamp.to_pydatetime()
+            if hasattr(timestamp, "to_pydatetime")
+            else timestamp
+        )
+        correlation_id = (
+            f"{telemetry.symbol}:{telemetry.model_version}:"
+            f"{timestamp.isoformat()}"
+        )
         self.metrics.increment("model_predictions")
-
-        event = self.emit(
+        self.emit(
             event_type="MODEL_PREDICTION",
             source="prediction_model",
-            symbol=symbol,
+            symbol=telemetry.symbol,
             correlation_id=correlation_id,
-            timestamp=timestamp.to_pydatetime() if hasattr(timestamp, "to_pydatetime") else timestamp,
+            timestamp=event_timestamp,
             payload=payload,
         )
-
-        snapshot = MonitoringSnapshot(
-            timestamp=timestamp.to_pydatetime() if hasattr(timestamp, "to_pydatetime") else timestamp,
-            prediction_psi=prediction_psi,
-            model_accuracy=model_accuracy,
-            model_balanced_accuracy=model_balanced_accuracy,
-            model_f1=model_f1,
-            model_log_loss=model_log_loss,
-            model_brier_score=model_brier_score,
-            calibration_error=calibration_error,
-        )
         return self.inspect_snapshot(
-            snapshot,
+            MonitoringSnapshot(
+                timestamp=event_timestamp,
+                prediction_psi=prediction_psi,
+                model_accuracy=model_accuracy,
+                model_balanced_accuracy=model_balanced_accuracy,
+                model_f1=model_f1,
+                model_log_loss=model_log_loss,
+                model_brier_score=model_brier_score,
+                calibration_error=calibration_error,
+            ),
             source="prediction_model",
-            correlation_id=event.correlation_id,
+            correlation_id=correlation_id,
         )
 
     def observe_model_metrics(
@@ -371,7 +371,7 @@ class MonitoringEngine:
         calibration_error: float | None = None,
         correlation_id: str | None = None,
     ) -> tuple[Alert, ...]:
-        """Observe aggregate model-evaluation telemetry."""
+        """Observe aggregate model evaluation metrics."""
         return self.inspect_snapshot(
             MonitoringSnapshot(
                 timestamp=timestamp,
@@ -395,13 +395,12 @@ class MonitoringEngine:
         *,
         correlation_id: str | None = None,
     ) -> MonitoringEvent:
-        """Record a Strategy/Journal decision snapshot, including NO_TRADE."""
-        direction = str(decision.direction)
-        direction = getattr(decision.direction, "value", direction)
-        if direction == "NO_TRADE":
-            self.metrics.increment("no_trade_decisions")
-        else:
-            self.metrics.increment("actionable_decisions")
+        """Record a Strategy/Journal decision, including NO_TRADE."""
+        direction = getattr(decision.direction, "value", str(decision.direction))
+        self.metrics.increment(
+            "no_trade_decisions" if direction == "NO_TRADE"
+            else "actionable_decisions"
+        )
         return self.emit(
             event_type="STRATEGY_DECISION",
             source="strategy_engine",
@@ -411,11 +410,8 @@ class MonitoringEngine:
             payload=decision_payload(decision),
         )
 
-    def performance(
-        self,
-        records: Iterable[object],
-    ) -> PerformanceSnapshot:
-        """Aggregate completed journal outcomes for M-5/M-8 reporting."""
+    def performance(self, records: Iterable[object]) -> PerformanceSnapshot:
+        """Aggregate completed journal outcomes."""
         snapshot = performance_from_records(records)
         self.metrics.increment("performance_calculations")
         return snapshot
@@ -423,9 +419,11 @@ class MonitoringEngine:
     def strategy_breakdown(
         self,
         records: Iterable[object],
+        *,
+        group_by: str = "direction",
     ) -> Mapping[str, float]:
-        """Return net P&L grouped by any stable journal field."""
-        return grouped_net_pnl(records, "direction")
+        """Return net P&L grouped by a stable journal field."""
+        return grouped_net_pnl(records, group_by)
 
     # ------------------------------------------------------------------
     # M-6 RISK
@@ -443,7 +441,7 @@ class MonitoringEngine:
         kill_switch_active: bool = False,
         correlation_id: str | None = None,
     ) -> tuple[Alert, ...]:
-        """Observe risk utilization; Risk Engine remains authoritative."""
+        """Observe Risk Engine state; Risk remains authoritative."""
         self.metrics.increment("risk_observations")
         return self.inspect_snapshot(
             MonitoringSnapshot(
@@ -467,7 +465,7 @@ class MonitoringEngine:
         timestamp: datetime | None = None,
         correlation_id: str | None = None,
     ) -> MonitoringEvent:
-        """Record independent SafetyGate state without changing that decision."""
+        """Record independent SafetyGate state without changing it."""
         if not decision.allowed:
             self.metrics.increment("safety_blocks")
         return self.emit(
@@ -500,33 +498,40 @@ class MonitoringEngine:
         correlation_id: str | None = None,
     ) -> tuple[Alert, ...]:
         """Observe order lifecycle and reconciliation telemetry."""
-        submitted = max(orders_submitted, 0)
+        if orders_submitted < 0 or orders_filled < 0 or orders_rejected < 0 or partial_fills < 0:
+            raise ValueError("execution counters must be non-negative")
         rejection_rate = (
-            orders_rejected / submitted
-            if submitted
+            orders_rejected / orders_submitted
+            if orders_submitted
             else None
         )
-        snapshot = MonitoringSnapshot(
-            timestamp=timestamp,
-            orders_submitted=orders_submitted,
-            orders_filled=orders_filled,
-            orders_rejected=orders_rejected,
-            partial_fill_count=partial_fills,
-            execution_latency_ms=execution_latency_ms,
-            slippage_bps=slippage_bps,
-            order_rejection_rate=rejection_rate,
-            reconciliation_mismatch=reconciliation_mismatch,
-        )
-        self.metrics.increment("orders_submitted", orders_submitted)
-        self.metrics.increment("orders_filled", orders_filled)
-        self.metrics.increment("orders_rejected", orders_rejected)
-        self.metrics.increment("partial_fills", partial_fills)
+        if orders_filled + orders_rejected > orders_submitted:
+            raise ValueError("filled + rejected orders cannot exceed submitted orders")
+
+        for name, amount in (
+            ("orders_submitted", orders_submitted),
+            ("orders_filled", orders_filled),
+            ("orders_rejected", orders_rejected),
+            ("partial_fills", partial_fills),
+        ):
+            self.metrics.increment(name, amount)
         if execution_latency_ms is not None:
             self.metrics.observe("execution_latency_ms", execution_latency_ms)
         if slippage_bps is not None:
             self.metrics.observe("slippage_bps", slippage_bps)
+
         return self.inspect_snapshot(
-            snapshot,
+            MonitoringSnapshot(
+                timestamp=timestamp,
+                orders_submitted=orders_submitted,
+                orders_filled=orders_filled,
+                orders_rejected=orders_rejected,
+                partial_fill_count=partial_fills,
+                execution_latency_ms=execution_latency_ms,
+                slippage_bps=slippage_bps,
+                order_rejection_rate=rejection_rate,
+                reconciliation_mismatch=reconciliation_mismatch,
+            ),
             source="execution_engine",
             correlation_id=correlation_id,
         )
@@ -537,22 +542,36 @@ class MonitoringEngine:
         *,
         timestamp: datetime | None = None,
         correlation_id: str | None = None,
-    ) -> MonitoringEvent:
-        """Record authoritative local/broker reconciliation results."""
-        if not report.safe:
+    ) -> tuple[Alert, MonitoringEvent] | MonitoringEvent:
+        """Observe authoritative reconciliation state.
+
+        A mismatch is emitted as an emergency monitoring alert but the method
+        does not mutate execution state.
+        """
+        safe = bool(report.safe)
+        if not safe:
             self.metrics.increment("reconciliation_mismatches")
-        return self.emit(
+            alert = self._alert(
+                timestamp=timestamp or datetime.now(timezone.utc),
+                severity=AlertSeverity.EMERGENCY,
+                code="POSITION_RECONCILIATION_MISMATCH",
+                source="reconciliation",
+                message="Local and authoritative position state does not reconcile.",
+                correlation_id=correlation_id,
+                details={"mismatches": list(report.mismatches)},
+            )
+        else:
+            alert = None
+
+        event = self.emit(
             event_type="RECONCILIATION",
             source="reconciliation",
             timestamp=timestamp or datetime.now(timezone.utc),
             correlation_id=correlation_id,
-            severity=(
-                AlertSeverity.INFO
-                if report.safe
-                else AlertSeverity.EMERGENCY
-            ),
+            severity=AlertSeverity.INFO if safe else AlertSeverity.EMERGENCY,
             payload=reconciliation_payload(report),
         )
+        return (alert, event) if alert is not None else event
 
     # ------------------------------------------------------------------
     # M-8 OUTCOME / LEARNING
@@ -563,7 +582,7 @@ class MonitoringEngine:
         *,
         correlation_id: str | None = None,
     ) -> MonitoringEvent:
-        """Record one completed journal outcome."""
+        """Record one completed Phase-16 journal outcome."""
         self.metrics.increment("completed_outcomes")
         return self.emit(
             event_type="TRADE_OUTCOME",
@@ -589,9 +608,7 @@ class MonitoringEngine:
             source="learning_engine",
             timestamp=timestamp or datetime.now(timezone.utc),
             correlation_id=correlation_id,
-            payload={
-                "experience_count": len(items),
-            },
+            payload={"experience_count": len(items)},
         )
 
     def observe_candidate_proposals(
@@ -601,7 +618,7 @@ class MonitoringEngine:
         timestamp: datetime | None = None,
         correlation_id: str | None = None,
     ) -> MonitoringEvent:
-        """Record candidate-improvement proposals without promoting anything."""
+        """Record Phase-19 proposals without approval/promotion authority."""
         items = tuple(proposals)
         self.metrics.increment("candidate_proposals", len(items))
         return self.emit(
@@ -613,7 +630,7 @@ class MonitoringEngine:
         )
 
     # ------------------------------------------------------------------
-    # CORE SNAPSHOT / ALERTING
+    # REPORTING / STORAGE
     # ------------------------------------------------------------------
     def emit(
         self,
@@ -648,7 +665,7 @@ class MonitoringEngine:
         source: str = "monitoring_engine",
         correlation_id: str | None = None,
     ) -> tuple[Alert, ...]:
-        """Evaluate a cross-domain snapshot against observational thresholds."""
+        """Evaluate one cross-domain telemetry snapshot."""
         if not isinstance(snapshot, MonitoringSnapshot):
             raise TypeError("snapshot must be MonitoringSnapshot")
 
@@ -662,34 +679,33 @@ class MonitoringEngine:
             message: str,
             details: Mapping,
         ) -> None:
-            if not condition:
-                return
-            alert = self._alert(
-                timestamp=snapshot.timestamp,
-                severity=severity,
-                code=code,
-                source=source,
-                message=message,
-                correlation_id=correlation_id,
-                details=details,
-            )
-            if alert is not None:
-                alerts.append(alert)
+            if condition:
+                alert = self._alert(
+                    timestamp=snapshot.timestamp,
+                    severity=severity,
+                    code=code,
+                    source=source,
+                    message=message,
+                    correlation_id=correlation_id,
+                    details=details,
+                )
+                if alert is not None:
+                    alerts.append(alert)
 
         # M-1
         check(
             snapshot.system_health is ComponentHealth.FAILED,
             severity=AlertSeverity.EMERGENCY,
             code="SYSTEM_HEALTH_FAILED",
-            message="One or more critical STOCK_BOT components have failed.",
+            message="One or more STOCK_BOT components have failed.",
             details={"system_health": snapshot.system_health.value},
         )
         if snapshot.heartbeat_age_seconds is not None:
             check(
-                snapshot.heartbeat_age_seconds > 30.0,
+                snapshot.heartbeat_age_seconds > self.policy.max_heartbeat_age_seconds,
                 severity=AlertSeverity.CRITICAL,
                 code="HEARTBEAT_STALE",
-                message="Monitoring heartbeat age exceeded the operational threshold.",
+                message="Monitoring heartbeat age exceeded threshold.",
                 details={"age_seconds": snapshot.heartbeat_age_seconds},
             )
 
@@ -699,7 +715,7 @@ class MonitoringEngine:
                 snapshot.data_freshness_seconds > self.policy.max_data_freshness_seconds,
                 severity=AlertSeverity.CRITICAL,
                 code="DATA_STALE",
-                message="Market data freshness exceeded monitoring threshold.",
+                message="Market data freshness exceeded threshold.",
                 details={
                     "value_seconds": snapshot.data_freshness_seconds,
                     "threshold_seconds": self.policy.max_data_freshness_seconds,
@@ -766,13 +782,13 @@ class MonitoringEngine:
             )
         if snapshot.feature_stale_rate is not None:
             check(
-                snapshot.feature_stale_rate > self.policy.max_stale_rate,
+                snapshot.feature_stale_rate > self.policy.max_feature_stale_rate,
                 severity=AlertSeverity.WARNING,
                 code="FEATURE_STALE_RATE_HIGH",
                 message="Feature stale-rate exceeded threshold.",
                 details={
                     "value": snapshot.feature_stale_rate,
-                    "threshold": self.policy.max_stale_rate,
+                    "threshold": self.policy.max_feature_stale_rate,
                 },
             )
         check(
@@ -784,30 +800,28 @@ class MonitoringEngine:
         )
 
         # M-4
-        for field_name, code, message in (
-            ("error_rate", "MODEL_ERROR_RATE_HIGH", "Model/inference operational error-rate exceeded threshold."),
-            ("stale_rate", "MODEL_STALE_RATE_HIGH", "Model telemetry stale-rate exceeded threshold."),
-        ):
-            value = getattr(snapshot, field_name)
-            if value is not None:
-                check(
-                    value > (
-                        self.policy.max_error_rate
-                        if field_name == "error_rate"
-                        else self.policy.max_stale_rate
-                    ),
-                    severity=AlertSeverity.CRITICAL,
-                    code=code,
-                    message=message,
-                    details={
-                        "value": value,
-                        "threshold": (
-                            self.policy.max_error_rate
-                            if field_name == "error_rate"
-                            else self.policy.max_stale_rate
-                        ),
-                    },
-                )
+        if snapshot.error_rate is not None:
+            check(
+                snapshot.error_rate > self.policy.max_error_rate,
+                severity=AlertSeverity.CRITICAL,
+                code="MODEL_ERROR_RATE_HIGH",
+                message="Model/inference operational error-rate exceeded threshold.",
+                details={
+                    "value": snapshot.error_rate,
+                    "threshold": self.policy.max_error_rate,
+                },
+            )
+        if snapshot.stale_rate is not None:
+            check(
+                snapshot.stale_rate > self.policy.max_stale_rate,
+                severity=AlertSeverity.CRITICAL,
+                code="MODEL_STALE_RATE_HIGH",
+                message="Model telemetry stale-rate exceeded threshold.",
+                details={
+                    "value": snapshot.stale_rate,
+                    "threshold": self.policy.max_stale_rate,
+                },
+            )
         if snapshot.prediction_psi is not None:
             check(
                 snapshot.prediction_psi > self.policy.max_prediction_psi,
@@ -835,7 +849,7 @@ class MonitoringEngine:
                 snapshot.model_log_loss > self.policy.max_model_log_loss,
                 severity=AlertSeverity.WARNING,
                 code="MODEL_LOG_LOSS_HIGH",
-                message="Observed model log loss exceeded monitoring threshold.",
+                message="Observed model log loss exceeded threshold.",
                 details={
                     "value": snapshot.model_log_loss,
                     "threshold": self.policy.max_model_log_loss,
@@ -846,7 +860,7 @@ class MonitoringEngine:
                 snapshot.calibration_error > self.policy.max_calibration_error,
                 severity=AlertSeverity.WARNING,
                 code="MODEL_CALIBRATION_DEGRADED",
-                message="Model calibration error exceeded monitoring threshold.",
+                message="Model calibration error exceeded threshold.",
                 details={
                     "value": snapshot.calibration_error,
                     "threshold": self.policy.max_calibration_error,
@@ -855,11 +869,10 @@ class MonitoringEngine:
 
         # M-5
         check(
-            snapshot.drawdown_pct if hasattr(snapshot, "drawdown_pct") else snapshot.max_drawdown_pct
-            > self.policy.max_drawdown_pct,
+            snapshot.max_drawdown_pct > self.policy.max_drawdown_pct,
             severity=AlertSeverity.CRITICAL,
             code="DRAWDOWN_HIGH",
-            message="Observed drawdown exceeded monitoring threshold.",
+            message="Observed strategy drawdown exceeded monitoring threshold.",
             details={
                 "value_pct": snapshot.max_drawdown_pct,
                 "threshold_pct": self.policy.max_drawdown_pct,
@@ -871,7 +884,10 @@ class MonitoringEngine:
                 severity=AlertSeverity.WARNING,
                 code="WIN_RATE_LOW",
                 message="Observed strategy win-rate is below monitoring floor.",
-                details={"value": snapshot.win_rate, "threshold": self.policy.min_win_rate},
+                details={
+                    "value": snapshot.win_rate,
+                    "threshold": self.policy.min_win_rate,
+                },
             )
         if snapshot.expectancy is not None and self.policy.min_expectancy is not None:
             check(
@@ -879,7 +895,10 @@ class MonitoringEngine:
                 severity=AlertSeverity.WARNING,
                 code="EXPECTANCY_LOW",
                 message="Observed strategy expectancy is below monitoring floor.",
-                details={"value": snapshot.expectancy, "threshold": self.policy.min_expectancy},
+                details={
+                    "value": snapshot.expectancy,
+                    "threshold": self.policy.min_expectancy,
+                },
             )
 
         # M-6
@@ -981,7 +1000,6 @@ class MonitoringEngine:
             payload={
                 "snapshot": snapshot.to_dict(),
                 "alert_codes": [alert.code for alert in alerts],
-                "total_pnl": snapshot.total_pnl,
             },
         )
         return tuple(alerts)
@@ -994,22 +1012,23 @@ class MonitoringEngine:
         drift: Iterable[DriftReport] = (),
         correlation_id: str | None = None,
     ) -> MonitoringReport:
-        """Build the dashboard-ready report for one monitoring point."""
+        """Build a dashboard-ready immutable monitoring report."""
         resolved_health = health or self.build_health(timestamp=snapshot.timestamp)
         alerts = self.inspect_snapshot(
             snapshot,
             source="monitoring_report",
             correlation_id=correlation_id,
         )
-        return build_trade_report(
+        return MonitoringReport(
+            timestamp=snapshot.timestamp,
+            system_health=resolved_health,
             snapshot=snapshot,
-            health=resolved_health,
-            alerts=alerts,
+            alerts=tuple(alerts),
             drift=tuple(drift),
         )
 
     def class_distribution(self, predictions: Iterable[str]) -> Mapping[str, int]:
-        """Return observed model prediction class counts."""
+        """Return observed prediction-class counts."""
         return dict(Counter(predictions))
 
     def alerts(self) -> tuple[Alert, ...]:
@@ -1035,7 +1054,11 @@ class MonitoringEngine:
         correlation_id: str | None,
         details: Mapping,
     ) -> Alert | None:
-        """Create, persist and optionally route one alert with deduplication."""
+        """Create, persist and route one alert.
+
+        The alert is always persisted. AlertManager only suppresses repeated
+        external notification delivery.
+        """
         alert = Alert(
             alert_id=str(uuid.uuid4()),
             timestamp=timestamp,
@@ -1048,5 +1071,5 @@ class MonitoringEngine:
         )
         self.store.append_alert(alert)
         self.metrics.increment("alerts_generated")
-        self.alert_manager.route(alert)
+        self.alert_manager.route(alert, now=timestamp)
         return alert
