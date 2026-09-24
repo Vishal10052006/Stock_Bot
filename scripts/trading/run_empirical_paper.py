@@ -132,8 +132,9 @@ def main() -> None:
     )
     operational_errors = int(sidecar.get("operational_errors", 0))
     stale_events = int(sidecar.get("stale_events", 0))
+    if operational_events is not None and operational_events < 0:
+        raise ValueError("operational_events must be non-negative")
     for name, value in (
-        ("operational_events", operational_events),
         ("operational_errors", operational_errors),
         ("stale_events", stale_events),
     ):
