@@ -588,16 +588,18 @@ def test_reverse_risk_sizes_only_the_new_direction() -> None:
 
     assert assessment.decision.status.value == "APPROVED"
     assert assessment.closing_quantity == 10.0
-    assert assessment.opening_position_size == 125.0
-    assert assessment.position_size == 135.0
-    assert assessment.gross_exposure_after == 13_500.0
+    assert assessment.opening_position_size == 5.0
+    assert assessment.position_size == 15.0
+    assert assessment.requested_projected_quantity == -5.0
+    assert assessment.approved_projected_quantity == -5.0
+    assert assessment.gross_exposure_after == 1_500.0
 
 
 def test_reverse_gross_limit_resizes_only_new_direction() -> None:
     context = RiskPositionContext(
         transition=RiskPositionTransition.REVERSE,
         existing_quantity=10.0,
-        projected_quantity=-5.0,
+        projected_quantity=-125.0,
     )
 
     assessment = RiskEngine(
@@ -612,10 +614,13 @@ def test_reverse_gross_limit_resizes_only_new_direction() -> None:
     )
 
     assert assessment.decision.status.value == "APPROVED"
+    assert assessment.decision.action is RiskAction.RESIZE
     assert assessment.closing_quantity == 10.0
-    assert assessment.opening_position_size == 10.0
-    assert assessment.position_size == 20.0
-    assert assessment.gross_exposure_after == 75_000.0
+    assert assessment.opening_position_size == 4.0
+    assert assessment.position_size == 14.0
+    assert assessment.requested_projected_quantity == -125.0
+    assert assessment.approved_projected_quantity == -4.0
+    assert assessment.gross_exposure_after == 74_400.0
 
 
 def test_reverse_does_not_consume_an_open_position_slot() -> None:
@@ -706,3 +711,41 @@ def test_position_context_accepts_correct_flatten_direction_for_short() -> None:
     )
 
     assert assessment.decision.status.value == "APPROVED"
+
+
+def test_risk_cannot_increase_portfolio_open_intent() -> None:
+    context = RiskPositionContext(
+        transition=RiskPositionTransition.OPEN,
+        existing_quantity=0.0,
+        projected_quantity=5.0,
+    )
+
+    assessment = RiskEngine().evaluate(
+        make_input(
+            position_context=context,
+        )
+    )
+
+    assert assessment.decision.status.value == "APPROVED"
+    assert assessment.position_size == 5.0
+    assert assessment.requested_projected_quantity == 5.0
+    assert assessment.approved_projected_quantity == 5.0
+
+
+def test_risk_cannot_increase_portfolio_increase_intent() -> None:
+    context = RiskPositionContext(
+        transition=RiskPositionTransition.INCREASE,
+        existing_quantity=10.0,
+        projected_quantity=15.0,
+    )
+
+    assessment = RiskEngine().evaluate(
+        make_input(
+            symbol_already_open=True,
+            position_context=context,
+        )
+    )
+
+    assert assessment.decision.status.value == "APPROVED"
+    assert assessment.position_size == 5.0
+    assert assessment.approved_projected_quantity == 15.0
