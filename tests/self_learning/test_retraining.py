@@ -18,9 +18,12 @@ from self_learning.retraining import (
 
 
 def _dataset() -> TrainingDataset:
+    # The production splitter uses a 60-minute purge on both sides of
+    # each boundary. Keep the fixture large enough that the validation
+    # interval remains non-empty under that real protocol.
     timestamps = pd.date_range(
         "2026-01-01 09:15",
-        periods=72,
+        periods=240,
         freq="5min",
     )
     rows: list[dict[str, object]] = []
@@ -72,7 +75,7 @@ def _experiment() -> ExperimentSpec:
         risk_version="risk-v1",
         execution_version="execution-v1",
         period_start="2026-01-01T09:15:00",
-        period_end="2026-01-01T15:10:00",
+        period_end="2026-01-02T05:10:00",
         symbols=("AAA", "BBB"),
         method="chronological-phase9-retraining",
         changed_component="model",
