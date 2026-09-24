@@ -150,6 +150,45 @@ def test_larger_reversal_from_short_opens_residual_long_position() -> None:
     assert position.realized_pnl == 100.0
 
 
+
+def test_fees_are_counted_once_in_account_and_position_pnl():
+    runtime = PaperTradingRuntime(
+        config=PaperTradingConfig(slippage_bps=0.0, fee_bps=10.0)
+    )
+    runtime.submit(
+        _authorization(StrategyDirection.LONG, "2026-01-01 09:15:00+05:30"),
+        price=100.0, quantity=10.0,
+    )
+    assert runtime.realized_pnl == -1.0
+    assert runtime.position("ITC").realized_pnl == -1.0
+    assert runtime.mark_to_market("ITC", 100.0) == -1.0
+    runtime.submit(
+        _authorization(StrategyDirection.SHORT, "2026-01-01 09:20:00+05:30"),
+        price=110.0, quantity=10.0,
+    )
+    assert runtime.realized_pnl == 97.9
+    assert runtime.position("ITC").quantity == 0.0
+    assert runtime.position("ITC").realized_pnl == 97.9
+    assert runtime.mark_to_market("ITC", 110.0) == 97.9
+
+def test_same_direction_entry_fees_accumulate_once():
+    runtime = PaperTradingRuntime(
+        config=PaperTradingConfig(slippage_bps=0.0, fee_bps=10.0)
+    )
+    runtime.submit(_authorization(StrategyDirection.LONG, "2026-01-01 09:15:00+05:30"), price=100.0, quantity=10.0)
+    runtime.submit(_authorization(StrategyDirection.LONG, "2026-01-01 09:20:00+05:30"), price=100.0, quantity=10.0)
+    assert runtime.realized_pnl == -2.0
+    assert runtime.position("ITC").realized_pnl == -2.0
+    assert runtime.mark_to_market("ITC", 100.0) == -2.0
+
+def test_paper_runtime_rejects_non_finite_inputs():
+    import pytest
+    runtime = PaperTradingRuntime()
+    with pytest.raises(ValueError, match="finite"):
+        runtime.submit(_authorization(StrategyDirection.LONG, "2026-01-01 09:15:00+05:30"), price=float("nan"))
+    with pytest.raises(ValueError, match="finite"):
+        runtime.account_snapshot({"ITC": float("inf")})
+
 def test_authorized_paper_runtime_uses_risk_approved_quantity_by_default() -> None:
     runtime = PaperTradingRuntime(
         config=PaperTradingConfig(slippage_bps=0.0, fee_bps=0.0)
