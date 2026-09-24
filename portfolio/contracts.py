@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
+
+from portfolio.transition import PositionTransition
 import hashlib
 import json
 import math
@@ -146,6 +148,7 @@ class PortfolioDecision:
     current_gross_exposure_fraction: float
     projected_gross_exposure_fraction: float
     projected_position_count: int
+    position_transition: PositionTransition
     fingerprint: str = field(init=False)
 
     def __post_init__(self) -> None:
@@ -158,6 +161,7 @@ class PortfolioDecision:
             "current_gross_exposure_fraction": self.current_gross_exposure_fraction,
             "projected_gross_exposure_fraction": self.projected_gross_exposure_fraction,
             "projected_position_count": self.projected_position_count,
+            "position_transition": self.position_transition.value,
         }
         canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
         object.__setattr__(
