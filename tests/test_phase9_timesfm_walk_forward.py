@@ -37,6 +37,7 @@ def _write_inputs(tmp_path: Path) -> tuple[Path, Path]:
         {
             "timestamp": timestamps,
             "symbol": ["ITC"] * len(timestamps),
+            "decision_close": np.linspace(100.0, 108.0, len(timestamps)),
             "future_timestamp": timestamps + pd.Timedelta(minutes=60),
             "future_return": [0.01] * len(timestamps),
             "horizon_bars": [FROZEN_HORIZON_BARS] * len(timestamps),
@@ -92,7 +93,7 @@ def test_session_history_never_uses_current_or_future_rows(tmp_path: Path) -> No
 
     assert history is not None
     assert len(history) == FROZEN_CONTEXT_LENGTH
-    assert np.isclose(history[-1], merged.iloc[63]["close"])
+    assert np.isclose(history[-1], merged.iloc[63]["decision_close"])
 
 
 def test_session_history_resets_across_trading_days(tmp_path: Path) -> None:
@@ -111,7 +112,7 @@ def test_session_history_resets_across_trading_days(tmp_path: Path) -> None:
     )
 
     assert history is not None
-    assert np.isclose(history[-1], combined.iloc[80 + 63]["close"])
+    assert np.isclose(history[-1], combined.iloc[80 + 63]["decision_close"])
 
 
 def test_forecast_conversion_produces_return_and_interval(tmp_path: Path) -> None:
