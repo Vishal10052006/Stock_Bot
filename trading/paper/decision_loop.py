@@ -20,7 +20,7 @@ from execution.trading_execution import (
     authorize_risk_decision,
 )
 from paper.runtime import PaperOrder, PaperTradingRuntime
-from trading.risk.engine import RiskEngine
+from trading.risk.engine import RiskAssessment, RiskEngine
 from trading.risk.gate import RiskDecision, RiskDecisionStatus
 from trading.risk.pipeline import evaluate_strategy_candidate_risk
 from trading.strategy.engine import StrategyEngine
@@ -35,6 +35,7 @@ class PaperDecisionStep:
     risk: RiskDecision
     authorization: ExecutionAuthorization
     order: PaperOrder | None
+    risk_assessment: RiskAssessment | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -233,6 +234,7 @@ class PaperDecisionLoop:
                     risk=risk,
                     authorization=authorization,
                     order=order,
+                    risk_assessment=assessment,
                 )
             )
 
