@@ -506,8 +506,6 @@ class ExecutionEngine:
 
         if client_order_id != order.client_order_id:
             raise ValueError("broker response client_order_id mismatch")
-        except (AttributeError, TypeError, ValueError) as exc:
-            raise ValueError(f"malformed broker response: {exc}") from exc
 
         if not broker_order_id:
             raise ValueError("broker response broker_order_id must not be empty")
