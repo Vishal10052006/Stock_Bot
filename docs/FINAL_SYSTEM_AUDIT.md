@@ -300,7 +300,7 @@ The supplied STOCK BOT roadmap defines later phases for:
 - Phase 19 — Candidate Improvement Engine
 - Phase 20 — Model Registry
 - Phase 21 — Live Signal Engine
-- Phase 22 — Paper Trading
+- Phase 22 — Paper Trading (engineering boundary implemented; empirical sufficiency evidence-dependent)
 - Phase 23 — Continuous Model Monitoring
 - Phase 24 — Safety / Kill-Switch
 - Phase 25 — Broker Integration
@@ -314,7 +314,7 @@ In particular:
 - Phase 25 broker integration remains intentionally locked.
 - Phase 26 controlled live deployment must not be treated as complete.
 - Phase 27 advanced intelligence is optional and must not be prioritized over robustness.
-- Phase 22 paper evidence requires real chronological paper observations.
+- Phase 22 paper trading now has a reproducible empirical runner, chronological input validation, append-only evidence persistence, and structural quality reporting; empirical sufficiency still requires real paper observations.
 - Phase 23 monitoring requires real operational streams/measurements.
 - Phase 17–20 need sufficient linked trade data and controlled validation before any automatic improvement authority is granted.
 
