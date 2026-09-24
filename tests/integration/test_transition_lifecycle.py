@@ -1,0 +1,352 @@
+"""End-to-end signed position transition lifecycle tests.
+
+These tests verify the frozen boundary:
+
+    Portfolio -> Risk -> Safety/Execution Authorization -> Paper Fill
+                         -> actual signed position -> next Portfolio state
+
+The Portfolio state is rebuilt from the actual paper fill, not from the
+requested/projected intent. No broker I/O is involved.
+"""
+
+from __future__ import annotations
+
+import pandas as pd
+import pytest
+
+from execution.trading_execution import (
+    ExecutionAuthorization,
+    ExecutionAuthorizationStatus,
+    authorize_risk_decision,
+)
+from paper.runtime import PaperTradingConfig, PaperTradingRuntime
+from portfolio.contracts import (
+    PortfolioAction,
+    PortfolioLimits,
+    PortfolioPosition,
+    PortfolioSnapshot,
+    PositionTransition,
+    TradeIntent,
+)
+from portfolio.manager import PortfolioManager
+from trading.risk.contracts import RiskPositionContext, RiskPositionTransition
+from trading.risk.engine import RiskEngine, RiskInput
+from trading.signals.models import CandidateDirection, TradeCandidate
+from trading.strategy.models import StrategyDirection
+
+
+TIMESTAMP = pd.Timestamp("2026-09-24 10:00:00+05:30")
+PRICE = 100.0
+
+
+def _candidate(
+    *,
+    timestamp: pd.Timestamp,
+    side: str,
+) -> TradeCandidate:
+    direction = (
+        CandidateDirection.LONG
+        if side == "BUY"
+        else CandidateDirection.SHORT
+    )
+    stop = 96.0 if direction is CandidateDirection.LONG else 104.0
+    return TradeCandidate(
+        timestamp=timestamp,
+        symbol="ITC",
+        direction=direction,
+        entry_price=PRICE,
+        stop_price=stop,
+        policy_version="transition_test_v1.0",
+    )
+
+
+def _risk_transition(transition: PositionTransition) -> RiskPositionTransition:
+    return RiskPositionTransition[transition.value]
+
+
+def _portfolio_snapshot(
+    runtime: PaperTradingRuntime,
+    *,
+    timestamp: pd.Timestamp,
+) -> PortfolioSnapshot:
+    """Project actual paper positions into the Portfolio contract."""
+    positions: list[PortfolioPosition] = []
+    for position in runtime.positions:
+        if position.quantity == 0.0:
+            continue
+        signed_quantity = (
+            position.quantity
+            if position.direction is StrategyDirection.LONG
+            else -position.quantity
+        )
+        positions.append(
+            PortfolioPosition(
+                symbol=position.symbol,
+                quantity=signed_quantity,
+                mark_price=PRICE,
+            )
+        )
+    return PortfolioSnapshot(
+        as_of=timestamp,
+        equity=runtime.account_snapshot({"ITC": PRICE})[0],
+        positions=tuple(positions),
+    )
+
+
+def _execute_intent(
+    *,
+    runtime: PaperTradingRuntime,
+    portfolio: PortfolioSnapshot,
+    intent: TradeIntent,
+    timestamp: pd.Timestamp,
+) -> tuple[PortfolioSnapshot, PositionTransition]:
+    """Run one intent through Portfolio -> Risk -> Authorization -> Paper."""
+    portfolio_decision = PortfolioManager(PortfolioLimits()).evaluate(
+        portfolio,
+        intent,
+    )
+
+    assert portfolio_decision.action is PortfolioAction.APPROVE
+
+    transition = portfolio_decision.position_transition
+    existing = next(
+        (
+            position
+            for position in portfolio.positions
+            if position.symbol == intent.symbol
+        ),
+        None,
+    )
+    context = RiskPositionContext(
+        transition=_risk_transition(transition),
+        existing_quantity=existing.quantity if existing else 0.0,
+        projected_quantity=(
+            existing.quantity if existing else 0.0
+        ) + (intent.quantity if intent.side == "BUY" else -intent.quantity),
+    )
+
+    candidate = _candidate(timestamp=timestamp, side=intent.side)
+    risk = RiskEngine().evaluate(
+        RiskInput(
+            timestamp=timestamp,
+            symbol="ITC",
+            candidate=candidate,
+            available_equity=portfolio.equity,
+            day_start_equity=portfolio.equity,
+            open_positions=len(portfolio.positions),
+            symbol_already_open=existing is not None,
+            position_context=context,
+            gross_exposure=portfolio.gross_exposure,
+        )
+    )
+
+    assert risk.decision.status.value == "APPROVED"
+    assert risk.decision.position_transition is context.transition
+    assert risk.decision.approved_projected_quantity is not None
+
+    authorization = authorize_risk_decision(
+        risk.decision,
+        risk_decision_id=f"{timestamp.isoformat()}:ITC",
+    )
+    assert authorization.status is ExecutionAuthorizationStatus.AUTHORIZED
+    assert authorization.approved_quantity == risk.decision.approved_quantity
+    assert authorization.position_transition is context.transition
+
+    order = runtime.submit(
+        authorization,
+        price=PRICE,
+    )
+    assert order.status.value == "FILLED"
+    assert order.quantity == authorization.approved_quantity
+
+    actual = _portfolio_snapshot(runtime, timestamp=timestamp)
+    return actual, transition
+
+
+@pytest.mark.parametrize(
+    ("start", "side", "order_quantity", "expected"),
+    [
+        (0.0, "BUY", 10.0, 10.0),
+        (10.0, "BUY", 5.0, 15.0),
+        (15.0, "SELL", 10.0, 5.0),
+        (5.0, "SELL", 5.0, 0.0),
+        (10.0, "SELL", 15.0, -5.0),
+    ],
+)
+def test_long_side_transition_matrix_matches_actual_paper_position(
+    start: float,
+    side: str,
+    order_quantity: float,
+    expected: float,
+) -> None:
+    """Each transition must produce the expected actual signed position."""
+    runtime = PaperTradingRuntime(
+        config=PaperTradingConfig(slippage_bps=0.0, fee_bps=0.0)
+    )
+
+    if start != 0.0:
+        bootstrap_side = "BUY" if start > 0 else "SELL"
+        bootstrap = TradeIntent(
+            "ITC",
+            abs(start),
+            PRICE,
+            bootstrap_side,
+            decision_id="bootstrap",
+        )
+        portfolio, _ = _execute_intent(
+            runtime=runtime,
+            portfolio=PortfolioSnapshot(
+                as_of=TIMESTAMP,
+                equity=100_000.0,
+                positions=(),
+            ),
+            intent=bootstrap,
+            timestamp=TIMESTAMP,
+        )
+    else:
+        portfolio = PortfolioSnapshot(
+            as_of=TIMESTAMP,
+            equity=100_000.0,
+            positions=(),
+        )
+
+    intent = TradeIntent(
+        "ITC",
+        order_quantity,
+        PRICE,
+        side,
+        decision_id=f"{side}-{order_quantity}",
+    )
+    actual, transition = _execute_intent(
+        runtime=runtime,
+        portfolio=portfolio,
+        intent=intent,
+        timestamp=TIMESTAMP + pd.Timedelta(minutes=1),
+    )
+
+    assert transition in {
+        PositionTransition.OPEN,
+        PositionTransition.INCREASE,
+        PositionTransition.REDUCE,
+        PositionTransition.FLATTEN,
+        PositionTransition.REVERSE,
+    }
+
+    position = next(
+        (p for p in actual.positions if p.symbol == "ITC"),
+        None,
+    )
+    actual_quantity = position.quantity if position is not None else 0.0
+    assert actual_quantity == expected
+
+
+def test_complete_long_lifecycle_uses_actual_fill_as_next_portfolio_state() -> None:
+    """OPEN -> INCREASE -> REDUCE -> FLATTEN ends exactly at flat."""
+    runtime = PaperTradingRuntime(
+        config=PaperTradingConfig(slippage_bps=0.0, fee_bps=0.0)
+    )
+    portfolio = PortfolioSnapshot(
+        as_of=TIMESTAMP,
+        equity=100_000.0,
+        positions=(),
+    )
+
+    steps = [
+        ("BUY", 10.0, 10.0, PositionTransition.OPEN),
+        ("BUY", 5.0, 15.0, PositionTransition.INCREASE),
+        ("SELL", 10.0, 5.0, PositionTransition.REDUCE),
+        ("SELL", 5.0, 0.0, PositionTransition.FLATTEN),
+    ]
+
+    for index, (side, quantity, expected, transition_expected) in enumerate(steps):
+        portfolio, transition = _execute_intent(
+            runtime=runtime,
+            portfolio=portfolio,
+            intent=TradeIntent(
+                "ITC",
+                quantity,
+                PRICE,
+                side,
+                decision_id=f"lifecycle-{index}",
+            ),
+            timestamp=TIMESTAMP + pd.Timedelta(minutes=index),
+        )
+        assert transition is transition_expected
+        position = next(
+            (p for p in portfolio.positions if p.symbol == "ITC"),
+            None,
+        )
+        assert (position.quantity if position else 0.0) == expected
+
+
+def test_complete_short_lifecycle_and_reverse_to_long() -> None:
+    """OPEN short -> INCREASE -> REDUCE -> FLATTEN -> OPEN long."""
+    runtime = PaperTradingRuntime(
+        config=PaperTradingConfig(slippage_bps=0.0, fee_bps=0.0)
+    )
+    portfolio = PortfolioSnapshot(
+        as_of=TIMESTAMP,
+        equity=100_000.0,
+        positions=(),
+    )
+
+    steps = [
+        ("SELL", 10.0, -10.0, PositionTransition.OPEN),
+        ("SELL", 5.0, -15.0, PositionTransition.INCREASE),
+        ("BUY", 10.0, -5.0, PositionTransition.REDUCE),
+        ("BUY", 5.0, 0.0, PositionTransition.FLATTEN),
+        ("BUY", 5.0, 5.0, PositionTransition.OPEN),
+    ]
+
+    for index, (side, quantity, expected, transition_expected) in enumerate(steps):
+        portfolio, transition = _execute_intent(
+            runtime=runtime,
+            portfolio=portfolio,
+            intent=TradeIntent(
+                "ITC",
+                quantity,
+                PRICE,
+                side,
+                decision_id=f"short-lifecycle-{index}",
+            ),
+            timestamp=TIMESTAMP + pd.Timedelta(minutes=index),
+        )
+        assert transition is transition_expected
+        position = next(
+            (p for p in portfolio.positions if p.symbol == "ITC"),
+            None,
+        )
+        assert (position.quantity if position else 0.0) == expected
+
+
+def test_reverse_preserves_actual_projected_position_provenance() -> None:
+    """A +10 -> -5 reverse submits 15 but actual state becomes -5."""
+    runtime = PaperTradingRuntime(
+        config=PaperTradingConfig(slippage_bps=0.0, fee_bps=0.0)
+    )
+    portfolio = PortfolioSnapshot(
+        as_of=TIMESTAMP,
+        equity=100_000.0,
+        positions=(
+            PortfolioPosition("ITC", 10.0, PRICE),
+        ),
+    )
+
+    intent = TradeIntent(
+        "ITC",
+        15.0,
+        PRICE,
+        "SELL",
+        decision_id="reverse",
+    )
+    actual, transition = _execute_intent(
+        runtime=runtime,
+        portfolio=portfolio,
+        intent=intent,
+        timestamp=TIMESTAMP + pd.Timedelta(minutes=1),
+    )
+
+    assert transition is PositionTransition.REVERSE
+    position = next(p for p in actual.positions if p.symbol == "ITC")
+    assert position.quantity == -5.0
+    assert runtime.journal[-1].quantity == 15.0
