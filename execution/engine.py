@@ -141,7 +141,7 @@ class OrderSnapshot:
         if not math.isfinite(self.requested_quantity) or self.requested_quantity <= 0:
             raise ValueError("requested_quantity must be positive and finite")
         if self.filled_quantity < 0 or self.filled_quantity > self.requested_quantity + 1e-12:
-            raise ValueError("filled_quantity must be within requested quantity")
+            raise ValueError("filled_quantity exceeds requested quantity")
         if self.average_fill_price is not None and (not math.isfinite(self.average_fill_price) or self.average_fill_price <= 0):
             raise ValueError("average_fill_price must be positive and finite")
         if self.filled_quantity > 0 and self.average_fill_price is None:
@@ -329,6 +329,7 @@ class ExecutionEngine:
         self._states: dict[str, OrderStatus] = {}
         self._events: list[ExecutionEvent] = []
         self._order_requests: dict[str, OrderRequest] = {}
+        self._latency_ms: dict[str, float] = {}
 
     @staticmethod
     def side_for_direction(direction: StrategyDirection) -> OrderSide:
@@ -437,6 +438,8 @@ class ExecutionEngine:
                 f"broker submission exception: {exc}",
             )
             self._orders[order.client_order_id] = snapshot
+            self._fills[order.client_order_id] = ()
+            self._latency_ms[order.client_order_id] = latency_ms
             return ExecutionResult(
                 request=order,
                 snapshot=snapshot,
@@ -464,8 +467,10 @@ class ExecutionEngine:
             )
             self._orders[order.client_order_id] = unknown
             self._fills[order.client_order_id] = ()
+            self._latency_ms[order.client_order_id] = latency_ms
             raise
 
+        self._latency_ms[order.client_order_id] = latency_ms
         self._transition(
             order.client_order_id,
             snapshot.status,
@@ -494,10 +499,26 @@ class ExecutionEngine:
             raise ValueError("broker response client_order_id mismatch")
         if snapshot.requested_quantity != order.quantity:
             raise ValueError("broker response quantity mismatch")
+        try:
+            broker_order_id = str(snapshot.broker_order_id).strip()
+            status = snapshot.status
+            requested_quantity = float(snapshot.requested_quantity)
+            filled_quantity = float(snapshot.filled_quantity)
+        except (AttributeError, TypeError, ValueError) as exc:
+            raise ValueError(f"malformed broker response: {exc}") from exc
+
+        if not broker_order_id:
+            raise ValueError("broker response broker_order_id must not be empty")
+        if not math.isfinite(requested_quantity) or requested_quantity <= 0:
+            raise ValueError("broker response requested quantity must be positive and finite")
+        if abs(requested_quantity - order.quantity) > 1e-12:
+            raise ValueError("broker response quantity mismatch")
+        if not isinstance(status, OrderStatus):
+            raise ValueError("broker response status is invalid")
         if (
-            not math.isfinite(snapshot.filled_quantity)
-            or snapshot.filled_quantity < 0
-            or snapshot.filled_quantity > order.quantity + 1e-12
+            not math.isfinite(filled_quantity)
+            or filled_quantity < 0
+            or filled_quantity > order.quantity + 1e-12
         ):
             raise ValueError("broker response filled quantity exceeds requested quantity")
 
@@ -521,17 +542,17 @@ class ExecutionEngine:
         if abs(fill_total - snapshot.filled_quantity) > 1e-12:
             raise ValueError("broker response fill total does not match filled quantity")
 
-        if snapshot.status is OrderStatus.FILLED and (
-            abs(snapshot.filled_quantity - order.quantity) > 1e-12
+        if status is OrderStatus.FILLED and (
+            abs(filled_quantity - order.quantity) > 1e-12
         ):
             raise ValueError("FILLED broker response must fill the requested quantity")
 
-        if snapshot.status is OrderStatus.PARTIALLY_FILLED and not (
-            0.0 < snapshot.filled_quantity < order.quantity
+        if status is OrderStatus.PARTIALLY_FILLED and not (
+            0.0 < filled_quantity < order.quantity
         ):
             raise ValueError("PARTIALLY_FILLED broker response has invalid fill quantity")
 
-        if snapshot.status is OrderStatus.CANCELLED and snapshot.filled_quantity >= order.quantity:
+        if status is OrderStatus.CANCELLED and filled_quantity >= order.quantity:
             raise ValueError("CANCELLED broker response cannot represent a fully filled order")
 
     def _transition(
@@ -735,9 +756,11 @@ class ExecutionEngine:
         requested = sum(s.requested_quantity for s in snapshots)
         filled_qty = sum(s.filled_quantity for s in snapshots)
         fees = sum(fill.fee for fills in self._fills.values() for fill in fills)
-        # Latency is not persisted in OrderSnapshot, so this metric is zero
-        # until callers persist ExecutionResult latency externally.
-        average_latency = 0.0
+        latencies = tuple(
+            self._latency_ms.get(snapshot.client_order_id, 0.0)
+            for snapshot in snapshots
+        )
+        average_latency = sum(latencies) / len(latencies) if latencies else 0.0
         return ExecutionMetrics(
             orders=orders,
             accepted_orders=accepted,
