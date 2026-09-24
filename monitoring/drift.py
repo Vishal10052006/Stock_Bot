@@ -12,7 +12,7 @@ class DriftReport:
     status: str
 
     def __post_init__(self) -> None:
-        if not self.metric.strip() or not math.isfinite(float(self.psi)) or self.psi < 0:
+        if not self.metric.strip() or math.isnan(float(self.psi)) or self.psi < 0:
             raise ValueError("invalid drift report")
         if self.reference_count <= 0 or self.current_count <= 0:
             raise ValueError("sample counts must be positive")
