@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from enum import Enum
 import hashlib
 import json
+import math
 from types import MappingProxyType
 from typing import Any, Mapping
 
@@ -105,7 +106,12 @@ class ModelRegistryRecord:
     strategy_version: str = ""
     lineage_id: str = ""
     evaluation_fingerprint: str = ""
+    candidate_fingerprint: str = ""
     approval_reference: str = ""
+    approval_fingerprint: str = ""
+    approval_evaluator: str = ""
+    approval_timestamp: str = ""
+    retirement_reason: str = ""
 
     def __post_init__(self) -> None:
         """Fail closed on incomplete provenance or invalid lifecycle state."""
@@ -136,6 +142,13 @@ class ModelRegistryRecord:
             _require_sha256(self.lineage_id, "lineage_id")
         if self.evaluation_fingerprint:
             _require_sha256(self.evaluation_fingerprint, "evaluation_fingerprint")
+        if self.candidate_fingerprint:
+            _require_sha256(self.candidate_fingerprint, "candidate_fingerprint")
+        if self.approval_fingerprint:
+            _require_sha256(self.approval_fingerprint, "approval_fingerprint")
+
+        if self.approval_status == ModelRegistryStatus.RETIRED.value and not self.retirement_reason.strip():
+            raise ValueError("retired model requires retirement_reason")
 
         if self.approval_status == ModelRegistryStatus.APPROVED.value:
             if not self.artifact_fingerprint:
@@ -146,6 +159,12 @@ class ModelRegistryRecord:
                 raise ValueError("approved model requires evaluation_fingerprint")
             if not self.approval_reference.strip():
                 raise ValueError("approved model requires approval_reference")
+            if not self.approval_fingerprint:
+                raise ValueError("approved model requires approval_fingerprint")
+            if not self.approval_evaluator.strip():
+                raise ValueError("approved model requires approval_evaluator")
+            if not self.approval_timestamp.strip():
+                raise ValueError("approved model requires approval_timestamp")
 
         if not isinstance(self.hyperparameters, Mapping):
             raise TypeError("hyperparameters must be a mapping")
@@ -160,6 +179,8 @@ class ModelRegistryRecord:
                 raise TypeError("metric names must be strings")
             if isinstance(value, bool) or not isinstance(value, (int, float)):
                 raise TypeError("metrics must contain numeric values")
+            if not math.isfinite(float(value)):
+                raise ValueError("metrics must contain finite values")
 
     def to_dict(self) -> dict[str, Any]:
         """Return deterministic registry metadata."""
@@ -183,7 +204,12 @@ class ModelRegistryRecord:
             "strategy_version": self.strategy_version,
             "lineage_id": self.lineage_id,
             "evaluation_fingerprint": self.evaluation_fingerprint,
+            "candidate_fingerprint": self.candidate_fingerprint,
             "approval_reference": self.approval_reference,
+            "approval_fingerprint": self.approval_fingerprint,
+            "approval_evaluator": self.approval_evaluator,
+            "approval_timestamp": self.approval_timestamp,
+            "retirement_reason": self.retirement_reason,
         }
 
     @property
@@ -239,11 +265,27 @@ class ModelRegistry:
         self,
         records: Mapping[str, ModelRegistryRecord] | None = None,
     ) -> None:
-        self._records = dict(records or {})
-        self._history = {
-            version: (record,)
-            for version, record in self._records.items()
-        }
+        """Create a registry from non-approved immutable states."""
+        if records is not None and not isinstance(records, Mapping):
+            raise TypeError("records must be a mapping")
+
+        self._records: dict[str, ModelRegistryRecord] = {}
+        self._history: dict[str, tuple[ModelRegistryRecord, ...]] = {}
+
+        for version, record in (records or {}).items():
+            if not isinstance(version, str) or not version.strip():
+                raise ValueError("registry version keys must be non-empty strings")
+            if not isinstance(record, ModelRegistryRecord):
+                raise TypeError("registry records must contain ModelRegistryRecord values")
+            if version != record.model_version:
+                raise ValueError("registry key must match record.model_version")
+            if record.approval_status == ModelRegistryStatus.APPROVED.value:
+                raise ValueError(
+                    "approved records must enter the registry through approve()"
+                )
+
+            self._records[version] = record
+            self._history[version] = (record,)
 
     def register(self, record: ModelRegistryRecord) -> ModelRegistryRecord:
         """Register a research/candidate record without promotion."""
@@ -274,8 +316,8 @@ class ModelRegistry:
     def approve(self, model_version: str, approval: ModelApproval) -> ModelRegistryRecord:
         """Create an approved immutable record from explicit governance evidence."""
         current = self.get(model_version)
-        if current.approval_status == ModelRegistryStatus.RETIRED.value:
-            raise ValueError("retired model cannot be approved")
+        if current.approval_status != ModelRegistryStatus.CANDIDATE.value:
+            raise ValueError("only CANDIDATE models can be approved")
         if not current.artifact_fingerprint:
             raise ValueError("model must have an artifact_fingerprint before approval")
         if not current.lineage_id:
@@ -291,6 +333,9 @@ class ModelRegistry:
                 **current.to_dict(),
                 "approval_status": ModelRegistryStatus.APPROVED.value,
                 "approval_reference": approval.approval_reference,
+                "approval_fingerprint": approval.fingerprint,
+                "approval_evaluator": approval.evaluator,
+                "approval_timestamp": approval.approved_at,
             }
         )
         self._records[model_version] = approved
@@ -308,6 +353,7 @@ class ModelRegistry:
             **{
                 **current.to_dict(),
                 "approval_status": ModelRegistryStatus.RETIRED.value,
+                "retirement_reason": reason.strip(),
             }
         )
         self._records[model_version] = retired
