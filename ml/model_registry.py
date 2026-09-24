@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from enum import Enum
 import hashlib
 import json
+from types import MappingProxyType
 from typing import Any, Mapping
 
 
@@ -43,11 +44,38 @@ def _require_sha256(value: str, field_name: str) -> str:
     return value
 
 
+def _freeze_value(value: Any) -> Any:
+    """Recursively freeze JSON-like metadata for immutable registry records."""
+    if isinstance(value, Mapping):
+        return MappingProxyType(
+            {str(key): _freeze_value(child) for key, child in value.items()}
+        )
+    if isinstance(value, (list, tuple)):
+        return tuple(_freeze_value(child) for child in value)
+    if isinstance(value, (set, frozenset)):
+        return frozenset(_freeze_value(child) for child in value)
+    return value
+
+
+def _canonical_value(value: Any) -> Any:
+    """Convert frozen metadata back to deterministic JSON-compatible values."""
+    if isinstance(value, Mapping):
+        return {
+            str(key): _canonical_value(value[key])
+            for key in sorted(value, key=str)
+        }
+    if isinstance(value, (tuple, list)):
+        return [_canonical_value(child) for child in value]
+    if isinstance(value, (set, frozenset)):
+        return sorted(_canonical_value(child) for child in value)
+    return value
+
+
 def _canonical_mapping(value: Mapping[str, Any]) -> dict[str, Any]:
     """Copy a mapping into deterministic JSON-compatible metadata."""
     if not isinstance(value, Mapping):
         raise TypeError("registry metadata must be a mapping")
-    return {str(key): value[key] for key in sorted(value, key=str)}
+    return _canonical_value(value)
 
 
 @dataclass(frozen=True, slots=True)
@@ -123,6 +151,9 @@ class ModelRegistryRecord:
             raise TypeError("hyperparameters must be a mapping")
         if not isinstance(self.metrics, Mapping):
             raise TypeError("metrics must be a mapping")
+
+        object.__setattr__(self, "hyperparameters", _freeze_value(self.hyperparameters))
+        object.__setattr__(self, "metrics", _freeze_value(self.metrics))
 
         for key, value in self.metrics.items():
             if not isinstance(key, str):
