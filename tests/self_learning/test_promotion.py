@@ -7,7 +7,6 @@ from self_learning.contracts import (
     CandidateLifecycle,
     ModelCandidate,
     ValidationSummary,
-    CandidateLifecycle,
 )
 from self_learning.promotion import PromotionController
 from self_learning.validation import validate_candidate
