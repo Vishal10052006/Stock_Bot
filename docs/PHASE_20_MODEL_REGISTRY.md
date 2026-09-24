@@ -141,11 +141,11 @@ Phase 20 is complete only after:
 
 ## Verified completion
 
-Verified on 2026-09-24 against GitHub Actions run #424.
+Verified on 2026-09-24 against GitHub Actions run #446.
 
 - Market Bot tests: PASS
 - Phase 9 contract validation: PASS
-- Full repository regression: **1473 passed**
+- Full repository regression: **1496 passed, 7 warnings**
 - Registry-specific lifecycle, identity, artifact, approval, retirement, history,
   and immutability tests: PASS
 - No broker, Risk, Safety, or live-execution authority was introduced.
@@ -166,3 +166,16 @@ The registry audit additionally verifies that:
 The execution test suite was renamed to `test_execution_engine.py` so its
 module name cannot collide with the existing backtesting `test_engine.py`
 during full pytest collection.
+
+
+## Final CI gate
+
+Final verified commit: `c21da9b5ef529f5e00649e345736296a401e6b97`.
+
+GitHub Actions run #446 completed successfully:
+
+- Market Bot tests: **31 passed**
+- Phase 9 contract validation: **90 passed**
+- Full repository regression: **1496 passed, 7 warnings**
+- No Phase-20 test failures
+- No live execution or broker authority introduced
