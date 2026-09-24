@@ -437,9 +437,8 @@ class RiskEngine:
 
         cash_resized = False
 
-        # Available cash is an optional account-level constraint. It can only
-        # reduce risk-first size; it never increases it.
-        if value.available_cash is not None:
+        # Closing existing exposure does not require additional cash.
+        if not release_only and value.available_cash is not None:
             cash_quantity = floor_to_step(
                 value.available_cash / entry,
                 self.config.quantity_step,
@@ -481,21 +480,25 @@ class RiskEngine:
 
         # 6. Optional volatility policy. Default factor is 1.0, matching the
         # current frozen specification while keeping the extension point ready.
-        try:
-            vol_factor = volatility_size_factor(
-                entry_price=entry,
-                atr=value.atr,
-                high_volatility=value.high_volatility,
-                high_volatility_factor=self.config.high_volatility_factor,
-                max_atr_fraction=self.config.max_atr_fraction,
-            )
-        except ValueError as exc:
-            return self._reject(
-                value,
-                str(exc),
-                daily_pnl,
-                RiskReasonCode.VOLATILITY_LIMIT,
-            )
+        if release_only:
+            vol_factor = 1.0
+        else:
+        # current frozen specification while keeping the extension point ready.
+            try:
+                vol_factor = volatility_size_factor(
+                    entry_price=entry,
+                    atr=value.atr,
+                    high_volatility=value.high_volatility,
+                    high_volatility_factor=self.config.high_volatility_factor,
+                    max_atr_fraction=self.config.max_atr_fraction,
+                )
+            except ValueError as exc:
+                return self._reject(
+                    value,
+                    str(exc),
+                    daily_pnl,
+                    RiskReasonCode.VOLATILITY_LIMIT,
+                )
 
         if vol_factor <= 0:
             return self._reject(
