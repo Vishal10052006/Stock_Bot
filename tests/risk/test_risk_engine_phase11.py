@@ -9,7 +9,12 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from trading.risk.contracts import RiskAction, RiskReasonCode
+from trading.risk.contracts import (
+    RiskAction,
+    RiskPositionContext,
+    RiskPositionTransition,
+    RiskReasonCode,
+)
 from trading.risk.engine import RiskConfig, RiskEngine, RiskInput
 from trading.risk.kill_switch import KillSwitchState
 from trading.signals.models import CandidateDirection, TradeCandidate
@@ -291,3 +296,126 @@ def test_optional_drawdown_limit_has_distinct_reason_code() -> None:
 
     assert assessment.decision.status.value == "REJECTED"
     assert assessment.decision.reason_code is RiskReasonCode.MAX_DRAWDOWN_LIMIT
+
+
+
+@pytest.mark.parametrize(
+    ("transition", "existing", "projected"),
+    [
+        (RiskPositionTransition.OPEN, 0.0, 10.0),
+        (RiskPositionTransition.INCREASE, 10.0, 15.0),
+        (RiskPositionTransition.REDUCE, 10.0, 5.0),
+        (RiskPositionTransition.FLATTEN, 10.0, 0.0),
+        (RiskPositionTransition.REVERSE, 10.0, -5.0),
+        (RiskPositionTransition.INCREASE, -10.0, -15.0),
+        (RiskPositionTransition.REDUCE, -10.0, -5.0),
+        (RiskPositionTransition.FLATTEN, -10.0, 0.0),
+        (RiskPositionTransition.REVERSE, -10.0, 5.0),
+    ],
+)
+def test_position_context_accepts_signed_transitions(
+    transition: RiskPositionTransition,
+    existing: float,
+    projected: float,
+) -> None:
+    context = RiskPositionContext(
+        transition=transition,
+        existing_quantity=existing,
+        projected_quantity=projected,
+    )
+
+    assert context.transition is transition
+
+
+@pytest.mark.parametrize(
+    ("transition", "existing", "projected"),
+    [
+        (RiskPositionTransition.OPEN, 10.0, 15.0),
+        (RiskPositionTransition.INCREASE, 10.0, 5.0),
+        (RiskPositionTransition.REDUCE, 10.0, -5.0),
+        (RiskPositionTransition.FLATTEN, 10.0, 1.0),
+        (RiskPositionTransition.REVERSE, 10.0, 5.0),
+    ],
+)
+def test_position_context_rejects_invalid_transition_geometry(
+    transition: RiskPositionTransition,
+    existing: float,
+    projected: float,
+) -> None:
+    with pytest.raises(ValueError):
+        RiskPositionContext(
+            transition=transition,
+            existing_quantity=existing,
+            projected_quantity=projected,
+        )
+
+
+def test_existing_position_can_reduce_without_duplicate_symbol_rejection() -> None:
+    context = RiskPositionContext(
+        transition=RiskPositionTransition.REDUCE,
+        existing_quantity=10.0,
+        projected_quantity=5.0,
+    )
+
+    assessment = RiskEngine().evaluate(
+        make_input(
+            symbol_already_open=True,
+            position_context=context,
+        )
+    )
+
+    assert assessment.decision.status.value == "APPROVED"
+    assert assessment.decision.reason_code is RiskReasonCode.APPROVED
+
+
+def test_existing_position_can_flatten_without_duplicate_symbol_rejection() -> None:
+    context = RiskPositionContext(
+        transition=RiskPositionTransition.FLATTEN,
+        existing_quantity=10.0,
+        projected_quantity=0.0,
+    )
+
+    assessment = RiskEngine().evaluate(
+        make_input(
+            symbol_already_open=True,
+            position_context=context,
+        )
+    )
+
+    assert assessment.decision.status.value == "APPROVED"
+
+
+def test_open_transition_still_rejects_duplicate_symbol() -> None:
+    context = RiskPositionContext(
+        transition=RiskPositionTransition.OPEN,
+        existing_quantity=0.0,
+        projected_quantity=10.0,
+    )
+
+    assessment = RiskEngine().evaluate(
+        make_input(
+            symbol_already_open=True,
+            position_context=context,
+        )
+    )
+
+    assert assessment.decision.status.value == "REJECTED"
+    assert assessment.decision.reason_code is RiskReasonCode.DUPLICATE_SYMBOL
+
+
+def test_reduction_does_not_consume_open_position_slot() -> None:
+    context = RiskPositionContext(
+        transition=RiskPositionTransition.REDUCE,
+        existing_quantity=10.0,
+        projected_quantity=5.0,
+    )
+
+    assessment = RiskEngine().evaluate(
+        make_input(
+            open_positions=3,
+            symbol_already_open=True,
+            position_context=context,
+        )
+    )
+
+    assert assessment.decision.status.value == "APPROVED"
