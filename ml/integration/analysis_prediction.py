@@ -14,6 +14,7 @@ import pandas as pd
 from intelligence.analysis.contracts import AnalysisContext
 from ml.models.logistic import LogisticOutcomeModel, MODEL_CLASSES
 from ml.preprocessing.pipeline import FeaturePreprocessor
+from ml.prediction.monitoring import PredictionTelemetry
 
 
 @dataclass(frozen=True, slots=True)
@@ -53,6 +54,7 @@ def predict_from_analysis(
     model: LogisticOutcomeModel,
     preprocessor: FeaturePreprocessor,
     model_version: str = "phase9-logistic-v1",
+    monitoring: Any | None = None,
 ) -> PredictionContext:
     """Generate Phase 9 probabilities from one validated AnalysisContext."""
     if not isinstance(context, AnalysisContext):
@@ -75,7 +77,7 @@ def predict_from_analysis(
     probabilities = model.predict_proba(transformed)
     predicted_class = str(probabilities.iloc[0].idxmax())
 
-    return PredictionContext(
+    prediction = PredictionContext(
         timestamp=context.timestamp,
         symbol=context.symbol,
         probabilities=probabilities,
@@ -84,3 +86,17 @@ def predict_from_analysis(
         feature_version=context.feature_version,
         analysis_version=context.analysis_version,
     )
+    if monitoring is not None:
+        monitoring.observe_prediction(
+            PredictionTelemetry(
+                timestamp=prediction.timestamp,
+                symbol=prediction.symbol,
+                model_version=prediction.model_version,
+                feature_version=prediction.feature_version,
+                long_probability=float(prediction.probabilities.iloc[0]["LONG_SUCCESS"]),
+                short_probability=float(prediction.probabilities.iloc[0]["SHORT_SUCCESS"]),
+                no_edge_probability=float(prediction.probabilities.iloc[0]["NO_EDGE"]),
+                predicted_class=prediction.predicted_class,
+            )
+        )
+    return prediction
