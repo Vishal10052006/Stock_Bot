@@ -1309,5 +1309,10 @@ def test_paper_adapter_rejects_non_finite_execution_price() -> None:
     adapter = PaperBrokerAdapter(price_provider=lambda _order: float("nan"))
     engine = ExecutionEngine(adapter)
 
-    with pytest.raises(ValueError, match="positive and finite"):
-        engine.submit(order_request())
+    result = engine.submit(order_request())
+
+    # Broker submission exceptions are converted into UNKNOWN so the engine
+    # cannot mistake an ambiguous provider failure for a rejected/filled order.
+    assert result.accepted is False
+    assert result.snapshot.status is OrderStatus.UNKNOWN
+    assert "positive and finite" in (result.error or "")
