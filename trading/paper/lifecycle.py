@@ -141,7 +141,7 @@ class PaperTradeLifecycle:
         exit_slippage_cost: float = 0.0,
         reference_price: float | None = None,
     ) -> TradeOutcome:
-        """Close part or all of an open trade without losing lifecycle state."""
+        """Close part or all of an open trade without losing lifecycle state.\n\n        ``price`` is the actual execution price. ``reference_price`` is the\n        decision/reference market price used to compute gross P&L before\n        explicit execution slippage. Keeping these distinct prevents\n        execution slippage from being embedded in gross P&L and then deducted\n        a second time from net P&L.\n        """
         symbol = symbol.upper()
         if symbol not in self._open:
             raise KeyError(f"no open trade for {symbol}")
