@@ -68,3 +68,10 @@ def test_decision_fingerprint_is_deterministic() -> None:
     first = manager.evaluate(state(), intent)
     second = manager.evaluate(state(), intent)
     assert first.fingerprint == second.fingerprint
+
+
+def test_existing_symbol_uses_existing_sector_when_intent_omits_sector() -> None:
+    manager = PortfolioManager(PortfolioLimits(max_sector_exposure_fraction=0.20))
+    decision = manager.evaluate(state(), TradeIntent("INFY", 1, 1500, "BUY", None, "d8"))
+    assert decision.action is PortfolioAction.REJECT
+    assert decision.reason_code == "MAX_SECTOR_EXPOSURE"
