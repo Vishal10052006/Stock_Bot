@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from datetime import time
 from enum import Enum
 import hashlib
+import math
 from zoneinfo import ZoneInfo
 
 import pandas as pd
@@ -81,8 +82,10 @@ class LiveSignalEngine:
         session_start: time = time(9, 15),
         session_end: time = time(15, 30),
     ) -> None:
-        if max_staleness_seconds < 0:
-            raise ValueError("max_staleness_seconds must be non-negative")
+        if not math.isfinite(max_staleness_seconds) or max_staleness_seconds < 0:
+            raise ValueError("max_staleness_seconds must be finite and non-negative")
+        if not isinstance(session_start, time) or not isinstance(session_end, time):
+            raise TypeError("session_start and session_end must be datetime.time values")
         if session_start >= session_end:
             raise ValueError("session_start must be before session_end")
 
@@ -103,6 +106,9 @@ class LiveSignalEngine:
         observed_at is explicit so tests and paper runs can reproduce the
         exact staleness decision without consulting an implicit system clock.
         """
+        if not isinstance(strategy_input, StrategyInput):
+            return self._blocked_from_invalid_input(strategy_input)
+
         try:
             timestamp = pd.Timestamp(strategy_input.timestamp)
             observed = pd.Timestamp(observed_at)
@@ -242,7 +248,9 @@ class LiveSignalEngine:
             "timestamp",
             pd.Timestamp("1970-01-01", tz="UTC"),
         )
-        symbol = str(getattr(strategy_input, "symbol", "UNKNOWN") or "UNKNOWN")
+        symbol = str(getattr(strategy_input, "symbol", "UNKNOWN") or "UNKNOWN").strip()
+        if not symbol:
+            symbol = "UNKNOWN"
         try:
             timestamp = pd.Timestamp(timestamp)
             if timestamp.tzinfo is None:
