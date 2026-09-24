@@ -1262,3 +1262,23 @@ def test_unknown_refresh_recovery_preserves_broker_reported_fills() -> None:
 
     assert recovered.status is OrderStatus.PARTIALLY_FILLED
     assert recovered.filled_quantity == 50.0
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"slippage_bps": float("nan")},
+        {"fee_bps": float("inf")},
+    ],
+)
+def test_paper_adapter_rejects_non_finite_cost_configuration(kwargs) -> None:
+    with pytest.raises(ValueError, match="finite"):
+        PaperAdapterConfig(**kwargs)
+
+
+def test_paper_adapter_rejects_non_finite_execution_price() -> None:
+    adapter = PaperBrokerAdapter(price_provider=lambda _order: float("nan"))
+    engine = ExecutionEngine(adapter)
+
+    with pytest.raises(ValueError, match="positive and finite"):
+        engine.submit(order_request())
