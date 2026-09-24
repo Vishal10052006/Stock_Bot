@@ -94,11 +94,14 @@ def _validate_non_negative_counts(
     operational_errors: int,
     stale_events: int,
 ) -> None:
-    _validate_non_negative_counts(
-        operational_events,
-        operational_errors,
-        stale_events,
-    )
+    if operational_events is not None and operational_events < 0:
+        raise ValueError("operational_events must be non-negative")
+    for name, value in (
+        ("operational_errors", operational_errors),
+        ("stale_events", stale_events),
+    ):
+        if value < 0:
+            raise ValueError(f"{name} must be non-negative")
 
 
 def _indexed_map(payload: dict[str, Any], name: str) -> dict[int, object]:
@@ -144,14 +147,11 @@ def main() -> None:
     )
     operational_errors = int(sidecar.get("operational_errors", 0))
     stale_events = int(sidecar.get("stale_events", 0))
-    if operational_events is not None and operational_events < 0:
-        raise ValueError("operational_events must be non-negative")
-    for name, value in (
-        ("operational_errors", operational_errors),
-        ("stale_events", stale_events),
-    ):
-        if value < 0:
-            raise ValueError(f"{name} must be non-negative")
+    _validate_non_negative_counts(
+        operational_events,
+        operational_errors,
+        stale_events,
+    )
 
     journal = PaperEvidenceJournal(args.journal)
     loop = PaperDecisionLoop()
