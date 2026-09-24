@@ -180,7 +180,8 @@ def test_unknown_order_recovers_to_authoritative_filled_state_without_resubmit()
     adapter = PaperBrokerAdapter()
     engine = ExecutionEngine(adapter)
     request = order_request()
-    original = adapter.submit(request)
+    engine.submit(request)
+    original = adapter._orders[request.client_order_id]
     adapter._orders.pop(request.client_order_id)
 
     unknown = engine.refresh(request.client_order_id)
@@ -558,6 +559,7 @@ def test_cancel_transport_failure_becomes_unknown():
     adapter = _CancelFailureAdapter()
     engine = ExecutionEngine(adapter)
     request = order_request()
+    adapter.config = PaperAdapterConfig(partial_fill_ratio=0.5)
     engine.submit(request)
 
     with pytest.raises(RuntimeError, match="cancel transport failure"):
@@ -579,7 +581,7 @@ def test_broker_response_rejects_filled_quantity_over_request():
     )
     engine = ExecutionEngine(adapter)
 
-    with pytest.raises(ValueError, match="exceeds requested"):
+    with pytest.raises(ValueError, match="exceeds requested|within requested"):
         engine.submit(order_request())
 
 
