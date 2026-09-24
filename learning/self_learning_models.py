@@ -1,12 +1,12 @@
 """Controlled self-learning governance contracts for STOCK_BOT.
 
-The module defines immutable, auditable state objects for the learning loop.
+The module contains immutable, auditable state objects for the learning loop.
 It intentionally contains no broker/execution authority and no direct model
 mutation.
 
 References:
-    Project self-learning master specification.
-    Phase 16-20 learning roadmap and experiment contracts.
+    STOCK_BOT self-learning master specification.
+    Phase 16-20 learning and experiment contracts.
 """
 
 from __future__ import annotations
@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 import hashlib
 import json
+import math
 from typing import Any, Mapping
 
 
@@ -27,6 +28,21 @@ def _fingerprint(payload: Mapping[str, Any]) -> str:
         default=str,
     )
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def _require_text(value: str, field_name: str) -> str:
+    """Validate a required textual field."""
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{field_name} must be non-empty")
+    return value.strip()
+
+
+def _require_finite(value: float, field_name: str) -> float:
+    """Require a finite numeric value."""
+    result = float(value)
+    if not math.isfinite(result):
+        raise ValueError(f"{field_name} must be finite")
+    return result
 
 
 class LearningState(str, Enum):
@@ -48,7 +64,7 @@ class LearningState(str, Enum):
 
 
 class LearningDecision(str, Enum):
-    """Research decision values; none of these authorizes execution."""
+    """Research decision values; none authorizes execution."""
 
     KEEP = "KEEP"
     REJECT = "REJECT"
@@ -75,7 +91,7 @@ class FailureClass(str, Enum):
 
 @dataclass(frozen=True, slots=True)
 class TradeOutcomeContext:
-    """Canonical learning context derived from one completed trade."""
+    """Canonical learning context derived from one completed linked trade."""
 
     trade_id: str
     decision_id: str
@@ -101,29 +117,29 @@ class TradeOutcomeContext:
 
     def __post_init__(self) -> None:
         """Validate immutable outcome context."""
-        if not self.trade_id.strip():
-            raise ValueError("trade_id must not be empty")
-        if not self.decision_id.strip():
-            raise ValueError("decision_id must not be empty")
-        if not self.symbol.strip():
-            raise ValueError("symbol must not be empty")
+        for name in ("trade_id", "decision_id", "outcome_timestamp", "outcome_label", "symbol"):
+            _require_text(getattr(self, name), name)
 
-        numeric = (
-            self.net_pnl,
-            self.r_multiple,
-            self.mae,
-            self.mfe,
-            self.holding_minutes,
-            self.costs,
-            self.slippage,
-        )
-        if not all(isinstance(value, (int, float)) for value in numeric):
-            raise TypeError("outcome numeric fields must be numeric")
+        for name in (
+            "net_pnl",
+            "r_multiple",
+            "mae",
+            "mfe",
+            "holding_minutes",
+            "costs",
+            "slippage",
+        ):
+            _require_finite(getattr(self, name), name)
+
         if self.holding_minutes < 0:
             raise ValueError("holding_minutes must be non-negative")
         if self.costs < 0 or self.slippage < 0:
             raise ValueError("costs and slippage must be non-negative")
+        if self.mae > 0 or self.mfe < 0:
+            raise ValueError("MAE must be <= 0 and MFE must be >= 0")
 
+        object.__setattr__(self, "trade_id", self.trade_id.strip())
+        object.__setattr__(self, "decision_id", self.decision_id.strip())
         object.__setattr__(self, "symbol", self.symbol.strip().upper())
         object.__setattr__(self, "feature_snapshot", dict(self.feature_snapshot))
 
@@ -159,7 +175,7 @@ class TradeOutcomeContext:
 
 @dataclass(frozen=True, slots=True)
 class DatasetVersion:
-    """Immutable dataset lineage descriptor used by one learning experiment."""
+    """Immutable dataset lineage descriptor for one learning experiment."""
 
     dataset_version: str
     creation_timestamp: str
@@ -175,27 +191,58 @@ class DatasetVersion:
     known_limitations: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
-        """Reject incomplete or ambiguous dataset identities."""
-        if not self.dataset_version.strip():
-            raise ValueError("dataset_version must not be empty")
-        if not self.source.strip():
-            raise ValueError("source must not be empty")
+        """Reject incomplete or internally inconsistent dataset identities."""
+        for name in (
+            "dataset_version",
+            "creation_timestamp",
+            "source",
+            "period_start",
+            "period_end",
+            "feature_schema_version",
+            "label_definition_version",
+        ):
+            _require_text(getattr(self, name), name)
+
         if self.row_count < 0:
-            raise ValueError("row_count must not be negative")
+            raise ValueError("row_count must be non-negative")
         if not self.symbols:
             raise ValueError("symbols must contain at least one symbol")
-        if any(not symbol.strip() for symbol in self.symbols):
+        if any(not isinstance(symbol, str) or not symbol.strip() for symbol in self.symbols):
             raise ValueError("symbols must contain non-empty strings")
-        if any(count < 0 for count in self.label_distribution.values()):
-            raise ValueError("label counts must be non-negative")
+        if any(
+            isinstance(count, bool) or not isinstance(count, int) or count < 0
+            for count in self.label_distribution.values()
+        ):
+            raise ValueError("label_distribution values must be non-negative integers")
         if sum(self.label_distribution.values()) != self.row_count:
             raise ValueError("label_distribution must sum to row_count")
 
         object.__setattr__(
             self,
-            "label_distribution",
-            dict(self.label_distribution),
+            "dataset_version",
+            self.dataset_version.strip(),
         )
+        object.__setattr__(
+            self,
+            "source",
+            self.source.strip(),
+        )
+        object.__setattr__(
+            self,
+            "symbols",
+            tuple(sorted(symbol.strip().upper() for symbol in self.symbols)),
+        )
+        object.__setattr__(
+            self,
+            "label_distribution",
+            dict(sorted(self.label_distribution.items())),
+        )
+        object.__setattr__(
+            self,
+            "source_trade_ids",
+            tuple(sorted(set(self.source_trade_ids))),
+        )
+        object.__setattr__(self, "known_limitations", tuple(self.known_limitations))
 
     @property
     def fingerprint(self) -> str:
@@ -235,6 +282,20 @@ class ExperimentLineage:
     fixed_components: tuple[str, ...]
     parent_experiment_id: str | None = None
 
+    def __post_init__(self) -> None:
+        """Validate lineage identity fields."""
+        _require_text(self.experiment_id, "experiment_id")
+        _require_text(self.code_version, "code_version")
+        _require_text(self.feature_version, "feature_version")
+        _require_text(self.label_version, "label_version")
+        _require_text(self.model_version, "model_version")
+        _require_text(self.strategy_version, "strategy_version")
+        _require_text(self.risk_version, "risk_version")
+        _require_text(self.execution_version, "execution_version")
+        _require_text(self.change, "change")
+        if not self.fixed_components:
+            raise ValueError("fixed_components must not be empty")
+
     @property
     def fingerprint(self) -> str:
         """Return deterministic lineage identity."""
@@ -258,7 +319,7 @@ class ExperimentLineage:
 
 @dataclass(frozen=True, slots=True)
 class ValidationEvidence:
-    """Structured validation evidence used by the promotion gate."""
+    """Structured evidence consumed by the promotion gate."""
 
     integrity_passed: bool
     leakage_passed: bool
@@ -273,9 +334,40 @@ class ValidationEvidence:
     effective_sample_size_notes: str = ""
     issues: tuple[str, ...] = ()
 
+    def __post_init__(self) -> None:
+        """Reject non-finite metrics from entering governance state."""
+        for group in (
+            self.predictive_metrics,
+            self.trading_metrics,
+            *self.regime_metrics.values(),
+            *self.symbol_metrics.values(),
+            *self.date_metrics.values(),
+        ):
+            for name, value in group.items():
+                _require_finite(float(value), str(name))
+
+        object.__setattr__(self, "predictive_metrics", dict(self.predictive_metrics))
+        object.__setattr__(self, "trading_metrics", dict(self.trading_metrics))
+        object.__setattr__(
+            self,
+            "regime_metrics",
+            {str(k): dict(v) for k, v in self.regime_metrics.items()},
+        )
+        object.__setattr__(
+            self,
+            "symbol_metrics",
+            {str(k): dict(v) for k, v in self.symbol_metrics.items()},
+        )
+        object.__setattr__(
+            self,
+            "date_metrics",
+            {str(k): dict(v) for k, v in self.date_metrics.items()},
+        )
+        object.__setattr__(self, "issues", tuple(self.issues))
+
     @property
     def all_required_gates_pass(self) -> bool:
-        """Return whether every mandatory gate is explicitly satisfied."""
+        """Return whether every mandatory validation boundary passed."""
         return all(
             (
                 self.integrity_passed,
@@ -321,9 +413,21 @@ class PromotionReview:
     decision: LearningDecision = LearningDecision.INCONCLUSIVE
     reasons: tuple[str, ...] = ()
 
+    def __post_init__(self) -> None:
+        """Validate promotion review identity fields."""
+        for name in (
+            "candidate_id",
+            "candidate_fingerprint",
+            "current_model_version",
+            "challenger_model_version",
+        ):
+            _require_text(getattr(self, name), name)
+        if self.current_model_version == self.challenger_model_version:
+            raise ValueError("current and challenger model versions must differ")
+
     @property
     def promotable(self) -> bool:
-        """Return whether all non-negotiable gates are satisfied."""
+        """Return whether every non-negotiable gate is satisfied."""
         return (
             self.validation.all_required_gates_pass
             and self.reproducibility_passed
@@ -361,6 +465,19 @@ class ChampionRecord:
     parent_model_version: str | None = None
     rollback_of: str | None = None
 
+    def __post_init__(self) -> None:
+        """Validate champion history identity."""
+        for name in (
+            "model_version",
+            "status",
+            "activated_at",
+            "experiment_id",
+            "promotion_review_fingerprint",
+        ):
+            _require_text(getattr(self, name), name)
+        if len(self.promotion_review_fingerprint) != 64:
+            raise ValueError("promotion_review_fingerprint must be SHA-256")
+
     @property
     def fingerprint(self) -> str:
         """Return deterministic champion-history identity."""
@@ -393,6 +510,29 @@ class LearningCycle:
     lesson: str = ""
     next_experiment: str = ""
 
+    def __post_init__(self) -> None:
+        """Validate cycle identity and immutable collection fields."""
+        _require_text(self.cycle_id, "cycle_id")
+        if any(len(value) != 64 for value in self.experience_fingerprints):
+            raise ValueError("experience_fingerprints must contain SHA-256 values")
+        if any(len(value) != 64 for value in self.learning_evidence_fingerprints):
+            raise ValueError("learning_evidence_fingerprints must contain SHA-256 values")
+        if self.promotion_review_fingerprint is not None and len(
+            self.promotion_review_fingerprint
+        ) != 64:
+            raise ValueError("promotion_review_fingerprint must be SHA-256")
+
+        object.__setattr__(
+            self,
+            "experience_fingerprints",
+            tuple(self.experience_fingerprints),
+        )
+        object.__setattr__(
+            self,
+            "learning_evidence_fingerprints",
+            tuple(self.learning_evidence_fingerprints),
+        )
+
     @property
     def fingerprint(self) -> str:
         """Return deterministic cycle identity."""
@@ -417,3 +557,17 @@ class LearningCycle:
                 "next_experiment": self.next_experiment,
             }
         )
+
+
+__all__ = [
+    "ChampionRecord",
+    "DatasetVersion",
+    "ExperimentLineage",
+    "FailureClass",
+    "LearningCycle",
+    "LearningDecision",
+    "LearningState",
+    "PromotionReview",
+    "TradeOutcomeContext",
+    "ValidationEvidence",
+]
