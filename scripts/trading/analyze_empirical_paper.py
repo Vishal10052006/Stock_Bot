@@ -66,21 +66,22 @@ def analyze(rows: pd.DataFrame) -> dict[str, Any]:
         step for step in signal_steps
         if (
             step.risk.reason == "Maximum gross exposure would be exceeded."
-            and step.risk.gross_exposure_before is not None
-            and step.risk.gross_exposure_limit is not None
-            and step.risk.gross_exposure_after is not None
+            and step.risk_assessment is not None
+            and step.risk_assessment.gross_exposure_before is not None
+            and step.risk_assessment.gross_exposure_limit is not None
+            and step.risk_assessment.gross_exposure_after is not None
         )
     ]
     before = [
-        float(step.risk.gross_exposure_before) / float(step.risk.gross_exposure_limit)
+        float(step.risk_assessment.gross_exposure_before) / float(step.risk_assessment.gross_exposure_limit)
         for step in exposure_rejections
     ]
     after = [
-        float(step.risk.gross_exposure_after) / float(step.risk.gross_exposure_limit)
+        float(step.risk_assessment.gross_exposure_after) / float(step.risk_assessment.gross_exposure_limit)
         for step in exposure_rejections
     ]
     excess = [
-        float(step.risk.gross_exposure_after) - float(step.risk.gross_exposure_limit)
+        float(step.risk_assessment.gross_exposure_after) - float(step.risk_assessment.gross_exposure_limit)
         for step in exposure_rejections
     ]
     exposure_summary = {
