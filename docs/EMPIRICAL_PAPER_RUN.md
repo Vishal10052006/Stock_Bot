@@ -85,3 +85,16 @@ The report binds:
 - aggregate paper-evidence quality.
 
 It does not state that the strategy is profitable, superior, or ready for live trading.
+
+
+## Automatic paper-runtime observations
+
+The authoritative paper loop now records its own chronological account-equity observation for every decision step. When no external fill timestamps are supplied, deterministic paper fills use the simulated paper-order timestamp as the fill timestamp. This makes paper latency coverage explicit and auditable, but it is not broker/network latency.
+
+The evidence runner also records one operational observation per completed decision step unless an explicit operational-event count is supplied through the sidecar.
+
+These observations are generated from the paper runtime itself; they are not synthetic market outcomes.
+
+### Calibration boundary
+
+Calibration remains conditional on prediction output. The current deterministic baseline strategy does not emit prediction_probability, so calibration coverage is reported as not applicable rather than being fabricated. Once Prediction Bot supplies prediction probabilities and corresponding outcomes, the same evidence contract can record calibration observations through the sidecar.
