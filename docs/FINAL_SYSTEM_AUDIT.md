@@ -1,9 +1,9 @@
 # STOCK BOT — Final System Audit Checkpoint
 
-**Audit date:** 2026-09-23  
+**Audit date:** 2026-09-24  
 **Audited branch:** `main`  
-**Audited commit:** `b309263de75731ffd2199326899d2dca7fe3d0e8`  
-**Latest verified CI:** GitHub Actions run #357 (`35896181976`) — SUCCESS for the Phase-17 test expansion
+**Audited commit:** `bc8aaad0e0618f14de10cda781ea6c20d173fce6`  
+**Latest verified CI:** GitHub Actions run #426 (`35993684404`) — SUCCESS
 
 ## 1. Executive status
 
@@ -223,7 +223,15 @@ The learning layer remains non-authoritative: it does not retrain models, mutate
 
 The older generic reinforcement implementation remains isolated from the trading execution path; it is not treated as a source of market outcomes.
 
-## 10. Live-readiness gates
+## 10. Phase 20 — Model Registry
+
+Phase 20 is implemented as an immutable, versioned model-artifact registry in `ml/model_registry.py`.
+
+The registry now binds model versions to feature/data/code provenance, artifact SHA-256 identity, strategy version when applicable, experiment lineage, evaluation fingerprint, and explicit approval evidence. Duplicate version metadata cannot silently replace an existing registration. Approval and retirement preserve historical immutable states.
+
+Direct approved registration is forbidden; approval requires explicit governance evidence matching the exact registered record. The registry has no Risk, Safety, broker, or live-execution authority.
+
+## 11. Live-readiness gates
 
 The fail-closed readiness checklist covers the specification's required gates:
 
@@ -255,7 +263,7 @@ When provenance is required, each true gate must carry:
 
 A structurally complete readiness object is still not live authorization.
 
-## 11. Broker/live execution audit
+## 12. Broker/live execution audit
 
 The current repository has no enabled live broker order-submission path.
 
@@ -283,7 +291,7 @@ No search in the repository identified an enabled `place_order`, `submit_order`,
 
 This is a deliberate safety property, not a missing emergency fix.
 
-## 12. Roadmap position
+## 13. Roadmap position
 
 The supplied STOCK BOT roadmap defines later phases for:
 
@@ -310,7 +318,7 @@ In particular:
 - Phase 23 monitoring requires real operational streams/measurements.
 - Phase 17–20 need sufficient linked trade data and controlled validation before any automatic improvement authority is granted.
 
-## 13. Final classification
+## 14. Final classification
 
 | Area | Status |
 |---|---|
@@ -336,7 +344,7 @@ In particular:
 | Paper-trading sufficiency | **Requires actual observations** |
 | Controlled live deployment | **Not authorized** |
 
-## 14. Non-negotiable conclusion
+## 15. Non-negotiable conclusion
 
 The correct state of STOCK BOT is:
 
