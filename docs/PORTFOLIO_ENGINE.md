@@ -81,3 +81,20 @@ Implemented on branch feat/portfolio-engine.
 
 This module is a portfolio-policy boundary only. It does not establish
 profitability, live readiness, or broker readiness.
+
+
+## Execution-state invariants
+
+The downstream execution boundary preserves the distinction between approved
+quantity and actually filled quantity:
+
+- A partial fill creates only the broker-confirmed filled exposure.
+- A later completion adds only the outstanding quantity.
+- Cancelling a partially filled order leaves the existing filled exposure intact.
+- If a broker fill races a cancellation request, the next authoritative broker
+  refresh may transition CANCELLED to FILLED; the broker state wins.
+- Portfolio reconstruction must use authoritative broker positions rather than
+  the original approved order quantity.
+
+The paper adapter provides deterministic state progression for these lifecycle
+tests without broker I/O.
