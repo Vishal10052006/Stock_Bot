@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - feat/market-bot-production-v2
+      - feat/portfolio-engine
   pull_request:
     branches:
       - main
