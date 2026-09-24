@@ -179,14 +179,14 @@ class CandidateLifecycleController:
             raise TypeError("decision must be a PromotionDecision")
         if decision.state is not PromotionState.PROMOTED:
             raise ValueError("promotion decision is not PROMOTED")
-        if decision.candidate_id != candidate.candidate_id:
-            raise ValueError("promotion decision candidate_id does not match")
-        if decision.candidate_fingerprint != candidate.fingerprint:
-            raise ValueError("promotion decision does not match candidate")
         if candidate.lifecycle is not CandidateLifecycle.PROMOTION_REVIEW:
             raise ValueError(
                 "only PROMOTION_REVIEW candidates can receive a promotion decision"
             )
+        if decision.candidate_id != candidate.candidate_id:
+            raise ValueError("promotion decision candidate_id does not match")
+        if decision.candidate_fingerprint != candidate.fingerprint:
+            raise ValueError("promotion decision does not match candidate")
 
         promoted = replace(
             candidate,
