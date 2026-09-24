@@ -109,6 +109,12 @@ Mark-to-market therefore includes the execution costs already incurred by the
 open position. Paper orders, positions, and trade outcomes reject non-finite
 numeric accounting values.
 
+For historical trade outcomes, the lifecycle keeps the execution fill price
+separate from the decision/reference price. Gross P&L is calculated from the
+reference prices, while explicit entry/exit slippage is recorded as a separate
+cost and deducted once. This keeps backtest net P&L consistent with the
+economic result of the slippage-adjusted fills.
+
 ## Position reconciliation boundary
 
 Broker positions are authoritative for reconciliation. The comparison is
