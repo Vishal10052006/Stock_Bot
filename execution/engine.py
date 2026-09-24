@@ -253,7 +253,13 @@ class OrderStateMachine:
         OrderStatus.CREATED: {OrderStatus.VALIDATED, OrderStatus.REJECTED_LOCAL},
         OrderStatus.VALIDATED: {OrderStatus.SUBMITTING, OrderStatus.REJECTED_LOCAL},
         OrderStatus.SUBMITTING: {
+            # Some broker adapters resolve an immediate paper order directly
+            # to a terminal/intermediate fill state. These transitions are
+            # valid acknowledgements of a successful submission.
             OrderStatus.SUBMITTED,
+            OrderStatus.OPEN,
+            OrderStatus.PARTIALLY_FILLED,
+            OrderStatus.FILLED,
             OrderStatus.REJECTED_BROKER,
             OrderStatus.FAILED,
             OrderStatus.UNKNOWN,
