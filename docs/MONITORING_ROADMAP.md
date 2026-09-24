@@ -20,15 +20,14 @@ M-17 Stable monitoring contract — COMPLETE
 M-18 Completion documentation — COMPLETE
 M-19 Runtime telemetry bridge — COMPLETE
 
-M-20 Empirical evidence identity / validation — COMPLETE
-M-21 Chronological run accounting — COMPLETE
-M-22 Cross-layer monitoring coverage — COMPLETE
-M-23 Failure / calibration evidence semantics — COMPLETE
-M-24 Final empirical monitoring completion gate — COMPLETE
+M-20 Empirical evidence identity / validation — IMPLEMENTED
+M-21 Chronological run accounting — IMPLEMENTED
+M-22 Cross-layer monitoring coverage — IMPLEMENTED
+M-23 Failure / calibration evidence semantics — IMPLEMENTED
+M-24 Final empirical monitoring completion gate — VALIDATING
 
 M-20..M-24 are evidence/completion gates over the existing Monitoring Engine.
-They do not add trading authority or replace the empirical paper run. The final
-completion command validates the real chronological paper evidence artifact.
+They do not add trading authority or replace the empirical paper run.
 
 ## M-19 runtime boundary
 
@@ -47,17 +46,20 @@ never replaces Risk or Independent Safety.
 
 ## M-20..M-24 empirical completion
 
-The remaining monitoring boundary is validated by:
+The final completion gate is implemented in:
 
-`PYTHONPATH="$PWD" python3 scripts/trading/validate_monitoring_completion.py`
+- `monitoring/empirical_completion.py`
+- `scripts/trading/validate_monitoring_completion.py`
+- `tests/monitoring/test_empirical_completion.py`
+- `docs/MONITORING_M20_M24_COMPLETION.md`
+
+Run:
+
+`pytest -q tests/monitoring/test_empirical_completion.py && PYTHONPATH="$PWD" python3 scripts/trading/validate_monitoring_completion.py`
 
 Default artifact:
 
 `data/paper/empirical_paper_report_v3.json`
 
-The completion gate verifies evidence identity, non-negative accounting, cross-layer
-relationships, chronological run identity, calibration semantics for deterministic
-baselines, failure-observation semantics, and operational observability.
-
-A successful monitoring completion gate is **not** a profitability claim and does
-not authorize live broker trading.
+M-24 becomes COMPLETE only after the real empirical artifact passes this gate.
+The gate is deliberately not a profitability or live-readiness claim.
