@@ -572,3 +572,56 @@ def test_partial_short_cancellation_preserves_signed_filled_quantity() -> None:
     assert cancelled.filled_quantity == 4.0
     assert adapter.positions()[0].quantity == -4.0
     assert engine.reconcile_positions(adapter.positions())
+
+
+def test_cancel_fill_race_accepts_authoritative_filled_state() -> None:
+    """A fill that wins a cancellation race must become authoritative."""
+    adapter = PaperBrokerAdapter(
+        config=PaperAdapterConfig(
+            partial_fill_ratio=0.6,
+            slippage_bps=0.0,
+            fee_bps=0.0,
+        ),
+        price_provider=lambda _order: 100.0,
+    )
+    engine = ExecutionEngine(adapter)
+    request = order_request()
+
+    first = engine.submit(request)
+    assert first.snapshot.filled_quantity == 60.0
+
+    cancelled = engine.cancel(request.client_order_id)
+    assert cancelled.status is OrderStatus.CANCELLED
+    assert adapter.positions()[0].quantity == 60.0
+
+    adapter.fill_remaining(request.client_order_id, after_cancel=True)
+    refreshed = engine.refresh(request.client_order_id)
+
+    assert refreshed.status is OrderStatus.FILLED
+    assert refreshed.filled_quantity == 100.0
+    assert len(refreshed.fills) == 2
+    assert adapter.positions()[0].quantity == 100.0
+    assert engine.reconcile_positions(adapter.positions())
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("quantity", float("inf")),
+        ("quantity", float("nan")),
+    ],
+)
+def test_position_snapshot_rejects_non_finite_quantity(field: str, value: float) -> None:
+    from execution.engine import PositionSnapshot
+
+    kwargs = {"symbol": "ITC", "quantity": 1.0, "average_price": 100.0}
+    kwargs[field] = value
+    with pytest.raises(ValueError, match="finite"):
+        PositionSnapshot(**kwargs)
+
+
+def test_position_snapshot_rejects_non_finite_average_price() -> None:
+    from execution.engine import PositionSnapshot
+
+    with pytest.raises(ValueError, match="finite"):
+        PositionSnapshot(symbol="ITC", quantity=1.0, average_price=float("inf"))
