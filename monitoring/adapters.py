@@ -1,14 +1,12 @@
-"""Adapters from existing STOCK_BOT domains into MonitoringEngine telemetry."""
+"""Adapters from existing STOCK_BOT domains into monitoring telemetry."""
 
 from __future__ import annotations
 
 from typing import Mapping
 
-from monitoring.models import AlertSeverity
-
 
 def prediction_payload(telemetry: object) -> Mapping[str, object]:
-    """Convert Phase-9 PredictionTelemetry into monitoring payload."""
+    """Convert Phase-9 PredictionTelemetry into a monitoring payload."""
     return {
         "timestamp": telemetry.timestamp.isoformat(),
         "symbol": telemetry.symbol,
@@ -23,7 +21,7 @@ def prediction_payload(telemetry: object) -> Mapping[str, object]:
 
 
 def decision_payload(decision: object) -> Mapping[str, object]:
-    """Convert Strategy/Journal decision context into monitoring payload."""
+    """Convert a TradeDecisionRecord-compatible object."""
     return {
         "trade_id": decision.trade_id,
         "timestamp": decision.timestamp.isoformat(),
@@ -40,7 +38,7 @@ def decision_payload(decision: object) -> Mapping[str, object]:
 
 
 def outcome_payload(outcome: object) -> Mapping[str, object]:
-    """Convert TradeJournalRecord into monitoring payload."""
+    """Convert a TradeJournalRecord-compatible object."""
     return {
         "journal_id": outcome.journal_id,
         "trade_id": outcome.trade_id,
@@ -59,8 +57,8 @@ def outcome_payload(outcome: object) -> Mapping[str, object]:
 
 
 def safety_payload(decision: object) -> Mapping[str, object]:
-    """Convert IndependentSafetyGate decision into monitoring payload."""
-    block = getattr(getattr(decision, "block", None), "value", decision.block)
+    """Convert an IndependentSafetyGate decision."""
+    block = getattr(decision.block, "value", decision.block)
     return {
         "allowed": bool(decision.allowed),
         "block": block,
@@ -69,7 +67,7 @@ def safety_payload(decision: object) -> Mapping[str, object]:
 
 
 def reconciliation_payload(report: object) -> Mapping[str, object]:
-    """Convert reconciliation report into monitoring payload."""
+    """Convert a BrokerReconciler report."""
     status = getattr(report.status, "value", report.status)
     return {
         "status": status,
