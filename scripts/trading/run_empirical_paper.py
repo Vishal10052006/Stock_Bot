@@ -18,7 +18,15 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
+import sys
 from typing import Any
+
+# Direct script execution sets sys.path[0] to scripts/trading rather than
+# the repository root. Bootstrap the repository root so imports such as
+# `experiments.*` and `trading.*` resolve exactly as they do from the repo root.
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
 
 import pandas as pd
 
