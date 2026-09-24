@@ -88,7 +88,12 @@ and Risk version. Re-submitting the same immutable request is therefore
 idempotent; an already-journaled client order is not submitted to the adapter a
 second time.
 
-A malformed broker response must never be treated as a valid fill.
+A malformed broker response must never be treated as a valid fill. If a
+submission response is malformed, the local order is journaled as UNKNOWN
+before the validation error is surfaced, preventing a subsequent caller from
+blindly submitting the same client order again. Cancellation transport
+failures or malformed cancellation responses likewise transition the order
+from CANCEL_PENDING to UNKNOWN because cancellation outcome is not known.
 
 
 UNKNOWN orders are unresolved rather than accepted in execution
@@ -157,6 +162,12 @@ race may produce a later authoritative FILLED snapshot after cancellation;
 the state machine permits that correction and portfolio reconciliation follows
 the final broker position.
 
+
+The standalone broker reconciliation contract also supports signed
+quantities for long/short positions, normalizes symbols, rejects zero or
+non-finite quantities and non-positive/non-finite average prices, and allows
+only representation-level floating-point noise (1e-12) when comparing
+quantity and price.
 
 ### Position-set invariants
 
