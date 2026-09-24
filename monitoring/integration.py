@@ -17,5 +17,13 @@ class MonitoringIntegration:
     def report(self):
         snapshot=self.engine.snapshot()
         validation=validate_monitoring_snapshot(snapshot)
-        checks=(ReadinessCheck("system.snapshot_validation",validation.passed,"; ".join(validation.failures)),ReadinessCheck("system.monitoring_engine",True,"monitoring engine available"))
+        checks=(
+            ReadinessCheck("system.snapshot_validation", validation.passed, "; ".join(validation.failures)),
+            ReadinessCheck(
+                "system.health_observed",
+                bool(snapshot.health),
+                "at least one component health observation is present",
+            ),
+            ReadinessCheck("system.monitoring_engine", True, "monitoring engine available"),
+        )
         return MonitoringIntegrationReport(evaluate_readiness(checks),validation.passed,snapshot_payload(snapshot))
