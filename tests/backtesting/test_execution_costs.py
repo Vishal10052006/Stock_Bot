@@ -99,12 +99,13 @@ def test_nonzero_exit_slippage_requires_reference_price() -> None:
     )
     from paper.runtime import PaperOrder, PaperOrderStatus
     from trading.paper.lifecycle import PaperTradeLifecycle
+    from trading.strategy.models import StrategyDirection
 
     timestamp = pd.Timestamp("2026-01-01 09:15:00+05:30")
     authorization = ExecutionAuthorization(
         timestamp=timestamp,
         symbol="ITC",
-        direction=__import__("trading.strategy.models", fromlist=["StrategyDirection"]).StrategyDirection.LONG,
+        direction=StrategyDirection.LONG,
         status=ExecutionAuthorizationStatus.AUTHORIZED,
         reason="test",
         risk_version="test",
