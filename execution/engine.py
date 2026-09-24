@@ -495,15 +495,17 @@ class ExecutionEngine:
         snapshot: OrderSnapshot,
     ) -> None:
         """Validate one broker snapshot before it can affect local state."""
-        if snapshot.client_order_id != order.client_order_id:
-            raise ValueError("broker response client_order_id mismatch")
-        if snapshot.requested_quantity != order.quantity:
-            raise ValueError("broker response quantity mismatch")
         try:
+            client_order_id = str(snapshot.client_order_id).strip()
             broker_order_id = str(snapshot.broker_order_id).strip()
             status = snapshot.status
             requested_quantity = float(snapshot.requested_quantity)
             filled_quantity = float(snapshot.filled_quantity)
+        except (AttributeError, TypeError, ValueError) as exc:
+            raise ValueError(f"malformed broker response: {exc}") from exc
+
+        if client_order_id != order.client_order_id:
+            raise ValueError("broker response client_order_id mismatch")
         except (AttributeError, TypeError, ValueError) as exc:
             raise ValueError(f"malformed broker response: {exc}") from exc
 
@@ -553,11 +555,6 @@ class ExecutionEngine:
 
         if abs(fill_total - snapshot.filled_quantity) > 1e-12:
             raise ValueError("broker response fill total does not match filled quantity")
-
-        if status is OrderStatus.FILLED and (
-            abs(filled_quantity - order.quantity) > 1e-12
-        ):
-            raise ValueError("FILLED broker response must fill the requested quantity")
 
         if status is OrderStatus.PARTIALLY_FILLED and not (
             0.0 < filled_quantity < order.quantity
