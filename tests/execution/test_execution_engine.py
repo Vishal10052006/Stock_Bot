@@ -795,6 +795,44 @@ def test_position_snapshot_rejects_non_finite_average_price() -> None:
         PositionSnapshot(symbol="ITC", quantity=1.0, average_price=float("inf"))
 
 
+def test_position_snapshot_requires_positive_average_price() -> None:
+    from execution.engine import PositionSnapshot
+
+    with pytest.raises(ValueError, match="positive"):
+        PositionSnapshot(symbol="ITC", quantity=1.0, average_price=0.0)
+
+    with pytest.raises(ValueError, match="positive"):
+        PositionSnapshot(symbol="ITC", quantity=-1.0, average_price=-100.0)
+
+
+def test_filled_order_snapshot_requires_average_fill_price() -> None:
+    from execution.engine import OrderSnapshot
+
+    with pytest.raises(ValueError, match="average_fill_price"):
+        OrderSnapshot(
+            broker_order_id="BROKER-1",
+            client_order_id="CLIENT-1",
+            status=OrderStatus.FILLED,
+            requested_quantity=10.0,
+            filled_quantity=10.0,
+            average_fill_price=None,
+        )
+
+
+@pytest.mark.parametrize("fee", [float("nan"), float("inf"), float("-inf")])
+def test_fill_rejects_non_finite_fee(fee: float) -> None:
+    from execution.engine import Fill
+
+    with pytest.raises(ValueError, match="finite"):
+        Fill(
+            fill_id="FEE-BAD",
+            client_order_id="CLIENT-1",
+            quantity=1.0,
+            price=100.0,
+            fee=fee,
+        )
+
+
 def test_refresh_rejects_inconsistent_fill_total() -> None:
     """A broker snapshot cannot claim 10 filled while exposing only 6 fills."""
     from execution.engine import Fill, OrderSnapshot
