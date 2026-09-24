@@ -508,3 +508,67 @@ def test_partial_short_fill_can_complete_remaining_quantity() -> None:
     assert refreshed.filled_quantity == 10.0
     assert adapter.positions()[0].quantity == -10.0
     assert engine.reconcile_positions(adapter.positions())
+
+
+def test_partial_fill_cancellation_preserves_only_actual_filled_position() -> None:
+    """Cancelling the remainder must never manufacture additional exposure."""
+    adapter = PaperBrokerAdapter(
+        config=PaperAdapterConfig(
+            partial_fill_ratio=0.6,
+            slippage_bps=0.0,
+            fee_bps=0.0,
+        ),
+        price_provider=lambda _order: 100.0,
+    )
+    engine = ExecutionEngine(adapter)
+    request = order_request()
+
+    first = engine.submit(request)
+    assert first.snapshot.status is OrderStatus.PARTIALLY_FILLED
+    assert first.snapshot.filled_quantity == 60.0
+    assert adapter.positions()[0].quantity == 60.0
+
+    cancelled = engine.cancel(request.client_order_id)
+    refreshed = engine.refresh(request.client_order_id)
+
+    assert cancelled.status is OrderStatus.CANCELLED
+    assert cancelled.filled_quantity == 60.0
+    assert refreshed.status is OrderStatus.CANCELLED
+    assert refreshed.filled_quantity == 60.0
+    assert adapter.positions()[0].quantity == 60.0
+    assert len(engine.fills(request.client_order_id)) == 1
+
+    with pytest.raises(ValueError, match="partially filled"):
+        adapter.fill_remaining(request.client_order_id)
+
+    assert adapter.positions()[0].quantity == 60.0
+    assert engine.reconcile_positions(adapter.positions())
+
+
+def test_partial_short_cancellation_preserves_signed_filled_quantity() -> None:
+    adapter = PaperBrokerAdapter(
+        config=PaperAdapterConfig(
+            partial_fill_ratio=0.4,
+            slippage_bps=0.0,
+            fee_bps=0.0,
+        )
+    )
+    engine = ExecutionEngine(adapter)
+    request = ExecutionEngine.from_authorization(
+        authorization(
+            direction=StrategyDirection.SHORT,
+            quantity=10.0,
+        ),
+        decision_id="partial-short-cancel",
+    )
+
+    first = engine.submit(request)
+    assert first.snapshot.filled_quantity == 4.0
+    assert adapter.positions()[0].quantity == -4.0
+
+    cancelled = engine.cancel(request.client_order_id)
+
+    assert cancelled.status is OrderStatus.CANCELLED
+    assert cancelled.filled_quantity == 4.0
+    assert adapter.positions()[0].quantity == -4.0
+    assert engine.reconcile_positions(adapter.positions())
