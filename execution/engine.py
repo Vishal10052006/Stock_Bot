@@ -674,6 +674,7 @@ class ExecutionEngine:
                 OrderStatus.REJECTED_LOCAL,
                 OrderStatus.REJECTED_BROKER,
                 OrderStatus.FAILED,
+                OrderStatus.UNKNOWN,
             }
             for s in snapshots
         )
