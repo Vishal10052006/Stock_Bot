@@ -18,7 +18,7 @@ from enum import Enum
 import hashlib
 import json
 import time
-from typing import Any, Mapping, Protocol
+from typing import Protocol
 
 import pandas as pd
 
@@ -158,8 +158,10 @@ class PositionSnapshot:
     def __post_init__(self) -> None:
         if not self.symbol.strip():
             raise ValueError("symbol must not be empty")
-        if self.quantity < 0 or self.average_price < 0:
-            raise ValueError("position values must be non-negative")
+        if self.average_price < 0:
+            raise ValueError("average_price must be non-negative")
+        # Signed quantity: positive=long, negative=short. This is required
+        # because NSE research/paper trading supports both directions.
         object.__setattr__(self, "symbol", self.symbol.strip().upper())
 
 
@@ -191,6 +193,41 @@ class ExecutionResult:
         }
         canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
         return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+@dataclass(frozen=True, slots=True)
+class ExecutionEvent:
+    """Immutable lifecycle event retained for audit and execution metrics."""
+
+    client_order_id: str
+    from_status: OrderStatus | None
+    to_status: OrderStatus
+    timestamp: pd.Timestamp
+    reason: str = ""
+
+    def __post_init__(self) -> None:
+        ts = pd.Timestamp(self.timestamp)
+        if ts.tzinfo is None:
+            raise ValueError("execution event timestamp must be timezone-aware")
+        object.__setattr__(self, "timestamp", ts)
+
+
+@dataclass(frozen=True, slots=True)
+class ExecutionMetrics:
+    """Aggregate execution-quality metrics derived from observed orders."""
+
+    orders: int
+    accepted_orders: int
+    filled_orders: int
+    partially_filled_orders: int
+    rejected_orders: int
+    unknown_orders: int
+    requested_quantity: float
+    filled_quantity: float
+    total_fees: float
+    average_latency_ms: float
+    fill_ratio: float
+    rejection_rate: float
 
 
 class BrokerAdapter(Protocol):
@@ -272,6 +309,8 @@ class ExecutionEngine:
         self.adapter = adapter
         self._orders: dict[str, OrderSnapshot] = {}
         self._fills: dict[str, tuple[Fill, ...]] = {}
+        self._states: dict[str, OrderStatus] = {}
+        self._events: list[ExecutionEvent] = []
 
     @staticmethod
     def side_for_direction(direction: StrategyDirection) -> OrderSide:
@@ -357,6 +396,9 @@ class ExecutionEngine:
                 latency_ms=0.0,
             )
 
+        self._transition(order.client_order_id, OrderStatus.VALIDATED, "local validation passed")
+        self._transition(order.client_order_id, OrderStatus.SUBMITTING, "broker submission started")
+
         start = time.perf_counter()
         try:
             snapshot = self.adapter.submit(order)
@@ -369,6 +411,11 @@ class ExecutionEngine:
                 reason=f"broker submission exception: {exc}",
             )
             latency_ms = (time.perf_counter() - start) * 1000.0
+            self._transition(
+                order.client_order_id,
+                OrderStatus.UNKNOWN,
+                f"broker submission exception: {exc}",
+            )
             self._orders[order.client_order_id] = snapshot
             return ExecutionResult(
                 request=order,
@@ -384,6 +431,11 @@ class ExecutionEngine:
         if snapshot.requested_quantity != order.quantity:
             raise ValueError("broker response quantity mismatch")
 
+        self._transition(
+            order.client_order_id,
+            snapshot.status,
+            snapshot.reason or "broker acknowledged order",
+        )
         self._orders[order.client_order_id] = snapshot
         self._fills[order.client_order_id] = tuple(snapshot.fills)
         return ExecutionResult(
@@ -395,6 +447,27 @@ class ExecutionEngine:
             },
             latency_ms=latency_ms,
             error=snapshot.reason or None,
+        )
+
+    def _transition(
+        self,
+        client_order_id: str,
+        target: OrderStatus,
+        reason: str,
+    ) -> None:
+        """Apply and journal one strictly validated lifecycle transition."""
+        current = self._states.get(client_order_id)
+        if current is not None:
+            OrderStateMachine.transition(current, target)
+        self._states[client_order_id] = target
+        self._events.append(
+            ExecutionEvent(
+                client_order_id=client_order_id,
+                from_status=current,
+                to_status=target,
+                timestamp=pd.Timestamp.now(tz="Asia/Kolkata"),
+                reason=reason,
+            )
         )
 
     def refresh(self, client_order_id: str) -> OrderSnapshot:
@@ -416,9 +489,15 @@ class ExecutionEngine:
                 reason="broker returned no order state",
                 fills=prior.fills,
             )
+            self._transition(client_order_id, OrderStatus.UNKNOWN, "broker returned no order state")
             self._orders[client_order_id] = unknown
             return unknown
 
+        current = self._states.get(client_order_id)
+        if current is None:
+            self._states[client_order_id] = snapshot.status
+        elif current is not snapshot.status:
+            self._transition(client_order_id, snapshot.status, "broker refresh")
         self._orders[client_order_id] = snapshot
         self._fills[client_order_id] = tuple(snapshot.fills)
         return snapshot
@@ -443,7 +522,10 @@ class ExecutionEngine:
         if prior.status in {OrderStatus.FILLED, OrderStatus.CANCELLED, OrderStatus.REJECTED_BROKER}:
             raise ValueError(f"cannot cancel order in state {prior.status.value}")
 
+        self._transition(client_order_id, OrderStatus.CANCEL_PENDING, "cancellation requested")
         snapshot = self.adapter.cancel(client_order_id)
+        if snapshot.status is not OrderStatus.CANCEL_PENDING:
+            self._transition(client_order_id, snapshot.status, snapshot.reason or "cancellation result")
         self._orders[client_order_id] = snapshot
         self._fills[client_order_id] = tuple(snapshot.fills)
         return snapshot
@@ -471,6 +553,51 @@ class ExecutionEngine:
     def journal(self) -> tuple[OrderSnapshot, ...]:
         return tuple(self._orders.values())
 
+    @property
+    def events(self) -> tuple[ExecutionEvent, ...]:
+        """Return immutable lifecycle events."""
+        return tuple(self._events)
+
+    def metrics(self) -> ExecutionMetrics:
+        """Calculate execution-quality metrics from the in-memory journal."""
+        snapshots = tuple(self._orders.values())
+        orders = len(snapshots)
+        accepted = sum(
+            s.status not in {
+                OrderStatus.REJECTED_LOCAL,
+                OrderStatus.REJECTED_BROKER,
+                OrderStatus.FAILED,
+            }
+            for s in snapshots
+        )
+        filled = sum(s.status is OrderStatus.FILLED for s in snapshots)
+        partial = sum(s.status is OrderStatus.PARTIALLY_FILLED for s in snapshots)
+        rejected = sum(
+            s.status in {OrderStatus.REJECTED_LOCAL, OrderStatus.REJECTED_BROKER, OrderStatus.FAILED}
+            for s in snapshots
+        )
+        unknown = sum(s.status is OrderStatus.UNKNOWN for s in snapshots)
+        requested = sum(s.requested_quantity for s in snapshots)
+        filled_qty = sum(s.filled_quantity for s in snapshots)
+        fees = sum(fill.fee for fills in self._fills.values() for fill in fills)
+        # Latency is not persisted in OrderSnapshot, so this metric is zero
+        # until callers persist ExecutionResult latency externally.
+        average_latency = 0.0
+        return ExecutionMetrics(
+            orders=orders,
+            accepted_orders=accepted,
+            filled_orders=filled,
+            partially_filled_orders=partial,
+            rejected_orders=rejected,
+            unknown_orders=unknown,
+            requested_quantity=requested,
+            filled_quantity=filled_qty,
+            total_fees=fees,
+            average_latency_ms=average_latency,
+            fill_ratio=(filled_qty / requested) if requested else 0.0,
+            rejection_rate=(rejected / orders) if orders else 0.0,
+        )
+
     def reconcile_positions(self, local: tuple[PositionSnapshot, ...]) -> bool:
         """Compare local positions with the authoritative broker snapshot."""
         broker = self.adapter.positions()
@@ -494,6 +621,8 @@ class ExecutionReadiness:
 __all__ = [
     "BrokerAdapter",
     "ExecutionEngine",
+    "ExecutionEvent",
+    "ExecutionMetrics",
     "ExecutionReadiness",
     "ExecutionResult",
     "Fill",
