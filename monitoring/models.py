@@ -1,4 +1,4 @@
-"""Immutable contracts for the STOCK_BOT monitoring engine.
+"""Extended immutable contracts for STOCK_BOT monitoring.
 
 M-1 System, M-2 Market Data, M-3 Features, M-4 Model, M-5 Strategy,
 M-6 Risk, M-7 Execution, and M-8 Outcome/Learning all report through these
@@ -86,6 +86,10 @@ class MonitoringEvent:
         object.__setattr__(self, "severity", AlertSeverity(self.severity))
         object.__setattr__(self, "payload", dict(self.payload))
 
+    @property
+    def fingerprint(self) -> str:
+        return fingerprint(asdict(self))
+
 
 @dataclass(frozen=True, slots=True)
 class Alert:
@@ -109,6 +113,21 @@ class Alert:
             raise ValueError("alert message must not be empty")
         object.__setattr__(self, "severity", AlertSeverity(self.severity))
         object.__setattr__(self, "details", dict(self.details))
+
+    @property
+    def fingerprint(self) -> str:
+        """Return a stable content fingerprint excluding the random alert ID."""
+        return fingerprint(
+            {
+                "timestamp": self.timestamp,
+                "severity": self.severity,
+                "code": self.code,
+                "source": self.source,
+                "message": self.message,
+                "correlation_id": self.correlation_id,
+                "details": self.details,
+            }
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -207,11 +226,7 @@ class PerformanceSnapshot:
 
 @dataclass(frozen=True, slots=True)
 class MonitoringSnapshot:
-    """Cross-domain point-in-time monitoring snapshot.
-
-    Risk-limit values mirror the frozen research/paper specification only as
-    observational reference values. The Risk Engine remains authoritative.
-    """
+    """Cross-domain point-in-time monitoring snapshot."""
 
     timestamp: datetime
 
@@ -351,15 +366,15 @@ class MonitoringSnapshot:
 
     @property
     def total_pnl(self) -> float:
-        """Return realized plus unrealized P&L."""
         return self.realized_pnl + self.unrealized_pnl
 
     @property
     def fill_rate(self) -> float | None:
-        """Return order fill rate when there are submitted orders."""
-        if self.orders_submitted == 0:
-            return None
-        return self.orders_filled / self.orders_submitted
+        return (
+            None
+            if self.orders_submitted == 0
+            else self.orders_filled / self.orders_submitted
+        )
 
     def to_dict(self) -> dict[str, Any]:
         """Return JSON-safe snapshot data."""
