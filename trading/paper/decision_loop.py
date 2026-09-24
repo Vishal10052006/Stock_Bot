@@ -42,6 +42,13 @@ class PaperDecisionRun:
     """Immutable result of a chronological paper decision run."""
 
     steps: tuple[PaperDecisionStep, ...]
+    equity_observations: tuple[float, ...] = ()
+
+    def __post_init__(self) -> None:
+        if len(self.equity_observations) not in (0, len(self.steps)):
+            raise ValueError(
+                "equity_observations must be empty or aligned one-to-one with steps"
+            )
 
     @property
     def run_id(self) -> str:
@@ -104,7 +111,7 @@ class PaperDecisionLoop:
         if not isinstance(rows, pd.DataFrame):
             raise TypeError("rows must be a pandas DataFrame")
         if rows.empty:
-            return PaperDecisionRun(steps=())
+            return PaperDecisionRun(steps=(), equity_observations=())
         if price_column not in rows.columns:
             raise ValueError(f"rows must contain {price_column!r}")
         if quantity <= 0:
@@ -120,6 +127,7 @@ class PaperDecisionLoop:
         ).reset_index(drop=True)
 
         steps: list[PaperDecisionStep] = []
+        equity_observations: list[float] = []
         last_prices: dict[str, float] = {}
         session_date: object | None = None
         day_start_equity = self.runtime.config.initial_equity
@@ -211,6 +219,14 @@ class PaperDecisionLoop:
                     if order.status.value == "FILLED":
                         trades_today += 1
 
+            # Capture the actual paper account state after any fill for this
+            # decision. This is a runtime observation, not a fabricated P&L
+            # estimate.
+            post_equity, _post_realized, _post_unrealized, _post_gross = (
+                self.runtime.account_snapshot(last_prices)
+            )
+            equity_observations.append(float(post_equity))
+
             steps.append(
                 PaperDecisionStep(
                     strategy=strategy,
@@ -220,7 +236,10 @@ class PaperDecisionLoop:
                 )
             )
 
-        return PaperDecisionRun(steps=tuple(steps))
+        return PaperDecisionRun(
+            steps=tuple(steps),
+            equity_observations=tuple(equity_observations),
+        )
 
     def run_and_persist_evidence(
         self,
@@ -233,7 +252,7 @@ class PaperDecisionLoop:
         false_signals: dict[int, bool] | None = None,
         equity_observations: dict[int, float] | None = None,
         calibration_outcomes: dict[int, float] | None = None,
-        operational_events: int = 0,
+        operational_events: int | None = None,
         operational_errors: int = 0,
         stale_events: int = 0,
         evidence_version: str,
@@ -247,6 +266,24 @@ class PaperDecisionLoop:
         equity, false-signal, or operational observations.
         """
         run = self.run(rows, price_column=price_column, quantity=quantity)
+
+        # The authoritative paper runtime can establish these observations
+        # itself. External maps remain supported for observations that the
+        # loop cannot know causally.
+        if fill_timestamps is None:
+            fill_timestamps = {
+                index: step.order.timestamp
+                for index, step in enumerate(run.steps)
+                if step.order is not None and step.order.status.value == "FILLED"
+            }
+        if equity_observations is None:
+            equity_observations = {
+                index: equity
+                for index, equity in enumerate(run.equity_observations)
+            }
+        if operational_events is None:
+            operational_events = len(run.steps)
+
         record = persist_paper_decision_run(
             run,
             journal=journal,

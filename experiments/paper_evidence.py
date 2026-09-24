@@ -113,7 +113,6 @@ def validate_paper_evidence(
         "latency_observation_count",
         "drawdown_observation_count",
         "regime_observation_count",
-        "calibration_observation_count",
         "operational_event_count",
     )
     for field in required_counts:
@@ -131,6 +130,14 @@ def validate_paper_evidence(
 
     if snapshot.latency_observation_count > snapshot.fill_count:
         issues.append("latency_observation_count cannot exceed fill_count")
+
+    # Calibration is conditionally applicable. The current deterministic
+    # baseline strategy does not emit prediction probabilities, so a paper
+    # run with zero calibration observations is valid evidence for the
+    # baseline monitoring scope. When calibration observations are supplied,
+    # the collector already enforces that a prediction probability exists.
+    if snapshot.calibration_observation_count > snapshot.signal_count:
+        issues.append("calibration_observation_count cannot exceed signal_count")
 
     if snapshot.operational_error_count > snapshot.operational_event_count:
         issues.append("operational_error_count cannot exceed operational_event_count")

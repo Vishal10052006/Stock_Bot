@@ -166,3 +166,28 @@ def test_paper_run_adapter_preserves_explicit_operational_counts() -> None:
     assert snapshot.operational_error_count == 1
     assert snapshot.stale_event_count == 1
     assert validate_paper_evidence(snapshot).valid
+
+
+
+def test_baseline_evidence_allows_unavailable_calibration() -> None:
+    snapshot = PaperEvidenceSnapshot(
+        evidence_version="PAPER-EVIDENCE-v1",
+        dataset_version="paper-2026-09",
+        code_version="baseline-v1",
+        signal_count=1,
+        fill_count=1,
+        slippage_observation_count=1,
+        latency_observation_count=1,
+        false_signal_count=0,
+        drawdown_observation_count=1,
+        regime_observation_count=1,
+        calibration_observation_count=0,
+        operational_event_count=1,
+        operational_error_count=0,
+        stale_event_count=0,
+    )
+
+    report = validate_paper_evidence(snapshot)
+
+    assert report.valid
+    assert not report.issues

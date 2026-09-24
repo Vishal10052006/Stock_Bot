@@ -125,7 +125,11 @@ def main() -> None:
     rows = _load_rows(args.input)
     sidecar = _load_sidecar(args.observations_json)
 
-    operational_events = int(sidecar.get("operational_events", 0))
+    operational_events = (
+        int(sidecar["operational_events"])
+        if "operational_events" in sidecar
+        else None
+    )
     operational_errors = int(sidecar.get("operational_errors", 0))
     stale_events = int(sidecar.get("stale_events", 0))
     for name, value in (
@@ -185,6 +189,37 @@ def main() -> None:
                 else json.loads(record.evidence.canonical_json())
             ),
         },
+        "observation_provenance": {
+            "equity": (
+                "paper_runtime_account_snapshot"
+                if not _indexed_map(sidecar, "equity_observations")
+                else "external_observation_sidecar"
+            ),
+            "latency": (
+                "deterministic_paper_fill_timestamp"
+                if run.orders and not _indexed_map(sidecar, "fill_timestamps")
+                else (
+                    "external_observation_sidecar"
+                    if _indexed_map(sidecar, "fill_timestamps")
+                    else "not_observed"
+                )
+            ),
+            "operational_events": (
+                "paper_decision_step"
+                if "operational_events" not in sidecar
+                else "external_observation_sidecar"
+            ),
+            "calibration": (
+                "external_prediction_outcome_sidecar"
+                if _indexed_map(sidecar, "calibration_outcomes")
+                else "not_applicable_without_prediction_probability"
+            ),
+            "false_signal_outcomes": (
+                "external_observation_sidecar"
+                if _indexed_map(sidecar, "false_signals")
+                else "not_observed"
+            ),
+        },
         "quality": {
             "valid": quality.valid,
             "issues": list(quality.issues),
@@ -208,6 +243,14 @@ def main() -> None:
     print(f"Paper orders         : {len(run.orders):,}")
     print(f"Evidence quality     : {'VALID' if quality.valid else 'INCOMPLETE'}")
     print(f"Quality issues       : {len(quality.issues):,}")
+    print(
+        "Calibration scope    : "
+        + (
+            "observed"
+            if _indexed_map(sidecar, "calibration_outcomes")
+            else "not applicable without prediction probability"
+        )
+    )
     print(f"Journal              : {args.journal}")
     print(f"Report               : {target}")
     print("=" * 72)
