@@ -55,6 +55,60 @@ class PromotionController:
             ),
         )
 
+    def review_run(
+        self,
+        *,
+        champion_version: str,
+        challenger: ModelCandidate,
+        validation_run: "ValidationRun",
+        policy: ValidationPolicy | None = None,
+    ) -> PromotionDecision:
+        """Review one immutable validation run bound to this exact candidate.
+
+        The run identity is included in the decision evidence so a promotion
+        review cannot be detached from the validation bundle that produced it.
+        """
+        from .validation_orchestrator import ValidationRun
+
+        if not isinstance(validation_run, ValidationRun):
+            raise TypeError("validation_run must be a ValidationRun")
+        if challenger.lifecycle.value != "PROMOTION_REVIEW":
+            raise ValueError("candidate must be PROMOTION_REVIEW before promotion review")
+        if validation_run.candidate_fingerprint != challenger.fingerprint:
+            raise ValueError("validation run does not match challenger")
+
+        gate = validate_candidate(
+            challenger,
+            dict(validation_run.stage_map),
+            policy=policy,
+        )
+        evidence = tuple(
+            fingerprint
+            for result in validation_run.stages
+            for fingerprint in result.artifact_fingerprints
+        ) + (validation_run.fingerprint,)
+
+        if not gate.valid:
+            return PromotionDecision(
+                candidate_id=challenger.candidate_id,
+                candidate_fingerprint=challenger.fingerprint,
+                champion_version=champion_version,
+                challenger_version=challenger.candidate_version,
+                state=PromotionState.BLOCKED,
+                reasons=gate.issues,
+                validation_fingerprints=tuple(dict.fromkeys(evidence)),
+            )
+
+        return PromotionDecision(
+            candidate_id=challenger.candidate_id,
+            candidate_fingerprint=challenger.fingerprint,
+            champion_version=champion_version,
+            challenger_version=challenger.candidate_version,
+            state=PromotionState.ELIGIBLE,
+            reasons=("Required validation evidence is structurally present.",),
+            validation_fingerprints=tuple(dict.fromkeys(evidence)),
+        )
+
     def approve(
         self,
         review: PromotionDecision,
