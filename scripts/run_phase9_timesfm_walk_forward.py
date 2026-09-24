@@ -159,7 +159,7 @@ def _session_history(
     if len(symbol_rows) < MIN_CONTEXT_POINTS:
         return None
 
-    values = symbol_rows["close"].to_numpy(dtype=np.float32)
+    values = symbol_rows["decision_close"].to_numpy(dtype=np.float32)
     return values[-context_length:]
 
 
