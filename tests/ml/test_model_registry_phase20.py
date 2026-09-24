@@ -126,6 +126,9 @@ def test_approval_is_explicit_and_preserves_artifact_lineage() -> None:
     assert approved.lineage_id == "b" * 64
     assert approved.evaluation_fingerprint == "c" * 64
     assert approved.approval_reference == "approval-2026-09-24-001"
+    assert approved.approval_evaluator == "controlled-review"
+    assert approved.approval_timestamp == "2026-09-24T16:00:00+05:30"
+    assert approved.approval_fingerprint == approval.fingerprint
     assert approved.fingerprint != candidate.fingerprint
 
 
@@ -216,3 +219,69 @@ def test_registry_metadata_is_immutable() -> None:
 
     with pytest.raises(TypeError):
         record.hyperparameters["new"] = 1  # type: ignore[index]
+
+
+def test_registry_constructor_rejects_approved_seed_state() -> None:
+    approved = _record(
+        approval_status=ModelRegistryStatus.APPROVED.value,
+        approval_reference="approval-seed",
+        approval_fingerprint="d" * 64,
+        approval_evaluator="controlled-review",
+        approval_timestamp="2026-09-24T16:00:00+05:30",
+    )
+
+    with pytest.raises(ValueError, match="through approve"):
+        ModelRegistry({approved.model_version: approved})
+
+
+def test_registry_constructor_rejects_mismatched_version_key() -> None:
+    record = _record(model_version="signal-v2.0")
+
+    with pytest.raises(ValueError, match="key must match"):
+        ModelRegistry({"wrong-key": record})
+
+
+def test_registry_rejects_non_finite_metrics() -> None:
+    with pytest.raises(ValueError, match="finite"):
+        _record(metrics={"balanced_accuracy": float("nan")})
+
+    with pytest.raises(ValueError, match="finite"):
+        _record(metrics={"balanced_accuracy": float("inf")})
+
+
+def test_registry_requires_candidate_status_for_approval() -> None:
+    registry = ModelRegistry()
+    registry.register(_record(approval_status=ModelRegistryStatus.RESEARCH_ONLY.value))
+
+    approval = ModelApproval(
+        model_fingerprint=registry.get("signal-v2.0").fingerprint,
+        approval_reference="approval-research",
+        evaluator="controlled-review",
+        approved_at="2026-09-24T16:00:00+05:30",
+    )
+
+    with pytest.raises(ValueError, match="only CANDIDATE"):
+        registry.approve("signal-v2.0", approval)
+
+
+def test_retirement_persists_reason_and_preserves_approval_provenance() -> None:
+    registry = ModelRegistry()
+    candidate = registry.register(_record())
+
+    approval = ModelApproval(
+        model_fingerprint=candidate.fingerprint,
+        approval_reference="approval-retire",
+        evaluator="controlled-review",
+        approved_at="2026-09-24T16:00:00+05:30",
+    )
+    approved = registry.approve("signal-v2.0", approval)
+    retired = registry.retire(
+        "signal-v2.0",
+        reason="superseded after controlled evaluation",
+    )
+
+    assert retired.retirement_reason == "superseded after controlled evaluation"
+    assert retired.approval_fingerprint == approved.approval_fingerprint
+    assert retired.approval_evaluator == approved.approval_evaluator
+    assert retired.approval_timestamp == approved.approval_timestamp
+    assert registry.history("signal-v2.0") == (candidate, approved, retired)
