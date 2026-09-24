@@ -212,7 +212,7 @@ def test_unknown_order_recovers_to_partial_state_without_manufacturing_fill():
     )
     engine = ExecutionEngine(adapter)
     request = order_request()
-    original = adapter.submit(request)
+    original = engine.submit(request).snapshot
     adapter._orders.pop(request.client_order_id)
 
     unknown = engine.refresh(request.client_order_id)
@@ -566,7 +566,7 @@ def test_malformed_submission_state_is_journaled_unknown_before_error():
     engine = ExecutionEngine(adapter)
     request = order_request()
 
-    with pytest.raises(ValueError, match="FILLED"):
+    with pytest.raises(ValueError, match="fill total"):
         engine.submit(request)
 
     assert engine.get_order(request.client_order_id).status is OrderStatus.UNKNOWN
@@ -599,16 +599,31 @@ def test_cancel_transport_failure_becomes_unknown():
 
 
 def test_broker_response_rejects_filled_quantity_over_request():
-    adapter = _StaticAdapter(
-        lambda order: _snapshot_for(
-            order,
-            status=OrderStatus.PARTIALLY_FILLED,
-            requested=order.quantity,
-            filled=order.quantity + 1.0,
-            fill_quantity=order.quantity,
-        )
-    )
-    engine = ExecutionEngine(adapter)
+    from execution.engine import Fill
+
+    def overfilled_snapshot(order):
+        return type(
+            "MalformedSnapshot",
+            (),
+            {
+                "broker_order_id": "BROKER-OVERFILL",
+                "client_order_id": order.client_order_id,
+                "status": OrderStatus.PARTIALLY_FILLED,
+                "requested_quantity": order.quantity,
+                "filled_quantity": order.quantity + 1.0,
+                "average_fill_price": 100.0,
+                "fills": (
+                    Fill(
+                        fill_id="OVERFILL-1",
+                        client_order_id=order.client_order_id,
+                        quantity=order.quantity + 1.0,
+                        price=100.0,
+                    ),
+                ),
+            },
+        )()
+
+    engine = ExecutionEngine(_StaticAdapter(overfilled_snapshot))
 
     with pytest.raises(ValueError, match="exceeds requested|within requested"):
         engine.submit(order_request())
