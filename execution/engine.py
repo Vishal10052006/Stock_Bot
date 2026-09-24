@@ -575,16 +575,35 @@ class ExecutionEngine:
         return snapshot
 
     def reconcile_order(self, client_order_id: str) -> bool:
-        """Return True only when local and broker order state agree."""
+        """Return True only when local and authoritative broker state agree.
+
+        The broker snapshot is validated with the same invariants used by
+        submit/refresh/cancel before it can be considered reconciled.
+        """
         local = self._orders.get(client_order_id)
         broker = self.adapter.get_order(client_order_id)
-        if local is None or broker is None:
+        order = self._order_requests.get(client_order_id)
+        if local is None or broker is None or order is None:
             return False
-        return (
-            local.status is broker.status
-            and abs(local.filled_quantity - broker.filled_quantity) <= 1e-12
-            and local.average_fill_price == broker.average_fill_price
-        )
+
+        try:
+            self._validate_broker_snapshot(order, broker)
+        except ValueError:
+            return False
+
+        if local.client_order_id != broker.client_order_id:
+            return False
+        if local.status is not broker.status:
+            return False
+        if abs(local.filled_quantity - broker.filled_quantity) > 1e-12:
+            return False
+
+        local_price = local.average_fill_price
+        broker_price = broker.average_fill_price
+        if local_price is None or broker_price is None:
+            return local_price is broker_price
+
+        return abs(local_price - broker_price) <= 1e-12
 
     def cancel(self, client_order_id: str) -> OrderSnapshot:
         """Cancel one known order and store the authoritative broker state."""
