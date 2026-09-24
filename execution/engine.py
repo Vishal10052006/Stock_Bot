@@ -627,10 +627,32 @@ class ExecutionEngine:
         )
 
     def reconcile_positions(self, local: tuple[PositionSnapshot, ...]) -> bool:
-        """Compare local positions with the authoritative broker snapshot."""
+        """Compare local positions with the authoritative broker snapshot.
+
+        Reconciliation is fail-closed: duplicate symbols, non-finite values,
+        or any quantity/price mismatch make the reconciliation invalid.
+        """
         broker = self.adapter.positions()
-        local_map = {item.symbol: (item.quantity, item.average_price) for item in local}
-        broker_map = {item.symbol: (item.quantity, item.average_price) for item in broker}
+
+        def canonical(
+            positions: tuple[PositionSnapshot, ...],
+        ) -> dict[str, tuple[float, float]]:
+            result: dict[str, tuple[float, float]] = {}
+            for item in positions:
+                if item.symbol in result:
+                    return {}
+                if not pd.Series([item.quantity, item.average_price]).map(pd.isna).any():
+                    result[item.symbol] = (item.quantity, item.average_price)
+                else:
+                    return {}
+            return result
+
+        local_map = canonical(local)
+        broker_map = canonical(broker)
+        if not local_map and local:
+            return False
+        if not broker_map and broker:
+            return False
         return local_map == broker_map
 
 
