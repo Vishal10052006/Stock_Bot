@@ -3,7 +3,11 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from scripts.trading.run_empirical_paper import _load_rows, _load_sidecar
+from scripts.trading.run_empirical_paper import (
+    _load_rows,
+    _load_sidecar,
+    _validate_non_negative_counts,
+)
 
 
 def _row(timestamp: str) -> dict[str, object]:
@@ -55,3 +59,13 @@ def test_sidecar_must_be_object(tmp_path: Path) -> None:
     path.write_text("[]", encoding="utf-8")
     with pytest.raises(ValueError, match="JSON object"):
         _load_sidecar(path)
+
+
+
+def test_observation_count_validation_allows_runtime_inference() -> None:
+    _validate_non_negative_counts(None, 0, 0)
+
+
+def test_observation_count_validation_rejects_negative_explicit_count() -> None:
+    with pytest.raises(ValueError, match="operational_events"):
+        _validate_non_negative_counts(-1, 0, 0)
