@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
+import math
 
 from trading.strategy.models import StrategyDirection
 
@@ -20,6 +21,8 @@ class FillConfig:
     fill_type: FillType = FillType.MARKET
 
     def __post_init__(self) -> None:
+        if not math.isfinite(float(self.slippage_bps)):
+            raise ValueError("slippage_bps must be finite")
         if self.slippage_bps < 0:
             raise ValueError("slippage_bps must be non-negative")
 
@@ -48,11 +51,11 @@ class FillModel:
         quantity: float,
         direction: StrategyDirection,
     ) -> SimulatedFill:
-        if price <= 0:
-            raise ValueError("price must be positive")
+        if not math.isfinite(float(price)) or price <= 0:
+            raise ValueError("price must be positive and finite")
 
-        if quantity <= 0:
-            raise ValueError("quantity must be positive")
+        if not math.isfinite(float(quantity)) or quantity <= 0:
+            raise ValueError("quantity must be positive and finite")
 
         if direction is StrategyDirection.NO_TRADE:
             raise ValueError("NO_TRADE cannot be filled")
