@@ -286,6 +286,9 @@ class OrderStateMachine:
             OrderStatus.UNKNOWN,
         },
         OrderStatus.CANCEL_PENDING: {OrderStatus.CANCELLED, OrderStatus.FILLED, OrderStatus.UNKNOWN},
+        # UNKNOWN is intentionally recoverable in both directions:
+        # broker state can disappear after a terminal local observation, and
+        # an unavailable broker can later return an authoritative state.
         OrderStatus.UNKNOWN: {
             OrderStatus.SUBMITTED,
             OrderStatus.OPEN,
@@ -296,6 +299,7 @@ class OrderStateMachine:
             OrderStatus.REJECTED_BROKER,
             OrderStatus.FAILED,
         },
+        OrderStatus.FILLED: {OrderStatus.UNKNOWN},
     }
 
     @classmethod
