@@ -527,3 +527,53 @@ def test_partial_fill_continuation_updates_portfolio_only_after_actual_fill() ->
     )
     assert final_portfolio.positions[0].quantity == 10.0
     assert engine.reconcile_positions(final_positions)
+
+
+def test_partial_fill_cancellation_keeps_portfolio_at_actual_filled_quantity() -> None:
+    """Portfolio exposure remains at the broker-confirmed partial fill after cancel."""
+    from execution.adapters.paper import PaperAdapterConfig, PaperBrokerAdapter
+    from execution.engine import ExecutionEngine
+
+    adapter = PaperBrokerAdapter(
+        config=PaperAdapterConfig(
+            partial_fill_ratio=0.6,
+            slippage_bps=0.0,
+            fee_bps=0.0,
+        ),
+        price_provider=lambda _order: PRICE,
+    )
+    engine = ExecutionEngine(adapter)
+
+    authorization = ExecutionAuthorization(
+        timestamp=TIMESTAMP,
+        symbol="ITC",
+        direction=StrategyDirection.LONG,
+        status=ExecutionAuthorizationStatus.AUTHORIZED,
+        reason="test approval",
+        risk_version="RISK-v1.0",
+        approved_quantity=10.0,
+        approved_notional=10.0 * PRICE,
+    )
+    request = engine.from_authorization(
+        authorization,
+        decision_id="partial-cancel-lifecycle",
+    )
+
+    first = engine.submit(request)
+    assert first.snapshot.filled_quantity == 6.0
+
+    cancelled = engine.cancel(request.client_order_id)
+    assert cancelled.status is OrderStatus.CANCELLED
+    assert cancelled.filled_quantity == 6.0
+
+    positions = adapter.positions()
+    assert positions[0].quantity == 6.0
+
+    portfolio = PortfolioSnapshot(
+        as_of=TIMESTAMP + pd.Timedelta(minutes=1),
+        equity=100_000.0,
+        positions=(PortfolioPosition("ITC", 6.0, PRICE),),
+    )
+    assert portfolio.positions[0].quantity == 6.0
+    assert portfolio.gross_exposure == 6.0 * PRICE
+    assert engine.reconcile_positions(positions)
