@@ -139,3 +139,24 @@ fitting, calibration, hyperparameter tuning, or model-family selection.
 By default the gate can report both pre-declared baseline families
 descriptively. This is not a model ranking or selection step; the final OOS
 artifact is evidence for the frozen protocol only.
+
+
+## Ensemble layer
+
+A deterministic Prediction Bot ensemble is now implemented in
+`ml/prediction/ensemble.py`. It combines already-generated classification
+probabilities or same-horizon return forecasts using explicit non-negative
+weights normalized to sum to one. The ensemble is prediction-only and does
+not create trade/no-trade decisions, position sizes, risk authorization, or
+orders.
+
+Classification probabilities are combined by weighted averaging. Return point
+forecasts and component uncertainty diagnostics are combined by weighted
+averaging. When return components contain prediction intervals, the ensemble
+uses a conservative component-envelope interval (minimum lower bound and
+maximum upper bound). This envelope is explicitly **not** treated as a new
+conformal coverage guarantee and is not recalibrated on final OOS data.
+
+Weights are configuration, not learned from the final OOS partition. No final
+OOS observation is consumed by the ensemble implementation. Ensemble quality
+must be evaluated later under the same chronological validation discipline.
