@@ -65,3 +65,24 @@ Risk -> Safety -> Execution
 
 Risk owns sizing; Safety can only block; Execution cannot reconstruct, enlarge,
 or silently resize the approved order.
+
+
+## Broker response invariants
+
+The Execution Engine fail-closes broker responses before recording them as
+accepted execution state. It verifies:
+
+- client order identity matches the submitted order;
+- requested quantity matches the immutable OrderRequest;
+- filled quantity is within the requested quantity;
+- every returned fill belongs to the same client order;
+- fill quantities and prices are positive;
+- FILLED means the complete requested quantity was filled;
+- PARTIALLY_FILLED means a strictly positive but incomplete quantity was filled.
+
+The client order identifier is deterministic for the decision, symbol, direction,
+and Risk version. Re-submitting the same immutable request is therefore
+idempotent; an already-journaled client order is not submitted to the adapter a
+second time.
+
+A malformed broker response must never be treated as a valid fill.
