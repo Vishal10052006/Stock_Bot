@@ -25,3 +25,20 @@ def test_cost_model_is_deterministic() -> None:
     )
 
     assert result.total == 1.5
+
+
+import pytest
+
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf")])
+def test_cost_config_rejects_non_finite_rates(value: float) -> None:
+    with pytest.raises(ValueError, match="finite"):
+        CostConfig(brokerage_bps=value)
+
+
+@pytest.mark.parametrize(
+    ("price", "quantity"),
+    [(float("nan"), 10.0), (float("inf"), 10.0), (100.0, float("nan"))],
+)
+def test_cost_model_rejects_non_finite_inputs(price: float, quantity: float) -> None:
+    with pytest.raises(ValueError, match="finite"):
+        TransactionCostModel().calculate(price=price, quantity=quantity)
