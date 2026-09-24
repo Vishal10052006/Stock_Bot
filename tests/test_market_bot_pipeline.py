@@ -5,6 +5,10 @@ import numpy as np
 import pandas as pd
 
 from market.bot.orchestrator import MarketBot, MarketBotConfig
+from ml.models.logistic import LogisticOutcomeModel
+from ml.preprocessing.pipeline import FeaturePreprocessor
+from monitoring.runtime import MonitoringRuntime
+from trading.runtime_pipeline import TradingResearchRuntime
 from trading.market_bot_pipeline import build_market_analysis_from_market_bot
 
 
@@ -94,3 +98,50 @@ def test_market_bot_ab30_composition_rejects_context_after_candle_endpoint():
         raise AssertionError(
             "MarketContext after the analysis candle endpoint must fail closed"
         )
+
+
+def test_shared_runtime_composition_carries_market_analysis_prediction_and_paper_telemetry():
+    from tests.test_analysis_prediction_integration import _training_frame
+
+    benchmark = _benchmark()
+    context = MarketBot(
+        MarketBotConfig(benchmark="NIFTY", data_version="market-test")
+    ).build(benchmark_data=benchmark)
+
+    X_train, y_train = _training_frame()
+    preprocessor = FeaturePreprocessor()
+    model = LogisticOutcomeModel()
+    model.fit(preprocessor.fit_transform(X_train), y_train)
+
+    runtime = TradingResearchRuntime(monitoring=MonitoringRuntime())
+    result, prediction = runtime.market_analysis_and_prediction(
+        _candles(),
+        symbol="RELIANCE",
+        benchmark_history=benchmark,
+        market_context=context,
+        model=model,
+        preprocessor=preprocessor,
+    )
+
+    paper_rows = pd.DataFrame([{
+        "timestamp": "2026-09-20T10:00:00Z",
+        "symbol": "RELIANCE",
+        "close": 110.0,
+        "regime": "TREND",
+        "regime_probability": 0.9,
+        "vwap_distance_pct": 0.01,
+        "rvol_20": 1.5,
+        "higher_high": True,
+        "higher_low": True,
+        "lower_low": False,
+        "lower_high": False,
+    }])
+    runtime.paper_decisions(paper_rows)
+    payload = runtime.report()
+
+    assert result.analysis.symbol == "RELIANCE"
+    assert prediction.symbol == "RELIANCE"
+    assert "analysis.completeness" in payload["metrics"]
+    assert "model.prediction_count" in payload["metrics"]
+    assert "strategy.decisions" in payload["metrics"]
+    assert "risk.equity" in payload["metrics"]
