@@ -24,7 +24,7 @@ from trading.signals.models import TradeCandidate
 from trading.strategy.models import StrategyDirection
 
 from .concentration import check_sector_exposure, check_symbol_exposure
-from .contracts import RiskPositionContext, RiskReasonCode, RiskPositionTransition
+from .contracts import RiskPositionContext, RiskReasonCode
 from .correlation import correlation_exposure_allowed
 from .daily_limits import DailyRiskState, daily_loss_limit_reached
 from .exposure import gross_exposure_after
@@ -349,7 +349,11 @@ class RiskEngine:
                 RiskReasonCode.MAX_OPEN_POSITIONS,
             )
 
-        if value.symbol_already_open and position_context is None:
+        duplicate_open = value.symbol_already_open and (
+            position_context is None
+            or position_context.transition.value == "OPEN"
+        )
+        if duplicate_open:
             return self._reject(
                 value,
                 "Symbol already has an open position.",
