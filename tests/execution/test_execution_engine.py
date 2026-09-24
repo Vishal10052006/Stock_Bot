@@ -270,6 +270,22 @@ class _FailOnceAdapter(PaperBrokerAdapter):
         return super().submit(order)
 
 
+def test_unknown_orders_are_not_counted_as_accepted_metrics():
+    adapter = _FailOnceAdapter()
+    engine = ExecutionEngine(adapter)
+    request = order_request()
+
+    result = engine.submit(request)
+    assert result.snapshot.status is OrderStatus.UNKNOWN
+
+    metrics = engine.metrics()
+
+    assert metrics.orders == 1
+    assert metrics.unknown_orders == 1
+    assert metrics.accepted_orders == 0
+    assert metrics.rejected_orders == 0
+
+
 def test_unknown_submission_is_not_reported_as_accepted_on_retry():
     """A retry sees the unresolved journal entry instead of resubmitting."""
     adapter = _FailOnceAdapter()
