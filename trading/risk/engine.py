@@ -483,7 +483,7 @@ class RiskEngine:
         if release_only:
             vol_factor = 1.0
         else:
-        # current frozen specification while keeping the extension point ready.
+            # Current frozen specification while keeping the extension point ready.
             try:
                 vol_factor = volatility_size_factor(
                     entry_price=entry,
@@ -587,11 +587,26 @@ class RiskEngine:
                     RiskReasonCode.MAX_GROSS_EXPOSURE,
                 )
 
-        # 8. Optional concentration/correlation controls.
+        # 8. Optional concentration/correlation controls. A release replaces
+        # the current symbol contribution instead of adding a second copy.
+        exposure_by_symbol = dict(value.symbol_exposure)
+        exposure_by_sector = dict(value.sector_exposure)
+        if release_only and position_context is not None:
+            current_symbol_value = abs(position_context.existing_quantity) * entry
+            projected_symbol_value = abs(position_context.projected_quantity) * entry
+            exposure_by_symbol.pop(value.symbol, None)
+            if value.sector:
+                current_sector_value = float(exposure_by_sector.get(value.sector, 0.0))
+                exposure_by_sector[value.sector] = max(
+                    0.0,
+                    current_sector_value - current_symbol_value,
+                )
+            proposed_value = projected_symbol_value
+
         if not check_symbol_exposure(
             symbol=value.symbol,
             proposed_value=proposed_value,
-            existing_by_symbol=value.symbol_exposure,
+            existing_by_symbol=exposure_by_symbol,
             max_symbol_exposure_fraction=self.config.max_symbol_exposure_fraction,
             equity=value.available_equity,
         ):
@@ -605,7 +620,7 @@ class RiskEngine:
         if not check_sector_exposure(
             sector=value.sector,
             proposed_value=proposed_value,
-            existing_by_sector=value.sector_exposure,
+            existing_by_sector=exposure_by_sector,
             max_sector_exposure_fraction=self.config.max_sector_exposure_fraction,
             equity=value.available_equity,
         ):
@@ -619,7 +634,7 @@ class RiskEngine:
         if not correlation_exposure_allowed(
             symbol=value.symbol,
             proposed_value=proposed_value,
-            existing_by_symbol=value.symbol_exposure,
+            existing_by_symbol=exposure_by_symbol,
             pairwise_correlation=value.pairwise_correlation,
             equity=value.available_equity,
             minimum_abs_correlation=self.config.minimum_abs_correlation,
