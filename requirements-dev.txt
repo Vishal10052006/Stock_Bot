@@ -1,0 +1,4 @@
+# Monitoring Engine dependencies
+pandas
+numpy
+scikit-learn
