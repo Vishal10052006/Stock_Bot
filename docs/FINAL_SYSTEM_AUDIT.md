@@ -303,7 +303,7 @@ The supplied STOCK BOT roadmap defines later phases for:
 - Phase 22 — Paper Trading (engineering boundary implemented; empirical sufficiency evidence-dependent)
 - Phase 23 — Continuous Model Monitoring (engineering boundary implemented; operational evidence-dependent)
 - Phase 24 — Safety / Kill-Switch (engineering boundary implemented; operational exercise evidence-dependent)
-- Phase 25 — Broker Integration
+- Phase 25 — Broker Integration (sandbox engineering boundary implemented; live integration locked)
 - Phase 26 — Controlled Live Deployment
 - Phase 27 — Advanced Intelligence
 
