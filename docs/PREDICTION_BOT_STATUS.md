@@ -178,3 +178,26 @@ does not inherit a formal conformal coverage guarantee.
 
 The benchmark is validation evidence for the ensemble architecture. It must
 not be used to retroactively tune the final OOS result.
+
+
+## Foundation-model experiment
+
+The experimental foundation-model stage now has an optional lazy TimesFM 2.5
+adapter in `ml/models/foundation_forecast.py`. The adapter is prediction-only,
+validates input length and finite values, checks forecast/quantile shapes, and
+returns point plus quantile forecasts without creating trade decisions.
+
+The TimesFM dependency is intentionally optional and is not imported during
+normal module import. Model weights are never downloaded by tests or the
+preflight script. Run `scripts/check_foundation_model_preflight.py` before an
+explicit local model load.
+
+TimesFM 3.0 is documented as research-only for the current license state: its
+default pretrained weights are distributed under a non-commercial,
+non-production license. It is therefore not wired into the production-facing
+Prediction Bot path.
+
+The first empirical foundation-model experiment must use the same causal
+12-bar return target and chronological evaluation discipline as the existing
+baselines. Final OOS observations must not be used for model/configuration
+selection, and interval coverage must be measured rather than assumed.
