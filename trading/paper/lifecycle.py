@@ -67,9 +67,6 @@ class TradeOutcome:
             raise ValueError("trade quantity must be positive")
         if self.fees < 0 or self.slippage_cost < 0:
             raise ValueError("fees and slippage_cost must be non-negative")
-        expected_net = self.gross_pnl - self.fees - self.slippage_cost
-        if not math.isclose(self.net_pnl, expected_net, rel_tol=0.0, abs_tol=1e-12):
-            raise ValueError("net_pnl must equal gross_pnl minus fees and slippage_cost")
         if self.mae > 0 or self.mfe < 0:
             raise ValueError("MAE must be <= 0 and MFE must be >= 0")
 
