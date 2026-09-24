@@ -22,3 +22,11 @@ def test_integration_report():
 
 def test_validation():
     assert validate_monitoring_snapshot(MonitoringEngine().snapshot()).passed
+
+
+def test_validation_rejects_null_metric_value():
+    snapshot=MonitoringEngine().snapshot()
+    snapshot=snapshot.__class__(snapshot.timestamp, snapshot.health, {"bad.metric": None}, snapshot.alerts)
+    result=validate_monitoring_snapshot(snapshot)
+    assert not result.passed
+    assert "snapshot.metrics.no_null_values" in result.failures
