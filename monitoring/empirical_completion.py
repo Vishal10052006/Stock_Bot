@@ -1,19 +1,13 @@
 """Final empirical completion gate for the STOCK_BOT Monitoring Engine.
 
-M-20..M-24 are evidence/completion gates layered on top of the completed
-M-1..M-19 monitoring implementation. They do not add trading authority,
-change Risk/Strategy behavior, or manufacture missing observations.
-
-The validator is intentionally conservative:
-- zero calibration observations are valid when the baseline emits no probabilities;
-- zero false-signal outcomes are reported as unobserved, not fabricated;
-- structural completion is never interpreted as profitability or live readiness.
+M-20..M-24 validate the real chronological paper-evidence artifact produced by
+run_empirical_paper.py. The gate is observational only: it never manufactures
+missing observations and never authorizes trading.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-import hashlib
 import json
 from pathlib import Path
 from typing import Any
@@ -38,15 +32,25 @@ class MonitoringCompletionReport:
         return all(gate.passed for gate in self.gates)
 
 
+def _section(payload: dict[str, Any], name: str) -> dict[str, Any]:
+    value = payload.get(name)
+    return value if isinstance(value, dict) else {}
+
+
+def _evidence(payload: dict[str, Any]) -> dict[str, Any]:
+    record = _section(payload, "record")
+    value = record.get("evidence")
+    return value if isinstance(value, dict) else {}
+
+
 def _pick(payload: dict[str, Any], *names: str) -> Any:
-    for name in names:
-        if name in payload:
-            return payload[name]
-    evidence = payload.get("evidence")
-    if isinstance(evidence, dict):
+    record = _section(payload, "record")
+    run = _section(payload, "paper_run")
+    evidence = _evidence(payload)
+    for source in (payload, record, run, evidence):
         for name in names:
-            if name in evidence:
-                return evidence[name]
+            if name in source:
+                return source[name]
     return None
 
 
@@ -61,6 +65,16 @@ def _non_negative_int(value: Any, name: str, gates: list[MonitoringCompletionGat
     )
 
 
+def _fingerprint(payload: dict[str, Any]) -> str:
+    record = _section(payload, "record")
+    value = payload.get("evidence_fingerprint")
+    if value is None:
+        value = record.get("fingerprint")
+    if value is None:
+        value = record.get("evidence_fingerprint")
+    return value if isinstance(value, str) else ""
+
+
 def validate_monitoring_report(
     payload: dict[str, Any],
     *,
@@ -68,7 +82,7 @@ def validate_monitoring_report(
 ) -> MonitoringCompletionReport:
     gates: list[MonitoringCompletionGate] = []
 
-    status = _pick(payload, "status")
+    status = payload.get("status")
     gates.append(
         MonitoringCompletionGate(
             "M-20 evidence status",
@@ -79,17 +93,16 @@ def validate_monitoring_report(
         )
     )
 
-    fingerprint = _pick(payload, "evidence_fingerprint", "fingerprint")
+    fingerprint = _fingerprint(payload)
     fingerprint_ok = (
-        isinstance(fingerprint, str)
-        and len(fingerprint) == 64
+        len(fingerprint) == 64
         and all(c in "0123456789abcdef" for c in fingerprint.lower())
     )
     gates.append(
         MonitoringCompletionGate(
             "M-20 evidence identity",
             fingerprint_ok,
-            "64-character SHA-256 evidence fingerprint present"
+            "validated record SHA-256 fingerprint present"
             if fingerprint_ok
             else "missing or invalid evidence fingerprint",
         )
@@ -139,10 +152,11 @@ def validate_monitoring_report(
     ):
         _non_negative_int(value, name, gates)
 
+    counter_values = (signal_count, fill_count, drawdown_count, operational_count)
     gates.append(
         MonitoringCompletionGate(
             "M-22 cross-layer coverage",
-            all(isinstance(v, int) and v >= 0 for v in (signal_count, fill_count, drawdown_count, operational_count)),
+            all(isinstance(v, int) and v >= 0 for v in counter_values),
             "strategy, execution, performance and operational counters are present",
         )
     )
@@ -189,12 +203,13 @@ def validate_monitoring_report(
         )
     )
 
+    operational_ok = isinstance(operational_count, int) and operational_count > 0
     gates.append(
         MonitoringCompletionGate(
             "M-24 operational observability",
-            isinstance(operational_count, int) and operational_count > 0,
+            operational_ok,
             "operational observations exist for the empirical run"
-            if isinstance(operational_count, int) and operational_count > 0
+            if operational_ok
             else "no operational observations were recorded",
         )
     )
@@ -211,7 +226,7 @@ def validate_monitoring_report(
         status="COMPLETE" if all(g.passed for g in gates) else "INCOMPLETE",
         gates=tuple(gates),
         source_report=source_report,
-        fingerprint=str(fingerprint or ""),
+        fingerprint=fingerprint,
     )
 
 
