@@ -442,3 +442,69 @@ def test_partial_fill_position_is_authoritative_and_reconcilable():
     broker_positions = adapter.positions()
     assert broker_positions[0].quantity == 40.0
     assert engine.reconcile_positions(broker_positions)
+
+
+def test_partial_fill_can_complete_remaining_quantity_and_reconcile() -> None:
+    """A 6/10 partial fill can later complete the remaining 4 shares."""
+    adapter = PaperBrokerAdapter(
+        config=PaperAdapterConfig(
+            partial_fill_ratio=0.6,
+            slippage_bps=0.0,
+            fee_bps=0.0,
+        ),
+        price_provider=lambda _order: 100.0,
+    )
+    engine = ExecutionEngine(adapter)
+    request = order_request()
+
+    first = engine.submit(request)
+    assert first.snapshot.status is OrderStatus.PARTIALLY_FILLED
+    assert first.snapshot.filled_quantity == 60.0
+    assert adapter.positions()[0].quantity == 60.0
+
+    completed = adapter.fill_remaining(request.client_order_id)
+    refreshed = engine.refresh(request.client_order_id)
+
+    assert completed.status is OrderStatus.FILLED
+    assert completed.requested_quantity == 100.0
+    assert completed.filled_quantity == 100.0
+    assert len(completed.fills) == 2
+    assert refreshed.status is OrderStatus.FILLED
+    assert refreshed.filled_quantity == 100.0
+    assert adapter.positions()[0].quantity == 100.0
+    assert engine.reconcile_positions(adapter.positions())
+
+
+def test_partial_short_fill_can_complete_remaining_quantity() -> None:
+    """Short positions remain signed while a partial order completes."""
+    adapter = PaperBrokerAdapter(
+        config=PaperAdapterConfig(
+            partial_fill_ratio=0.4,
+            slippage_bps=0.0,
+            fee_bps=0.0,
+        ),
+        price_provider=lambda _order: 100.0,
+    )
+    engine = ExecutionEngine(adapter)
+    request = ExecutionEngine.from_authorization(
+        authorization(
+            direction=StrategyDirection.SHORT,
+            quantity=10.0,
+        ),
+        decision_id="partial-short-complete",
+    )
+
+    first = engine.submit(request)
+    assert first.snapshot.status is OrderStatus.PARTIALLY_FILLED
+    assert first.snapshot.filled_quantity == 4.0
+    assert adapter.positions()[0].quantity == -4.0
+
+    completed = adapter.fill_remaining(request.client_order_id)
+    refreshed = engine.refresh(request.client_order_id)
+
+    assert completed.status is OrderStatus.FILLED
+    assert completed.filled_quantity == 10.0
+    assert refreshed.status is OrderStatus.FILLED
+    assert refreshed.filled_quantity == 10.0
+    assert adapter.positions()[0].quantity == -10.0
+    assert engine.reconcile_positions(adapter.positions())
