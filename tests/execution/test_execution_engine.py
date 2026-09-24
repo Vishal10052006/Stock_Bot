@@ -625,3 +625,91 @@ def test_position_snapshot_rejects_non_finite_average_price() -> None:
 
     with pytest.raises(ValueError, match="finite"):
         PositionSnapshot(symbol="ITC", quantity=1.0, average_price=float("inf"))
+
+
+def test_refresh_rejects_inconsistent_fill_total() -> None:
+    """A broker snapshot cannot claim 10 filled while exposing only 6 fills."""
+    from execution.engine import Fill, OrderSnapshot
+
+    adapter = PaperBrokerAdapter()
+    engine = ExecutionEngine(adapter)
+    request = order_request()
+    engine.submit(request)
+
+    bad = OrderSnapshot(
+        broker_order_id="PAPER-1",
+        client_order_id=request.client_order_id,
+        status=OrderStatus.PARTIALLY_FILLED,
+        requested_quantity=request.quantity,
+        filled_quantity=60.0,
+        average_fill_price=100.0,
+        fills=(
+            Fill(
+                fill_id="ONLY-6",
+                client_order_id=request.client_order_id,
+                quantity=6.0,
+                price=100.0,
+            ),
+        ),
+    )
+
+    adapter._orders[request.client_order_id] = bad
+    with pytest.raises(ValueError, match="fill total"):
+        engine.refresh(request.client_order_id)
+
+
+def test_refresh_rejects_duplicate_fill_ids() -> None:
+    from execution.engine import Fill, OrderSnapshot
+
+    adapter = PaperBrokerAdapter()
+    engine = ExecutionEngine(adapter)
+    request = order_request()
+    engine.submit(request)
+
+    fill = Fill(
+        fill_id="DUP",
+        client_order_id=request.client_order_id,
+        quantity=50.0,
+        price=100.0,
+    )
+    bad = OrderSnapshot(
+        broker_order_id="PAPER-1",
+        client_order_id=request.client_order_id,
+        status=OrderStatus.PARTIALLY_FILLED,
+        requested_quantity=request.quantity,
+        filled_quantity=100.0,
+        average_fill_price=100.0,
+        fills=(fill, fill),
+    )
+    adapter._orders[request.client_order_id] = bad
+
+    with pytest.raises(ValueError, match="duplicate fill"):
+        engine.refresh(request.client_order_id)
+
+
+def test_cancel_validates_authoritative_broker_snapshot() -> None:
+    adapter = PaperBrokerAdapter(
+        config=PaperAdapterConfig(partial_fill_ratio=0.5)
+    )
+    engine = ExecutionEngine(adapter)
+    request = order_request()
+    engine.submit(request)
+
+    original_cancel = adapter.cancel
+
+    def malformed_cancel(client_order_id: str):
+        snapshot = original_cancel(client_order_id)
+        return type(snapshot)(
+            broker_order_id=snapshot.broker_order_id,
+            client_order_id=snapshot.client_order_id,
+            status=snapshot.status,
+            requested_quantity=snapshot.requested_quantity,
+            filled_quantity=100.0,
+            average_fill_price=snapshot.average_fill_price,
+            reason=snapshot.reason,
+            fills=snapshot.fills,
+        )
+
+    adapter.cancel = malformed_cancel  # type: ignore[method-assign]
+    with pytest.raises(ValueError, match="fill total|CANCELLED"):
+        engine.cancel(request.client_order_id)
