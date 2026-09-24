@@ -1,0 +1,95 @@
+"""Append-only JSONL persistence for monitoring events and alerts."""
+
+from __future__ import annotations
+
+from pathlib import Path
+import json
+from typing import Iterable
+
+from monitoring.models import Alert, MonitoringEvent
+
+
+class MonitoringStore:
+    """Small append-only store suitable for local STOCK_BOT operation."""
+
+    def __init__(self, path: str | Path = "memory/monitoring/events.jsonl") -> None:
+        self.path = Path(path)
+
+    def append_event(self, event: MonitoringEvent) -> None:
+        self._append({"record_type": "event", **self._serialize(event)})
+
+    def append_alert(self, alert: Alert) -> None:
+        self._append({"record_type": "alert", **self._serialize(alert)})
+
+    def read_events(self) -> tuple[MonitoringEvent, ...]:
+        return tuple(
+            MonitoringEvent(
+                event_id=item["event_id"],
+                timestamp=__import__("datetime").datetime.fromisoformat(item["timestamp"]),
+                event_type=item["event_type"],
+                source=item["source"],
+                severity=item["severity"],
+                symbol=item.get("symbol"),
+                correlation_id=item.get("correlation_id"),
+                payload=item.get("payload", {}),
+            )
+            for item in self._read("event")
+        )
+
+    def read_alerts(self) -> tuple[Alert, ...]:
+        return tuple(
+            Alert(
+                alert_id=item["alert_id"],
+                timestamp=__import__("datetime").datetime.fromisoformat(item["timestamp"]),
+                severity=item["severity"],
+                code=item["code"],
+                source=item["source"],
+                message=item["message"],
+                correlation_id=item.get("correlation_id"),
+                details=item.get("details", {}),
+            )
+            for item in self._read("alert")
+        )
+
+    def _append(self, payload: dict) -> None:
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        with self.path.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str))
+            handle.write("\n")
+
+    def _read(self, record_type: str) -> Iterable[dict]:
+        if not self.path.exists():
+            return ()
+        records = []
+        with self.path.open("r", encoding="utf-8") as handle:
+            for line in handle:
+                if not line.strip():
+                    continue
+                payload = json.loads(line)
+                if payload.get("record_type") == record_type:
+                    records.append(payload)
+        return records
+
+    @staticmethod
+    def _serialize(value):
+        if isinstance(value, MonitoringEvent):
+            return {
+                "event_id": value.event_id,
+                "timestamp": value.timestamp.isoformat(),
+                "event_type": value.event_type,
+                "source": value.source,
+                "severity": value.severity.value,
+                "symbol": value.symbol,
+                "correlation_id": value.correlation_id,
+                "payload": dict(value.payload),
+            }
+        return {
+            "alert_id": value.alert_id,
+            "timestamp": value.timestamp.isoformat(),
+            "severity": value.severity.value,
+            "code": value.code,
+            "source": value.source,
+            "message": value.message,
+            "correlation_id": value.correlation_id,
+            "details": dict(value.details),
+        }
