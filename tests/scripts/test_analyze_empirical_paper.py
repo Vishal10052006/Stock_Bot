@@ -81,3 +81,19 @@ def test_analyzer_input_is_chronological() -> None:
             assert "chronological order" in str(exc)
     finally:
         path.unlink(missing_ok=True)
+
+
+def test_analyze_reports_exposure_constraint_diagnostics() -> None:
+    rows = pd.DataFrame(
+        [
+            _row("2026-09-21 10:00:00"),
+            _row("2026-09-21 10:05:00"),
+        ]
+    )
+
+    report = analyze(rows)
+
+    diagnostics = report["exposure_diagnostics"]
+    assert diagnostics["rejections"] == 0
+    assert diagnostics["exposure_constraint"]["zero_exposure_incompatible_count"] == 0
+    assert diagnostics["exposure_constraint"]["exposure_constrained_quantity"] == []
