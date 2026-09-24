@@ -246,6 +246,7 @@ class RiskAssessment:
     volatility_factor: float | None = None
     closing_quantity: float | None = None
     opening_quantity: float | None = None
+    opening_position_size: float | None = None
 
 
 def _strategy_direction(candidate: TradeCandidate) -> StrategyDirection:
@@ -415,6 +416,10 @@ class RiskEngine:
             RiskPositionTransition.REDUCE,
             RiskPositionTransition.FLATTEN,
         }
+        reverse_transition = (
+            position_context is not None
+            and position_context.transition is RiskPositionTransition.REVERSE
+        )
 
         sizing = calculate_position_size(
             available_equity=value.available_equity,
@@ -436,6 +441,11 @@ class RiskEngine:
             requested_quantity = sizing.quantity
 
         cash_resized = False
+        reverse_closing_quantity = (
+            transition_sizing.closing_quantity
+            if reverse_transition and transition_sizing is not None
+            else 0.0
+        )
 
         # Closing existing exposure does not require additional cash.
         if not release_only and value.available_cash is not None:
@@ -513,7 +523,19 @@ class RiskEngine:
             self.config.quantity_step,
         )
 
-        resized = cash_resized or quantity < requested_quantity
+        if reverse_transition:
+            opening_quantity = quantity
+            quantity = reverse_closing_quantity + opening_quantity
+            requested_order_quantity = reverse_closing_quantity + sizing.quantity
+        else:
+            opening_quantity = (
+                transition_sizing.opening_quantity
+                if transition_sizing is not None
+                else quantity
+            )
+            requested_order_quantity = requested_quantity
+
+        resized = cash_resized or quantity < requested_order_quantity
         if quantity <= 0:
             return self._reject(
                 value,
@@ -532,10 +554,23 @@ class RiskEngine:
 
         proposed_value = entry * quantity
 
+        if reverse_transition and position_context is not None:
+            projected_reverse_quantity = (
+                -opening_quantity
+                if position_context.existing_quantity > 0
+                else opening_quantity
+            )
+            gross_after = projected_gross_exposure(
+                current_gross_exposure=value.gross_exposure,
+                existing_quantity=position_context.existing_quantity,
+                projected_quantity=projected_reverse_quantity,
+                mark_price=entry,
+            )
+
         # A release-only transition replaces this symbol's existing gross
         # contribution with its projected contribution. No new gross budget
         # is consumed by REDUCE/FLATTEN.
-        if release_only and position_context is not None:
+        elif release_only and position_context is not None:
             gross_after = projected_gross_exposure(
                 current_gross_exposure=value.gross_exposure,
                 existing_quantity=position_context.existing_quantity,
@@ -591,9 +626,13 @@ class RiskEngine:
         # the current symbol contribution instead of adding a second copy.
         exposure_by_symbol = dict(value.symbol_exposure)
         exposure_by_sector = dict(value.sector_exposure)
-        if release_only and position_context is not None:
+        if (release_only or reverse_transition) and position_context is not None:
             current_symbol_value = abs(position_context.existing_quantity) * entry
-            projected_symbol_value = abs(position_context.projected_quantity) * entry
+            projected_symbol_value = (
+                abs(position_context.projected_quantity) * entry
+                if release_only
+                else opening_quantity * entry
+            )
             exposure_by_symbol.pop(value.symbol, None)
             if value.sector:
                 current_sector_value = float(exposure_by_sector.get(value.sector, 0.0))
@@ -679,7 +718,8 @@ class RiskEngine:
             daily_pnl=daily_pnl,
             volatility_factor=vol_factor,
             closing_quantity=(transition_sizing.closing_quantity if transition_sizing else None),
-            opening_quantity=(transition_sizing.opening_quantity if transition_sizing else None),
+            opening_quantity=(opening_quantity if transition_sizing else None),
+            opening_position_size=(opening_quantity if reverse_transition else None),
         )
 
     def _reject(
