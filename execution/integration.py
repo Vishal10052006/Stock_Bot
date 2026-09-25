@@ -40,7 +40,7 @@ def authorize_risk_assessment(
     This is intentionally a composition helper rather than a second risk
     engine. Execution never computes position sizing here.
     """
-    if not isinstance(risk_assessment := assessment, RiskAssessment):
+    if not isinstance(assessment, RiskAssessment):
         raise TypeError("assessment must be a RiskAssessment")
     if not isinstance(risk_decision, RiskDecision):
         raise TypeError("risk_decision must be a RiskDecision")
@@ -48,14 +48,14 @@ def authorize_risk_assessment(
         raise ValueError("risk_decision_id must not be empty")
 
     approved_quantity = (
-        float(risk_assessment.position_size)
-        if risk_assessment.position_size is not None
+        float(assessment.position_size)
+        if assessment.position_size is not None
         else 0.0
     )
 
     approved_notional = (
-        float(risk_assessment.entry_price) * approved_quantity
-        if risk_assessment.entry_price is not None
+        float(assessment.entry_price) * approved_quantity
+        if assessment.entry_price is not None
         and approved_quantity > 0
         else 0.0
     )
@@ -66,9 +66,9 @@ def authorize_risk_assessment(
         approved_notional=approved_notional,
         risk_decision_id=risk_decision_id,
         restrictions=restrictions,
-        entry_price=risk_assessment.entry_price,
-        stop_price=risk_assessment.stop_price,
-        target_price=risk_assessment.target_price,
+        entry_price=assessment.entry_price,
+        stop_price=assessment.stop_price,
+        target_price=assessment.target_price,
         max_slippage_bps=max_slippage_bps,
         expires_at=expires_at,
     )
