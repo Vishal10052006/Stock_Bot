@@ -50,3 +50,21 @@ pytest -q
 ```
 
 A clean repository-wide test run is required after any execution-engine change.
+
+
+## Completion extension — execution recovery and exits
+
+The execution boundary now includes the remaining production-safety pieces that can be implemented without enabling live broker trading:
+
+13. **UNKNOWN recovery** — `recover_unknown()` re-queries authoritative broker state and updates the lifecycle only when the broker can resolve the order. A missing broker record remains `UNKNOWN`; the engine never blindly resubmits an uncertain order.
+14. **Exit execution** — `from_exit_authorization()` creates an explicit `purpose="EXIT"` order, requires the authorization quantity to match the requested exit quantity, requires the authorization direction to oppose the current signed position, and prevents exits larger than the observed position.
+15. **Execution lineage** — lifecycle events retain `decision_id` and `purpose`, while deterministic client order IDs include the execution purpose. This links decision → authorization → order lifecycle without introducing a second journal system.
+16. **Failure-matrix tests** — coverage now includes late broker acknowledgements, unresolved UNKNOWN orders, exit-size limits, exit idempotency, and lifecycle lineage.
+
+### Safety invariant
+
+An UNKNOWN submission is **not** evidence that the broker did not receive the order. The only safe automatic action is to query broker truth. If the broker cannot resolve the order, execution remains blocked in `UNKNOWN` and requires external operational resolution; no automatic duplicate submission is performed.
+
+### Live execution status
+
+These changes do **not** enable Upstox/live trading. The existing live lock, independent safety gate, broker validation requirements, reconciliation gates, and readiness provenance remain authoritative.
