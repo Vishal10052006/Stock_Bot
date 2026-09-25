@@ -35,7 +35,8 @@ def test_partial_fill_matrix_is_observable():
         price_provider=lambda _order: 100.0,
     )
     engine = ExecutionEngine(adapter)
-    result = engine.submit(order_request(quantity=100.0))
+    request = ExecutionEngine.from_authorization(authorization(quantity=100.0), decision_id="partial-fill")
+    result = engine.submit(request)
     assert result.snapshot.status is OrderStatus.PARTIALLY_FILLED
     assert result.snapshot.filled_quantity == 50.0
     assert result.snapshot.requested_quantity == 100.0
@@ -108,7 +109,7 @@ def test_execution_monitor_captures_operational_metrics():
 def test_paper_soak_runner():
     engine = ExecutionEngine(PaperBrokerAdapter())
     report = PaperSoakRunner(engine).run(
-        [order_request(decision_id="soak-1"), order_request(decision_id="soak-2")]
+        [ExecutionEngine.from_authorization(authorization(quantity=100.0), decision_id="soak-1"), ExecutionEngine.from_authorization(authorization(quantity=50.0), decision_id="soak-2")]
     )
     assert report.passed
     assert report.orders == 2
