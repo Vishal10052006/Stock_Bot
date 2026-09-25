@@ -150,6 +150,10 @@ def test_real_upstox_sandbox_order_lifecycle():
 
     UPSTOX_SANDBOX_CONFIRM=YES is additionally required before any order
     placement is attempted.
+
+    The current Upstox sandbox capability list explicitly covers order
+    placement and cancellation. Position APIs are not required by this
+    sandbox evidence test.
     """
     token = os.getenv("UPSTOX_SANDBOX_ACCESS_TOKEN")
     instrument = os.getenv("UPSTOX_SANDBOX_INSTRUMENT_TOKEN")
@@ -214,6 +218,3 @@ def test_real_upstox_sandbox_order_lifecycle():
             f"Sandbox order reached terminal state {looked_up.status.value}; "
             "cancellation was not observable for this run."
         )
-
-    positions = adapter.positions()
-    assert isinstance(positions, tuple)
