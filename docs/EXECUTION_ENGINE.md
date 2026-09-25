@@ -41,6 +41,8 @@ current provider contract and the complete live-readiness gates pass.
   until an explicitly enabled, externally supplied client is validated.
 - `UpstoxSandboxClient`: sandbox-only HTTP transport; it accepts only the
   dedicated `https://sandbox.upstox.com` host and never supports live endpoints.
+- `UpstoxSDKSandboxClient`: preferred sandbox transport for provider
+  integration validation, backed by the official `upstox-python-sdk`.
 
 ## Required validation
 
@@ -90,6 +92,8 @@ Live broker execution remains locked.
 The Upstox adapter implements provider request/response mapping behind an injected client boundary. The adapter remains disabled by default and does not construct HTTP clients or read credentials.
 
 The current Upstox V3 order contract uses quantity, product, validity, price, tag, instrument_token, order_type, and transaction_type; successful placement returns provider order IDs. The adapter preserves the Stock_Bot deterministic client order ID as the Upstox tag.
+
+`execution/adapters/upstox_sdk.py` provides the official SDK-backed sandbox transport. It constructs `Configuration(sandbox=True)` internally, so callers cannot accidentally select a live base URL. The repository pins `upstox-python-sdk==2.23.0` in `requirements-execution.txt`.
 
 Provider-specific mapping tests cover:
 - request payload construction
