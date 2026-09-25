@@ -13,6 +13,7 @@ from trading.strategy.models import StrategyDirection
 def _authorization(
     direction: StrategyDirection,
     timestamp: str,
+    quantity: float = 10.0,
 ) -> ExecutionAuthorization:
     return ExecutionAuthorization(
         timestamp=pd.Timestamp(timestamp),
@@ -21,8 +22,8 @@ def _authorization(
         status=ExecutionAuthorizationStatus.AUTHORIZED,
         reason="test",
         risk_version="test",
-        approved_quantity=10.0,
-        approved_notional=1000.0,
+        approved_quantity=quantity,
+        approved_notional=100.0 * quantity,
     )
 
 
@@ -101,9 +102,9 @@ def test_larger_reversal_opens_residual_opposite_position() -> None:
         _authorization(
             StrategyDirection.SHORT,
             "2026-01-01 09:20:00+05:30",
+            quantity=15.0,
         ),
         price=110.0,
-        quantity=15.0,
     )
 
     position = runtime.position("ITC")
@@ -136,9 +137,9 @@ def test_larger_reversal_from_short_opens_residual_long_position() -> None:
         _authorization(
             StrategyDirection.LONG,
             "2026-01-01 09:20:00+05:30",
+            quantity=15.0,
         ),
         price=90.0,
-        quantity=15.0,
     )
 
     position = runtime.position("ITC")
@@ -186,6 +187,10 @@ def test_paper_runtime_rejects_non_finite_inputs():
     runtime = PaperTradingRuntime()
     with pytest.raises(ValueError, match="finite"):
         runtime.submit(_authorization(StrategyDirection.LONG, "2026-01-01 09:15:00+05:30"), price=float("nan"))
+    runtime.submit(
+        _authorization(StrategyDirection.LONG, "2026-01-01 09:15:00+05:30"),
+        price=100.0,
+    )
     with pytest.raises(ValueError, match="finite"):
         runtime.account_snapshot({"ITC": float("inf")})
 
