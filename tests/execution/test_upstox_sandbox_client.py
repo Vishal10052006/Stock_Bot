@@ -194,14 +194,16 @@ def test_real_upstox_sandbox_order_lifecycle():
     try:
         limit_price = float(price)
     except ValueError as exc:
-        pytest.fail("UPSTOX_SANDBOX_PRICE must be numeric.") from exc
+        raise AssertionError("UPSTOX_SANDBOX_PRICE must be numeric.") from exc
 
     if limit_price <= 0:
         pytest.fail("UPSTOX_SANDBOX_PRICE must be greater than zero.")
 
     from execution.adapters.upstox import UpstoxAdapterConfig, UpstoxBrokerAdapter
+    from execution.adapters.upstox_sdk import UpstoxSDKSandboxClient
     from execution.engine import OrderRequest, OrderSide, OrderStatus, OrderType
 
+    client = UpstoxSDKSandboxClient(token)
     adapter = UpstoxBrokerAdapter(
         UpstoxAdapterConfig(
             api_base_url=SANDBOX_BASE_URL,
