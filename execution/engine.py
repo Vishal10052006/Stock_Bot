@@ -189,6 +189,7 @@ class ExecutionResult:
             "decision_id": self.request.decision_id,
             "symbol": self.request.symbol,
             "quantity": self.request.quantity,
+            "purpose": self.request.purpose,
             "status": self.snapshot.status.value,
             "filled_quantity": self.snapshot.filled_quantity,
             "average_fill_price": self.snapshot.average_fill_price,
@@ -203,6 +204,8 @@ class ExecutionEvent:
     """Immutable lifecycle event retained for audit and execution metrics."""
 
     client_order_id: str
+    decision_id: str = ""
+    purpose: str = "ENTRY"
     from_status: OrderStatus | None
     to_status: OrderStatus
     timestamp: pd.Timestamp
@@ -315,6 +318,7 @@ class ExecutionEngine:
     def __init__(self, adapter: BrokerAdapter) -> None:
         self.adapter = adapter
         self._orders: dict[str, OrderSnapshot] = {}
+        self._requests: dict[str, OrderRequest] = {}
         self._fills: dict[str, tuple[Fill, ...]] = {}
         self._states: dict[str, OrderStatus] = {}
         self._events: list[ExecutionEvent] = []
@@ -437,6 +441,7 @@ class ExecutionEngine:
         get_order before any retry is permitted.
         """
         self.validate(order)
+        self._requests.setdefault(order.client_order_id, order)
 
         existing = self._orders.get(order.client_order_id)
         if existing is not None:
@@ -519,6 +524,8 @@ class ExecutionEngine:
         self._events.append(
             ExecutionEvent(
                 client_order_id=client_order_id,
+                decision_id=self._requests.get(client_order_id).decision_id if client_order_id in self._requests else "",
+                purpose=self._requests.get(client_order_id).purpose if client_order_id in self._requests else "ENTRY",
                 from_status=current,
                 to_status=target,
                 timestamp=pd.Timestamp.now(tz="Asia/Kolkata"),
