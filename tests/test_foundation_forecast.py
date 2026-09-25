@@ -112,6 +112,57 @@ def test_forecast_shape_validation_uses_pre_call_batch_size() -> None:
     assert quantiles.shape == (2, 4, 10)
 
 
+def test_forecast_pads_incomplete_batches_with_valid_contexts() -> None:
+    class FakeModel:
+        def __init__(self):
+            self.seen_inputs = None
+
+        def forecast(self, *, horizon, inputs):
+            self.seen_inputs = list(inputs)
+            point = np.asarray(
+                [[float(values[-1])] * horizon for values in inputs],
+                dtype=float,
+            )
+            quantiles = np.zeros((len(inputs), horizon, 10), dtype=float)
+            return point, quantiles
+
+    fake = FakeModel()
+    model = FoundationForecastModel(
+        FoundationForecastConfig(batch_size=4)
+    )
+    model._model = fake
+    model._compiled = True
+
+    inputs = [
+        np.full(64, 11.0),
+        np.full(64, 22.0),
+        np.full(64, 33.0),
+    ]
+
+    point, quantiles = model.forecast(inputs, horizon=2)
+
+    assert fake.seen_inputs is not None
+    assert len(fake.seen_inputs) == 4
+    assert [float(values[-1]) for values in fake.seen_inputs] == [
+        11.0,
+        22.0,
+        33.0,
+        11.0,
+    ]
+    assert point.shape == (3, 2)
+    assert np.array_equal(
+        point,
+        np.asarray(
+            [
+                [11.0, 11.0],
+                [22.0, 22.0],
+                [33.0, 33.0],
+            ]
+        ),
+    )
+    assert quantiles.shape == (3, 2, 10)
+
+
 def test_forecast_normalizes_timesfm_transposed_batch_orientation() -> None:
     class FakeModel:
         def forecast(self, *, horizon, inputs):
