@@ -57,7 +57,7 @@ A clean repository-wide test run is required after any execution-engine change.
 
 The execution boundary now includes the remaining production-safety pieces that can be implemented without enabling live broker trading:
 
-13. **UNKNOWN recovery** — `recover_unknown()` re-queries authoritative broker state and updates the lifecycle only when the broker can resolve the order. A missing broker record remains `UNKNOWN`; the engine never blindly resubmits an uncertain order.
+13. **UNKNOWN recovery** — `recover_unknown()` re-queries authoritative broker state and updates the lifecycle only when the broker can resolve the order. A missing broker record remains `UNKNOWN`; the engine never blindly resubmits the uncertain order.
 14. **Exit execution** — `from_exit_authorization()` creates an explicit `purpose="EXIT"` order, requires the authorization quantity to match the requested exit quantity, requires the authorization direction to oppose the current signed position, and prevents exits larger than the observed position.
 15. **Execution lineage** — lifecycle events retain `decision_id` and `purpose`, while deterministic client order IDs include the execution purpose. This links decision → authorization → order lifecycle without introducing a second journal system.
 16. **Failure-matrix tests** — coverage now includes late broker acknowledgements, unresolved UNKNOWN orders, exit-size limits, exit idempotency, and lifecycle lineage.
@@ -102,17 +102,17 @@ The adapter intentionally depends on an externally supplied client with place_or
 
 ## UPSTOX-VALIDATION-02 — sandbox evidence harness
 
-`execution/adapters/upstox_sandbox.py` now provides a deliberately sandbox-only
-transport client. It uses Upstox's dedicated sandbox host and the V2 order,
-order-history, cancel, and short-term-position endpoints needed by the current
-adapter contract.
+`execution/adapters/upstox_sandbox.py` provides a deliberately sandbox-only
+transport client. It uses Upstox's dedicated sandbox host and supports the
+order placement, order-history lookup, and cancellation calls needed by the
+current adapter contract.
 
 The client:
 - rejects any base URL other than `https://sandbox.upstox.com`
 - requires a caller-supplied sandbox token
 - never logs or persists the token
 - never constructs a live API URL
-- normalizes order history and positions into the adapter's provider-client shape
+- normalizes order history into the adapter's provider-client shape
 - raises `UpstoxSandboxError` on transport, HTTP, or malformed-response failures
 
 The opt-in integration test is `tests/execution/test_upstox_sandbox_client.py`.
@@ -126,16 +126,20 @@ UPSTOX_SANDBOX_CONFIRM=YES
 ```
 
 The test places one sandbox LIMIT order, resolves it by tag, verifies broker-order
-lineage, attempts cancellation when the order is still cancellable, and reads
-sandbox positions. It is intentionally not part of ordinary CI and does not
-accept a live-provider URL.
+lineage, and attempts cancellation when the order is still cancellable.
 
-Provider documentation identifies sandbox as a risk-free integration environment
-and currently lists place, modify, and cancel order APIs as sandbox-enabled.
-Sandbox credentials are separate from live transactions.
+Current Upstox documentation explicitly lists Place Order and Cancel Order as
+sandbox-enabled APIs. Upstox's sandbox announcement also describes order
+details/history as available for sandbox orders, while the current sandbox
+capability list does not include portfolio/position APIs. Therefore position
+reconciliation is **not** claimed as sandbox evidence by this test; it remains
+a separate provider/readiness gate.
 
 These tests provide a mechanism for real provider evidence, but **no sandbox
 evidence is claimed until the opt-in test has actually been run with a valid
-sandbox credential and instrument token**.
+sandbox credential, instrument token, and reachable provider endpoint**.
+
+A failed DNS/network preflight is an environment/infrastructure failure, not
+evidence of successful or unsuccessful broker authentication.
 
 **Live trading remains locked.**
