@@ -68,3 +68,16 @@ An UNKNOWN submission is **not** evidence that the broker did not receive the or
 ### Live execution status
 
 These changes do **not** enable Upstox/live trading. The existing live lock, independent safety gate, broker validation requirements, reconciliation gates, and readiness provenance remain authoritative.
+
+
+## Production-side completion
+
+Production validation controls now live in `execution/production.py`: adapter contract checks, partial-fill and rejection coverage, restart rehydration, signed position reconciliation, kill-switch tests, execution monitoring, paper soak execution, backtest cost-assumption parity, and a fail-closed production readiness gate.
+
+`ExecutionEngine.rehydrate()` rebuilds order state from broker truth using client IDs recovered from durable journal storage. Missing broker state remains unresolved rather than being recreated by duplicate submission.
+
+`.github/workflows/execution-engine.yml` runs the execution suite and full repository regression for execution-related changes.
+
+The final readiness gate remains blocked until provider-specific integration evidence exists for authentication, submission, acknowledgement, partial fills, rejection, cancellation, lookup, position reconciliation, rate limiting, timeout recovery, and process restart recovery.
+
+Live broker execution remains locked.
