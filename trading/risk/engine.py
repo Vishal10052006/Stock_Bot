@@ -582,7 +582,14 @@ class RiskEngine:
             )
         elif transition_sizing is not None:
             opening_quantity = risk_sized_opening_quantity
-            quantity = opening_quantity
+            # REDUCE/FLATTEN are release-only transitions: the broker order
+            # closes existing exposure but creates no new opening quantity.
+            # The approved order quantity must therefore remain the transition
+            # order quantity rather than the zero opening quantity.
+            if release_only:
+                quantity = transition_sizing.order_quantity
+            else:
+                quantity = opening_quantity
             requested_order_quantity = transition_sizing.order_quantity
         else:
             opening_quantity = quantity
