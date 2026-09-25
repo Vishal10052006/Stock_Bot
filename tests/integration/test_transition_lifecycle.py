@@ -17,9 +17,9 @@ import pytest
 from execution.trading_execution import (
     ExecutionAuthorization,
     ExecutionAuthorizationStatus,
-    OrderStatus,
     authorize_risk_decision,
 )
+from execution.engine import OrderStatus
 from paper.runtime import PaperTradingConfig, PaperTradingRuntime
 from portfolio.contracts import (
     PortfolioAction,
