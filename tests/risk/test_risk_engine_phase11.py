@@ -384,6 +384,7 @@ def test_existing_position_can_flatten_without_duplicate_symbol_rejection() -> N
             candidate=make_candidate(CandidateDirection.SHORT),
             symbol_already_open=True,
             position_context=context,
+            gross_exposure=1_000.0,
         )
     )
 
@@ -528,6 +529,7 @@ def test_reduction_does_not_double_count_symbol_concentration() -> None:
             symbol_already_open=True,
             position_context=context,
             symbol_exposure={"RELIANCE": 10_000.0},
+            gross_exposure=10_000.0,
         )
     )
 
