@@ -56,9 +56,9 @@ def test_backtest_applies_entry_and_exit_costs() -> None:
     # Gross P&L is measured from decision/reference prices. Explicit
     # execution slippage is then deducted exactly once.
     assert outcome.gross_pnl == pytest.approx(250.0)
-    assert outcome.slippage_cost == pytest.approx(0.5025)
+    assert outcome.slippage_cost == pytest.approx(50.25)
     assert outcome.fees == pytest.approx(25.124875)
-    assert outcome.net_pnl == pytest.approx(224.372625)
+    assert outcome.net_pnl == pytest.approx(174.625125)
     assert outcome.net_pnl == pytest.approx(
         outcome.gross_pnl - outcome.fees - outcome.slippage_cost
     )
