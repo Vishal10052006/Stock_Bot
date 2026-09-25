@@ -204,12 +204,12 @@ class ExecutionEvent:
     """Immutable lifecycle event retained for audit and execution metrics."""
 
     client_order_id: str
-    decision_id: str = ""
-    purpose: str = "ENTRY"
     from_status: OrderStatus | None
     to_status: OrderStatus
     timestamp: pd.Timestamp
     reason: str = ""
+    decision_id: str = ""
+    purpose: str = "ENTRY"
 
     def __post_init__(self) -> None:
         ts = pd.Timestamp(self.timestamp)
