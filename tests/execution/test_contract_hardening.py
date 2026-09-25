@@ -12,6 +12,7 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
+from execution.adapters.paper import PaperBrokerAdapter
 from execution.engine import ExecutionEngine
 from execution.integration import authorize_risk_assessment
 from execution.trading_execution import ExecutionAuthorizationStatus
@@ -131,9 +132,7 @@ def test_execution_rejects_constraint_tampering():
         expires_at=request.expires_at,
     )
 
-    engine = ExecutionEngine(
-        adapter=__import__("execution.adapters.paper", fromlist=["PaperBrokerAdapter"]).PaperBrokerAdapter()
-    )
+    engine = ExecutionEngine(adapter=PaperBrokerAdapter())
 
     with pytest.raises(ValueError, match="target_price"):
         engine.validate(tampered)
@@ -162,9 +161,7 @@ def test_expired_authorized_order_is_rejected():
         created_at=TS + pd.Timedelta(seconds=1),
     )
 
-    engine = ExecutionEngine(
-        adapter=__import__("execution.adapters.paper", fromlist=["PaperBrokerAdapter"]).PaperBrokerAdapter()
-    )
+    engine = ExecutionEngine(adapter=PaperBrokerAdapter())
 
     with pytest.raises(ValueError, match="expired"):
         engine.validate(request)
