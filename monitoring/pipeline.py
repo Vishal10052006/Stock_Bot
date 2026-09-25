@@ -99,6 +99,22 @@ class MonitoringPipeline:
             requested = AlertSeverity.CRITICAL if "EXCEEDED" in code else AlertSeverity.WARNING
             self._alert(code, "model", code, requested)
 
+    def evaluate_performance(self, snapshot) -> None:
+        from .performance import evaluate_performance_monitoring
+
+        metrics = evaluate_performance_monitoring(snapshot)
+        for name, value in metrics.items():
+            if isinstance(value, (int, float)) and math.isfinite(float(value)):
+                self.engine.record_metric(f"performance.{name}", float(value))
+
+    def evaluate_regime(self, snapshot) -> None:
+        from .regime import evaluate_regime_monitoring
+
+        metrics = evaluate_regime_monitoring(snapshot)
+        for name, value in metrics.items():
+            if isinstance(value, (int, float)) and math.isfinite(float(value)):
+                self.engine.record_metric(f"regime.{name}", float(value))
+
     def evaluate_risk(self, snapshot: RiskMonitoringSnapshot) -> None:
         metrics, breaches = evaluate_risk_monitoring(snapshot)
         for name, value in metrics.items():
