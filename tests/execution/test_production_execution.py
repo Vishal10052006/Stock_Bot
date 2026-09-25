@@ -2,8 +2,8 @@ import pytest
 
 from execution.engine import (
     ExecutionEngine,
+    OrderSnapshot,
     OrderStatus,
-    PositionSnapshot,
 )
 from execution.adapters.paper import PaperAdapterConfig, PaperBrokerAdapter
 from execution.production import (
@@ -16,6 +16,11 @@ from execution.production import (
     reconcile_execution_positions,
     validate_broker_contract,
     validate_kill_switch,
+)
+from execution.certification import (
+    OperationalRunbook,
+    RetryBackoffPolicy,
+    validate_replay_idempotency,
 )
 from tests.execution.test_execution_engine import authorization, order_request
 
@@ -45,7 +50,6 @@ def test_partial_fill_matrix_is_observable():
 def test_rejection_matrix_is_fail_closed():
     class RejectingAdapter(PaperBrokerAdapter):
         def submit(self, order):
-            from execution.engine import OrderSnapshot
             return OrderSnapshot(
                 broker_order_id="REJECT-1",
                 client_order_id=order.client_order_id,
@@ -58,6 +62,31 @@ def test_rejection_matrix_is_fail_closed():
     result = engine.submit(order_request())
     assert not result.accepted
     assert result.snapshot.status is OrderStatus.REJECTED_BROKER
+
+
+def test_timeout_and_network_failure_remain_unknown_without_retry():
+    class FailureAdapter(PaperBrokerAdapter):
+        def __init__(self, message):
+            super().__init__()
+            self.message = message
+            self.submitted_client_ids = []
+
+        def submit(self, order):
+            self.submitted_client_ids.append(order.client_order_id)
+            raise TimeoutError(self.message)
+
+        def get_order(self, client_order_id):
+            return None
+
+    for message in ("timeout", "network error"):
+        adapter = FailureAdapter(message)
+        engine = ExecutionEngine(adapter)
+        result = engine.submit(order_request())
+        assert result.snapshot.status is OrderStatus.UNKNOWN
+        assert len(adapter.submitted_client_ids) == 1
+        recovered = engine.recover_unknown(result.request.client_order_id)
+        assert recovered.status is OrderStatus.UNKNOWN
+        assert len(adapter.submitted_client_ids) == 1
 
 
 def test_restart_recovery_rehydrates_from_broker_truth():
@@ -109,7 +138,8 @@ def test_execution_monitor_captures_operational_metrics():
 def test_paper_soak_runner():
     engine = ExecutionEngine(PaperBrokerAdapter())
     report = PaperSoakRunner(engine).run(
-        [ExecutionEngine.from_authorization(authorization(quantity=100.0), decision_id="soak-1"), ExecutionEngine.from_authorization(authorization(quantity=50.0), decision_id="soak-2")]
+        [ExecutionEngine.from_authorization(authorization(quantity=100.0), decision_id="soak-1"),
+         ExecutionEngine.from_authorization(authorization(quantity=50.0), decision_id="soak-2")]
     )
     assert report.passed
     assert report.orders == 2
@@ -123,6 +153,26 @@ def test_backtest_execution_parity():
             assumptions,
             ExecutionAssumptions(slippage_bps=7.0, fee_bps=2.0),
         )
+
+
+def test_duplicate_replay_is_idempotent():
+    engine = ExecutionEngine(PaperBrokerAdapter())
+    first, second = validate_replay_idempotency(engine, order_request())
+    assert first.snapshot.broker_order_id == second.snapshot.broker_order_id
+    assert len(engine.journal) == 1
+
+
+def test_rate_limit_backoff_is_bounded():
+    policy = RetryBackoffPolicy(
+        initial_seconds=0.5, multiplier=2.0, max_seconds=2.0, max_attempts=5
+    )
+    assert [policy.delay_for(i) for i in range(1, 6)] == [0.5, 1.0, 2.0, 2.0, 2.0]
+    with pytest.raises(ValueError):
+        policy.delay_for(6)
+
+
+def test_operational_runbook_is_complete():
+    assert OperationalRunbook().validate()
 
 
 def test_production_readiness_fails_closed():
