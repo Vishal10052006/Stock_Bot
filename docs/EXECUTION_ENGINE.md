@@ -81,3 +81,25 @@ Production validation controls now live in `execution/production.py`: adapter co
 The final readiness gate remains blocked until provider-specific integration evidence exists for authentication, submission, acknowledgement, partial fills, rejection, cancellation, lookup, position reconciliation, rate limiting, timeout recovery, and process restart recovery.
 
 Live broker execution remains locked.
+
+## Upstox provider-contract validation
+
+The Upstox adapter now implements provider request/response mapping behind an injected client boundary. The adapter remains disabled by default and does not construct HTTP clients or read credentials.
+
+The current Upstox V3 order contract uses quantity, product, validity, price, tag, instrument_token, order_type, and transaction_type; successful placement returns provider order IDs. The adapter preserves the Stock_Bot deterministic client order ID as the Upstox tag.
+
+Provider-specific mapping tests cover:
+- request payload construction
+- filled-order response mapping
+- partial-fill mapping
+- broker rejection mapping
+- broker-order lookup
+- cancellation using the provider order ID
+- signed position mapping
+- disabled/fail-closed behavior
+
+The adapter intentionally depends on an externally supplied client with place_order, find_order_by_tag, cancel_order, and get_positions methods. This keeps authentication and transport outside the execution domain.
+
+Upstox currently documents sandbox-enabled V3 place/cancel APIs and a sandbox environment intended for integration testing. These tests do not call the Upstox network and therefore do not constitute sandbox execution evidence.
+
+**Live trading remains locked.**
