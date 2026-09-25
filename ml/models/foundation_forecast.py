@@ -143,10 +143,29 @@ class FoundationForecastModel:
 
         expected_batch_size = len(prepared)
 
+        # TimesFM 2.5 internally pads incomplete batches with synthetic
+        # zero-valued placeholder series. Those placeholders can contaminate
+        # the compiled batch's forecasts across otherwise independent series.
+        # Complete the batch here with valid caller contexts instead, then
+        # discard the corresponding padded outputs below. Reusing real
+        # contexts is inference-only padding: it adds no observations to any
+        # caller series and preserves the original output contract.
+        backend_inputs = list(prepared)
+        if len(backend_inputs) % self.config.batch_size:
+            padding = self.config.batch_size - (
+                len(backend_inputs) % self.config.batch_size
+            )
+            backend_inputs.extend(
+                backend_inputs[index % expected_batch_size]
+                for index in range(padding)
+            )
+
         point, quantiles = self._model.forecast(
             horizon=horizon,
-            inputs=prepared,
+            inputs=backend_inputs,
         )
+        point = np.asarray(point, dtype=float)[:expected_batch_size]
+        quantiles = np.asarray(quantiles, dtype=float)[:expected_batch_size]
         point_array = np.asarray(point, dtype=float)
         quantile_array = np.asarray(quantiles, dtype=float)
 
