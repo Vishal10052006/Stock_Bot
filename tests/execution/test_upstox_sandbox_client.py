@@ -170,10 +170,37 @@ def test_real_upstox_sandbox_order_lifecycle():
     if os.getenv("UPSTOX_SANDBOX_CONFIRM") != "YES":
         pytest.skip("Set UPSTOX_SANDBOX_CONFIRM=YES to opt into order placement.")
 
+    placeholder_values = {
+        "UPSTOX_SANDBOX_ACCESS_TOKEN": "YOUR_REAL_SANDBOX_TOKEN",
+        "UPSTOX_SANDBOX_INSTRUMENT_TOKEN": "YOUR_SANDBOX_INSTRUMENT_TOKEN",
+        "UPSTOX_SANDBOX_PRICE": "YOUR_VALID_PRICE",
+    }
+    configured = {
+        "UPSTOX_SANDBOX_ACCESS_TOKEN": token,
+        "UPSTOX_SANDBOX_INSTRUMENT_TOKEN": instrument,
+        "UPSTOX_SANDBOX_PRICE": price,
+    }
+    placeholders = [
+        name for name, placeholder in placeholder_values.items()
+        if configured[name].strip() == placeholder
+    ]
+    if placeholders:
+        pytest.fail(
+            "Real sandbox validation was explicitly enabled, but placeholder "
+            f"values are still configured: {', '.join(placeholders)}. "
+            "Set real sandbox values locally; never paste credentials into the repository or chat."
+        )
+
+    try:
+        limit_price = float(price)
+    except ValueError as exc:
+        pytest.fail("UPSTOX_SANDBOX_PRICE must be numeric.") from exc
+
+    if limit_price <= 0:
+        pytest.fail("UPSTOX_SANDBOX_PRICE must be greater than zero.")
+
     from execution.adapters.upstox import UpstoxAdapterConfig, UpstoxBrokerAdapter
     from execution.engine import OrderRequest, OrderSide, OrderStatus, OrderType
-
-    client = UpstoxSDKSandboxClient(token)
 
     adapter = UpstoxBrokerAdapter(
         UpstoxAdapterConfig(
@@ -191,7 +218,7 @@ def test_real_upstox_sandbox_order_lifecycle():
         side=OrderSide.BUY,
         quantity=1,
         order_type=OrderType.LIMIT,
-        limit_price=float(price),
+        limit_price=limit_price,
     )
 
     placed = adapter.submit(request)
