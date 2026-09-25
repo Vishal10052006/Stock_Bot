@@ -155,15 +155,11 @@ def test_expired_authorized_order_is_rejected():
         expires_at=TS,
     )
 
-    request = ExecutionEngine.from_authorization(
-        authorization,
-        decision_id="decision-itc-004",
-        created_at=TS + pd.Timedelta(seconds=1),
-    )
-
-    engine = ExecutionEngine(adapter=PaperBrokerAdapter())
-
     with pytest.raises(ValueError, match="expires_at must not precede created_at"):
         # OrderRequest construction itself is fail-closed when the request is
         # already outside its upstream authorization expiry.
-        engine.validate(request)
+        ExecutionEngine.from_authorization(
+            authorization,
+            decision_id="decision-itc-004",
+            created_at=TS + pd.Timedelta(seconds=1),
+        )
