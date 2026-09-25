@@ -3,6 +3,7 @@ import pytest
 from execution.engine import (
     ExecutionEngine,
     OrderSnapshot,
+    PositionSnapshot,
     OrderStatus,
 )
 from execution.adapters.paper import PaperAdapterConfig, PaperBrokerAdapter
