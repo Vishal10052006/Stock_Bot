@@ -7,6 +7,8 @@ changing risk sizing, or enabling live execution.
 
 from __future__ import annotations
 
+import pandas as pd
+
 from execution.safety import SafetyDecision
 from execution.trading_execution import (
     ExecutionAuthorization,
@@ -23,13 +25,17 @@ def authorize_execution(
     approved_notional: float | None = None,
     risk_decision_id: str = "",
     restrictions: tuple[str, ...] = (),
+    entry_price: float | None = None,
+    stop_price: float | None = None,
+    target_price: float | None = None,
+    max_slippage_bps: float | None = None,
+    expires_at: pd.Timestamp | None = None,
     safety_decision: SafetyDecision,
 ) -> ExecutionAuthorization:
     """Authorize only when both Risk and independent Safety allow execution.
 
     Risk remains the sizing authority. A safety veto cannot enlarge, resize,
-    or otherwise modify an approved quantity; it only blocks the downstream
-    authorization.
+    or otherwise modify an approved quantity; it only blocks the authorization.
     """
     if not isinstance(safety_decision, SafetyDecision):
         raise TypeError("safety_decision must be a SafetyDecision")
@@ -40,6 +46,11 @@ def authorize_execution(
         approved_notional=approved_notional,
         risk_decision_id=risk_decision_id,
         restrictions=restrictions,
+        entry_price=entry_price,
+        stop_price=stop_price,
+        target_price=target_price,
+        max_slippage_bps=max_slippage_bps,
+        expires_at=expires_at,
     )
 
     if not safety_decision.allowed:
@@ -48,7 +59,10 @@ def authorize_execution(
             symbol=authorization.symbol,
             direction=authorization.direction,
             status=ExecutionAuthorizationStatus.BLOCKED,
-            reason=f"Independent safety gate blocked execution: {safety_decision.reason}",
+            reason=(
+                "Independent safety gate blocked execution: "
+                f"{safety_decision.reason}"
+            ),
             risk_version=authorization.risk_version,
             approved_quantity=0.0,
             approved_notional=0.0,
