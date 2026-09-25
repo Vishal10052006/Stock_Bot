@@ -10,6 +10,7 @@ from execution.adapters.upstox_sandbox import (
     SANDBOX_BASE_URL,
     UpstoxSandboxClient,
 )
+from execution.adapters.upstox_sdk import UpstoxSDKSandboxClient
 
 
 class FakeResponse:
@@ -141,7 +142,7 @@ def test_positions_normalize_provider_list(monkeypatch):
 
 @pytest.mark.integration
 def test_real_upstox_sandbox_order_lifecycle():
-    """Opt-in provider validation; never runs in normal CI.
+    """Opt-in provider validation through the official SDK; never runs in normal CI.
 
     Required environment:
       UPSTOX_SANDBOX_ACCESS_TOKEN
@@ -153,7 +154,7 @@ def test_real_upstox_sandbox_order_lifecycle():
 
     The current Upstox sandbox capability list explicitly covers order
     placement and cancellation. Position APIs are not required by this
-    sandbox evidence test.
+    sandbox evidence test. The official SDK client forces sandbox mode.
     """
     token = os.getenv("UPSTOX_SANDBOX_ACCESS_TOKEN")
     instrument = os.getenv("UPSTOX_SANDBOX_INSTRUMENT_TOKEN")
@@ -172,7 +173,7 @@ def test_real_upstox_sandbox_order_lifecycle():
     from execution.adapters.upstox import UpstoxAdapterConfig, UpstoxBrokerAdapter
     from execution.engine import OrderRequest, OrderSide, OrderStatus, OrderType
 
-    client = UpstoxSandboxClient(token)
+    client = UpstoxSDKSandboxClient(token)
 
     adapter = UpstoxBrokerAdapter(
         UpstoxAdapterConfig(
