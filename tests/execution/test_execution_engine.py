@@ -144,6 +144,25 @@ def test_partial_fill_is_preserved():
     assert result.snapshot.filled_quantity == 40.0
 
 
+@pytest.mark.parametrize(
+    "terminal_status",
+    [
+        OrderStatus.FILLED,
+        OrderStatus.CANCELLED,
+        OrderStatus.EXPIRED,
+        OrderStatus.REJECTED_BROKER,
+        OrderStatus.FAILED,
+    ],
+)
+def test_terminal_broker_states_can_become_unknown_on_refresh_loss(
+    terminal_status: OrderStatus,
+):
+    assert OrderStateMachine.transition(
+        terminal_status,
+        OrderStatus.UNKNOWN,
+    ) is OrderStatus.UNKNOWN
+
+
 def test_refresh_marks_missing_broker_state_unknown():
     adapter = PaperBrokerAdapter()
     engine = ExecutionEngine(adapter)
