@@ -192,28 +192,6 @@ class FoundationForecastModel:
         point_array = point_array[:expected_batch_size]
         quantile_array = quantile_array[:expected_batch_size]
 
-        expected_point_shape = (expected_batch_size, horizon)
-        expected_quantile_shape = (expected_batch_size, horizon, 10)
-
-        # Some TimesFM 2.5 backends expose the same forecast tensor with the
-        # first two axes reversed. Normalize only that exact, unambiguous
-        # orientation; never reshape or pad a tensor whose dimensions do not
-        # prove that it represents the caller's batch and requested horizon.
-        if point_array.shape == (horizon, expected_batch_size):
-            point_array = point_array.T
-        if quantile_array.shape == (horizon, expected_batch_size, 10):
-            quantile_array = np.transpose(quantile_array, (1, 0, 2))
-
-        if point_array.shape != expected_point_shape:
-            raise RuntimeError(
-                f"unexpected TimesFM point shape: {point_array.shape}; "
-                f"expected {expected_point_shape}"
-            )
-        if quantile_array.shape != expected_quantile_shape:
-            raise RuntimeError(
-                f"unexpected TimesFM quantile shape: {quantile_array.shape}; "
-                f"expected {expected_quantile_shape}"
-            )
         if not np.isfinite(point_array).all() or not np.isfinite(quantile_array).all():
             raise RuntimeError("TimesFM returned non-finite forecast values")
 
