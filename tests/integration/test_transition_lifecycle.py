@@ -17,6 +17,7 @@ import pytest
 from execution.trading_execution import (
     ExecutionAuthorization,
     ExecutionAuthorizationStatus,
+    OrderStatus,
     authorize_risk_decision,
 )
 from paper.runtime import PaperTradingConfig, PaperTradingRuntime
