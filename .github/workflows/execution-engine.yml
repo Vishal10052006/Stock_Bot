@@ -1,0 +1,44 @@
+name: Execution Engine Production Validation
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "execution/**"
+      - "tests/execution/**"
+      - "paper/**"
+      - "backtesting/**"
+      - "monitoring/**"
+      - "docs/EXECUTION_ENGINE.md"
+      - "requirements-execution.txt"
+      - ".github/workflows/execution-engine.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "execution/**"
+      - "tests/execution/**"
+      - "paper/**"
+      - "backtesting/**"
+      - "monitoring/**"
+      - "requirements-execution.txt"
+      - ".github/workflows/execution-engine.yml"
+
+jobs:
+  execution-validation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install numpy pandas pytest scipy scikit-learn requests pydantic fastapi sqlalchemy alembic python-dotenv yfinance ta joblib pyarrow
+          python -m pip install -r requirements-execution.txt
+      - name: Execution production validation
+        run: python -m pytest -q tests/execution
+      - name: Full repository regression
+        run: python -m pytest -q
