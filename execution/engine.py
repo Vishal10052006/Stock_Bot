@@ -603,6 +603,38 @@ class ExecutionEngine:
             if snapshot.status is OrderStatus.UNKNOWN
         )
 
+    def rehydrate(self, client_order_ids: tuple[str, ...]) -> dict[str, OrderSnapshot]:
+        """Rebuild execution state after process restart from broker truth.
+
+        The caller supplies client IDs recovered from the durable execution
+        journal. The broker remains authoritative; missing broker state is
+        represented as UNKNOWN and never recreated by blind submission.
+        """
+        recovered: dict[str, OrderSnapshot] = {}
+        for client_order_id in client_order_ids:
+            if not client_order_id.strip():
+                raise ValueError("client_order_id must not be empty")
+            snapshot = self.adapter.get_order(client_order_id)
+            if snapshot is None:
+                prior = self._orders.get(client_order_id)
+                if prior is None:
+                    continue
+                snapshot = OrderSnapshot(
+                    broker_order_id=prior.broker_order_id,
+                    client_order_id=client_order_id,
+                    status=OrderStatus.UNKNOWN,
+                    requested_quantity=prior.requested_quantity,
+                    filled_quantity=prior.filled_quantity,
+                    average_fill_price=prior.average_fill_price,
+                    reason="broker returned no order state during rehydration",
+                    fills=prior.fills,
+                )
+            self._orders[client_order_id] = snapshot
+            self._fills[client_order_id] = tuple(snapshot.fills)
+            self._states[client_order_id] = snapshot.status
+            recovered[client_order_id] = snapshot
+        return recovered
+
     def reconcile_order(self, client_order_id: str) -> bool:
         """Return True only when local and broker order state agree."""
         local = self._orders.get(client_order_id)
