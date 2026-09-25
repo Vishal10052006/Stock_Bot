@@ -1,0 +1,4 @@
+# Provider SDKs used by the execution-engine validation surface.
+# Pinned to the current official Upstox Python SDK release validated against
+# the sandbox integration documentation.
+upstox-python-sdk==2.23.0
