@@ -141,11 +141,6 @@ class FoundationForecastModel:
                 raise ValueError(f"input series {index} contains non-finite values")
             prepared.append(array)
 
-        # Capture the caller-visible batch size before invoking the backend.
-        # Some compiled inference backends may pad or otherwise mutate the
-        # input container internally; the adapter contract is defined by the
-        # number of series supplied by the caller, not by post-call container
-        # state.
         expected_batch_size = len(prepared)
 
         point, quantiles = self._model.forecast(
@@ -157,6 +152,16 @@ class FoundationForecastModel:
 
         expected_point_shape = (expected_batch_size, horizon)
         expected_quantile_shape = (expected_batch_size, horizon, 10)
+
+        # Some TimesFM 2.5 backends expose the same forecast tensor with the
+        # first two axes reversed. Normalize only that exact, unambiguous
+        # orientation; never reshape or pad a tensor whose dimensions do not
+        # prove that it represents the caller's batch and requested horizon.
+        if point_array.shape == (horizon, expected_batch_size):
+            point_array = point_array.T
+        if quantile_array.shape == (horizon, expected_batch_size, 10):
+            quantile_array = np.transpose(quantile_array, (1, 0, 2))
+
         if point_array.shape != expected_point_shape:
             raise RuntimeError(
                 f"unexpected TimesFM point shape: {point_array.shape}; "
