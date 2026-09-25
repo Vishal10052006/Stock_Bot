@@ -38,6 +38,7 @@ from .safety import (
     SafetyDecision,
     SafetyState,
 )
+from .integration import authorize_risk_assessment
 
 def build_research_readiness_evidence(*args, **kwargs):
     """Lazily import the research adapter to avoid execution import cycles."""
@@ -47,6 +48,7 @@ def build_research_readiness_evidence(*args, **kwargs):
 
 
 __all__ = [
+    "authorize_risk_assessment",
     "BrokerAdapter",
     "BrokerPosition",
     "BrokerReconciler",
