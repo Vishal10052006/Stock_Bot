@@ -6,7 +6,6 @@ promote a model into production or authorize trading.
 
 from __future__ import annotations
 
-from dataclasses import asdict
 import json
 from pathlib import Path
 
@@ -32,7 +31,7 @@ class PredictionModelRegistry:
         if not isinstance(record, ModelRegistryRecord):
             raise TypeError("record must be a ModelRegistryRecord")
         records = self._read()
-        records[record.model_version] = asdict(record)
+        records[record.model_version] = record.to_dict()
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.path.write_text(
             json.dumps(records, sort_keys=True, indent=2, default=str),
