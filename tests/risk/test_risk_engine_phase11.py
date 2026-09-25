@@ -364,6 +364,7 @@ def test_existing_position_can_reduce_without_duplicate_symbol_rejection() -> No
             candidate=make_candidate(CandidateDirection.SHORT),
             symbol_already_open=True,
             position_context=context,
+            gross_exposure=1_000.0,
         )
     )
 
@@ -550,6 +551,7 @@ def test_reduction_does_not_double_count_sector_concentration() -> None:
             sector="ENERGY",
             sector_exposure={"ENERGY": 10_000.0},
             symbol_exposure={"RELIANCE": 10_000.0},
+            gross_exposure=10_000.0,
         )
     )
 
@@ -569,6 +571,7 @@ def test_flatten_does_not_require_available_cash() -> None:
             symbol_already_open=True,
             position_context=context,
             available_cash=0.0,
+            gross_exposure=1_000.0,
         )
     )
 
@@ -643,6 +646,7 @@ def test_reverse_does_not_consume_an_open_position_slot() -> None:
             open_positions=3,
             symbol_already_open=True,
             position_context=context,
+            gross_exposure=1_000.0,
         )
     )
 
@@ -678,6 +682,7 @@ def test_entry_budget_blocks_reverse_but_not_flatten() -> None:
             trades_today=5,
             symbol_already_open=True,
             position_context=flatten_context,
+            gross_exposure=1_000.0,
         )
     )
 
