@@ -160,14 +160,37 @@ class FoundationForecastModel:
                 for index in range(padding)
             )
 
+        backend_batch_size = len(backend_inputs)
         point, quantiles = self._model.forecast(
             horizon=horizon,
             inputs=backend_inputs,
         )
-        point = np.asarray(point, dtype=float)[:expected_batch_size]
-        quantiles = np.asarray(quantiles, dtype=float)[:expected_batch_size]
         point_array = np.asarray(point, dtype=float)
         quantile_array = np.asarray(quantiles, dtype=float)
+
+        expected_backend_point_shape = (backend_batch_size, horizon)
+        expected_backend_quantile_shape = (backend_batch_size, horizon, 10)
+
+        # Validate and normalize the complete backend batch before slicing away
+        # the inference-only padding rows.
+        if point_array.shape == (horizon, backend_batch_size):
+            point_array = point_array.T
+        if quantile_array.shape == (horizon, backend_batch_size, 10):
+            quantile_array = np.transpose(quantile_array, (1, 0, 2))
+
+        if point_array.shape != expected_backend_point_shape:
+            raise RuntimeError(
+                f"unexpected TimesFM point shape: {point_array.shape}; "
+                f"expected {expected_backend_point_shape}"
+            )
+        if quantile_array.shape != expected_backend_quantile_shape:
+            raise RuntimeError(
+                f"unexpected TimesFM quantile shape: {quantile_array.shape}; "
+                f"expected {expected_backend_quantile_shape}"
+            )
+
+        point_array = point_array[:expected_batch_size]
+        quantile_array = quantile_array[:expected_batch_size]
 
         expected_point_shape = (expected_batch_size, horizon)
         expected_quantile_shape = (expected_batch_size, horizon, 10)
