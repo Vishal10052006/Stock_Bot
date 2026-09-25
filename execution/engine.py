@@ -315,6 +315,15 @@ class OrderStateMachine:
             OrderStatus.CANCELLED,
             OrderStatus.UNKNOWN,
         },
+
+        # A previously terminal local state can become UNKNOWN if the broker
+        # no longer returns an authoritative record. Reconciliation must then
+        # resolve the discrepancy before trading continues.
+        OrderStatus.FILLED: {OrderStatus.UNKNOWN},
+        OrderStatus.CANCELLED: {OrderStatus.UNKNOWN},
+        OrderStatus.REJECTED_BROKER: {OrderStatus.UNKNOWN},
+        OrderStatus.EXPIRED: {OrderStatus.UNKNOWN},
+        OrderStatus.FAILED: {OrderStatus.UNKNOWN},
         OrderStatus.CANCEL_PENDING: {OrderStatus.CANCELLED, OrderStatus.FILLED, OrderStatus.UNKNOWN},
         OrderStatus.UNKNOWN: {
             OrderStatus.SUBMITTED,
