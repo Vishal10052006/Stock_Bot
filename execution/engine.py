@@ -72,6 +72,7 @@ class OrderRequest:
     order_type: OrderType = OrderType.MARKET
     limit_price: float | None = None
     time_in_force: TimeInForce = TimeInForce.DAY
+    purpose: str = "ENTRY"
     created_at: pd.Timestamp = field(default_factory=lambda: pd.Timestamp.now(tz="Asia/Kolkata"))
     authorization: ExecutionAuthorization | None = None
 
@@ -89,6 +90,8 @@ class OrderRequest:
             raise ValueError("LIMIT orders require a positive limit_price")
         if self.order_type is OrderType.MARKET and self.limit_price is not None:
             raise ValueError("MARKET orders must not define limit_price")
+        if self.purpose not in {"ENTRY", "EXIT"}:
+            raise ValueError("purpose must be ENTRY or EXIT")
         object.__setattr__(self, "created_at", ts)
         object.__setattr__(self, "symbol", self.symbol.strip().upper())
 
@@ -332,6 +335,7 @@ class ExecutionEngine:
         decision_id: str,
         order_type: OrderType = OrderType.MARKET,
         limit_price: float | None = None,
+        purpose: str = "ENTRY",
         created_at: pd.Timestamp | None = None,
     ) -> OrderRequest:
         """Convert an approved authorization into an immutable order request."""
@@ -346,7 +350,9 @@ class ExecutionEngine:
 
         timestamp = pd.Timestamp(created_at or authorization.timestamp)
         # The client order id is deterministic for one decision + risk version.
-        raw = f"{decision_id}|{authorization.symbol}|{authorization.direction.value}|{authorization.risk_version}"
+        if purpose not in {"ENTRY", "EXIT"}:
+            raise ValueError("purpose must be ENTRY or EXIT")
+        raw = f"{decision_id}|{authorization.symbol}|{authorization.direction.value}|{authorization.risk_version}|{purpose}"
         client_order_id = "SB-" + hashlib.sha256(raw.encode("utf-8")).hexdigest()[:24]
 
         return OrderRequest(
@@ -357,8 +363,54 @@ class ExecutionEngine:
             quantity=float(authorization.approved_quantity),
             order_type=order_type,
             limit_price=limit_price,
+            purpose=purpose,
             created_at=timestamp,
             authorization=authorization,
+        )
+
+    @classmethod
+    def from_exit_authorization(
+        cls,
+        authorization: ExecutionAuthorization,
+        *,
+        decision_id: str,
+        position: PositionSnapshot,
+        quantity: float | None = None,
+        order_type: OrderType = OrderType.MARKET,
+        limit_price: float | None = None,
+        created_at: pd.Timestamp | None = None,
+    ) -> OrderRequest:
+        """Create an exit order without allowing execution to increase exposure.
+
+        The Risk Engine still owns the authorized quantity. Execution only
+        constrains that quantity to the currently observed position and flips
+        the side so the order closes existing exposure.
+        """
+        if not isinstance(position, PositionSnapshot):
+            raise TypeError("position must be a PositionSnapshot")
+        if position.quantity == 0:
+            raise ValueError("cannot create an exit order for a flat position")
+        requested = abs(position.quantity) if quantity is None else float(quantity)
+        if requested <= 0:
+            raise ValueError("exit quantity must be positive")
+        if requested > abs(position.quantity):
+            raise ValueError("exit quantity cannot exceed current position")
+        if authorization.symbol.strip().upper() != position.symbol:
+            raise ValueError("exit authorization symbol does not match position")
+        expected_direction = (
+            StrategyDirection.SHORT if position.quantity > 0 else StrategyDirection.LONG
+        )
+        if authorization.direction is not expected_direction:
+            raise ValueError("exit authorization direction must oppose the position")
+        if authorization.approved_quantity != requested:
+            raise ValueError("exit quantity must exactly equal risk-approved quantity")
+        return cls.from_authorization(
+            authorization,
+            decision_id=decision_id,
+            order_type=order_type,
+            limit_price=limit_price,
+            purpose="EXIT",
+            created_at=created_at,
         )
 
     def validate(self, order: OrderRequest) -> None:
@@ -505,6 +557,44 @@ class ExecutionEngine:
         self._orders[client_order_id] = snapshot
         self._fills[client_order_id] = tuple(snapshot.fills)
         return snapshot
+
+    def recover_unknown(self, client_order_id: str) -> OrderSnapshot:
+        """Resolve UNKNOWN using broker truth; never blindly resubmit.
+
+        A missing broker record remains UNKNOWN and fail-closed. This method
+        intentionally performs no broker submission.
+        """
+        prior = self._orders.get(client_order_id)
+        if prior is None:
+            raise KeyError(f"unknown local order: {client_order_id}")
+        if prior.status is not OrderStatus.UNKNOWN:
+            return prior
+
+        snapshot = self.adapter.get_order(client_order_id)
+        if snapshot is None:
+            return prior
+
+        if snapshot.client_order_id != client_order_id:
+            raise ValueError("broker recovery client_order_id mismatch")
+        if snapshot.requested_quantity != prior.requested_quantity:
+            raise ValueError("broker recovery quantity mismatch")
+
+        self._transition(
+            client_order_id,
+            snapshot.status,
+            snapshot.reason or "unknown order resolved from broker state",
+        )
+        self._orders[client_order_id] = snapshot
+        self._fills[client_order_id] = tuple(snapshot.fills)
+        return snapshot
+
+    def unknown_orders(self) -> tuple[OrderSnapshot, ...]:
+        """Return orders requiring broker-state recovery."""
+        return tuple(
+            snapshot
+            for snapshot in self._orders.values()
+            if snapshot.status is OrderStatus.UNKNOWN
+        )
 
     def reconcile_order(self, client_order_id: str) -> bool:
         """Return True only when local and broker order state agree."""
