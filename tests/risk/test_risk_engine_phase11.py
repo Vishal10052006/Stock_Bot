@@ -361,6 +361,7 @@ def test_existing_position_can_reduce_without_duplicate_symbol_rejection() -> No
 
     assessment = RiskEngine().evaluate(
         make_input(
+            candidate=make_candidate(CandidateDirection.SHORT),
             symbol_already_open=True,
             position_context=context,
         )
@@ -379,6 +380,7 @@ def test_existing_position_can_flatten_without_duplicate_symbol_rejection() -> N
 
     assessment = RiskEngine().evaluate(
         make_input(
+            candidate=make_candidate(CandidateDirection.SHORT),
             symbol_already_open=True,
             position_context=context,
         )
@@ -414,9 +416,11 @@ def test_reduction_does_not_consume_open_position_slot() -> None:
 
     assessment = RiskEngine().evaluate(
         make_input(
+            candidate=make_candidate(CandidateDirection.SHORT),
             open_positions=3,
             symbol_already_open=True,
             position_context=context,
+            gross_exposure=1_000.0,
         )
     )
 
@@ -519,6 +523,7 @@ def test_reduction_does_not_double_count_symbol_concentration() -> None:
         RiskConfig(max_symbol_exposure_fraction=0.10)
     ).evaluate(
         make_input(
+            candidate=make_candidate(CandidateDirection.SHORT),
             symbol_already_open=True,
             position_context=context,
             symbol_exposure={"RELIANCE": 10_000.0},
@@ -539,6 +544,7 @@ def test_reduction_does_not_double_count_sector_concentration() -> None:
         RiskConfig(max_sector_exposure_fraction=0.10)
     ).evaluate(
         make_input(
+            candidate=make_candidate(CandidateDirection.SHORT),
             symbol_already_open=True,
             position_context=context,
             sector="ENERGY",
@@ -559,6 +565,7 @@ def test_flatten_does_not_require_available_cash() -> None:
 
     assessment = RiskEngine().evaluate(
         make_input(
+            candidate=make_candidate(CandidateDirection.SHORT),
             symbol_already_open=True,
             position_context=context,
             available_cash=0.0,
@@ -592,7 +599,7 @@ def test_reverse_risk_sizes_only_the_new_direction() -> None:
     assert assessment.position_size == 15.0
     assert assessment.requested_projected_quantity == -5.0
     assert assessment.approved_projected_quantity == -5.0
-    assert assessment.gross_exposure_after == 1_500.0
+    assert assessment.gross_exposure_after == 500.0
 
 
 def test_reverse_gross_limit_resizes_only_new_direction() -> None:
@@ -616,11 +623,11 @@ def test_reverse_gross_limit_resizes_only_new_direction() -> None:
     assert assessment.decision.status.value == "APPROVED"
     assert assessment.decision.action is RiskAction.RESIZE
     assert assessment.closing_quantity == 10.0
-    assert assessment.opening_position_size == 4.0
-    assert assessment.position_size == 14.0
+    assert assessment.opening_position_size == 10.0
+    assert assessment.position_size == 20.0
     assert assessment.requested_projected_quantity == -125.0
-    assert assessment.approved_projected_quantity == -4.0
-    assert assessment.gross_exposure_after == 74_400.0
+    assert assessment.approved_projected_quantity == -10.0
+    assert assessment.gross_exposure_after == 74_000.0
 
 
 def test_reverse_does_not_consume_an_open_position_slot() -> None:
@@ -667,6 +674,7 @@ def test_entry_budget_blocks_reverse_but_not_flatten() -> None:
     )
     flatten = RiskEngine().evaluate(
         make_input(
+            candidate=make_candidate(CandidateDirection.SHORT),
             trades_today=5,
             symbol_already_open=True,
             position_context=flatten_context,
@@ -707,6 +715,7 @@ def test_position_context_accepts_correct_flatten_direction_for_short() -> None:
             candidate=make_candidate(CandidateDirection.LONG),
             symbol_already_open=True,
             position_context=context,
+            gross_exposure=1_000.0,
         )
     )
 
