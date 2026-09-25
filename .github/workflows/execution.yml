@@ -1,0 +1,29 @@
+name: Execution Engine Validation
+
+on:
+  push:
+    branches:
+      - main
+      - "execution/**"
+  pull_request:
+
+jobs:
+  execution:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install execution test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pandas numpy pytest
+
+      - name: Run execution test suite
+        run: python -m pytest -q tests/execution
