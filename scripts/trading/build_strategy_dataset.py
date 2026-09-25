@@ -253,6 +253,21 @@ def _build_strategy_rows(
         ],
     )
 
+    # FeatureDataset v1 intentionally contains derived features only and does
+    # not expose the raw close. The strategy-ready contract, however, requires
+    # the decision-time close, so attach the authoritative Phase 4 close by
+    # exact symbol/timestamp identity rather than reconstructing it.
+    decision_close = indicators_all.loc[
+        :,
+        ["timestamp", "symbol", "close"],
+    ]
+    features = features.merge(
+        decision_close,
+        on=["timestamp", "symbol"],
+        how="left",
+        validate="one_to_one",
+    )
+
     regime = detect_market_regime(features)
 
     # Phase 6 is one market regime per timestamp. Join by timestamp only,
