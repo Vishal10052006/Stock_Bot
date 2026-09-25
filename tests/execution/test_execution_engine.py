@@ -406,3 +406,33 @@ def test_exit_order_is_idempotent_and_closes_position():
     assert first.filled
     assert second.snapshot.broker_order_id == first.snapshot.broker_order_id
     assert adapter.positions() == ()
+
+
+def test_execution_events_preserve_decision_and_intent_lineage():
+    engine = ExecutionEngine(PaperBrokerAdapter())
+    request = order_request()
+    result = engine.submit(request)
+
+    assert result.request.purpose == "ENTRY"
+    assert engine.events[-1].decision_id == request.decision_id
+    assert engine.events[-1].purpose == "ENTRY"
+
+    position = engine.adapter.positions()[0]
+    exit_auth = authorization(
+        direction=StrategyDirection.SHORT,
+        quantity=position.quantity,
+    )
+    exit_request = ExecutionEngine.from_exit_authorization(
+        exit_auth,
+        decision_id="lineage-exit",
+        position=position,
+    )
+    engine.submit(exit_request)
+
+    exit_events = tuple(
+        event for event in engine.events
+        if event.client_order_id == exit_request.client_order_id
+    )
+    assert exit_events
+    assert all(event.decision_id == "lineage-exit" for event in exit_events)
+    assert all(event.purpose == "EXIT" for event in exit_events)
