@@ -39,6 +39,8 @@ current provider contract and the complete live-readiness gates pass.
 - `PaperBrokerAdapter`: deterministic, no network I/O.
 - `UpstoxBrokerAdapter`: integration boundary only; live methods fail closed
   until an explicitly enabled, externally supplied client is validated.
+- `UpstoxSandboxClient`: sandbox-only HTTP transport; it accepts only the
+  dedicated `https://sandbox.upstox.com` host and never supports live endpoints.
 
 ## Required validation
 
@@ -50,7 +52,6 @@ pytest -q
 ```
 
 A clean repository-wide test run is required after any execution-engine change.
-
 
 ## Completion extension — execution recovery and exits
 
@@ -69,7 +70,6 @@ An UNKNOWN submission is **not** evidence that the broker did not receive the or
 
 These changes do **not** enable Upstox/live trading. The existing live lock, independent safety gate, broker validation requirements, reconciliation gates, and readiness provenance remain authoritative.
 
-
 ## Production-side completion
 
 Production validation controls now live in `execution/production.py`: adapter contract checks, partial-fill and rejection coverage, restart rehydration, signed position reconciliation, kill-switch tests, execution monitoring, paper soak execution, backtest cost-assumption parity, and a fail-closed production readiness gate.
@@ -84,7 +84,7 @@ Live broker execution remains locked.
 
 ## Upstox provider-contract validation
 
-The Upstox adapter now implements provider request/response mapping behind an injected client boundary. The adapter remains disabled by default and does not construct HTTP clients or read credentials.
+The Upstox adapter implements provider request/response mapping behind an injected client boundary. The adapter remains disabled by default and does not construct HTTP clients or read credentials.
 
 The current Upstox V3 order contract uses quantity, product, validity, price, tag, instrument_token, order_type, and transaction_type; successful placement returns provider order IDs. The adapter preserves the Stock_Bot deterministic client order ID as the Upstox tag.
 
@@ -100,6 +100,42 @@ Provider-specific mapping tests cover:
 
 The adapter intentionally depends on an externally supplied client with place_order, find_order_by_tag, cancel_order, and get_positions methods. This keeps authentication and transport outside the execution domain.
 
-Upstox currently documents sandbox-enabled V3 place/cancel APIs and a sandbox environment intended for integration testing. These tests do not call the Upstox network and therefore do not constitute sandbox execution evidence.
+## UPSTOX-VALIDATION-02 — sandbox evidence harness
+
+`execution/adapters/upstox_sandbox.py` now provides a deliberately sandbox-only
+transport client. It uses Upstox's dedicated sandbox host and the V2 order,
+order-history, cancel, and short-term-position endpoints needed by the current
+adapter contract.
+
+The client:
+- rejects any base URL other than `https://sandbox.upstox.com`
+- requires a caller-supplied sandbox token
+- never logs or persists the token
+- never constructs a live API URL
+- normalizes order history and positions into the adapter's provider-client shape
+- raises `UpstoxSandboxError` on transport, HTTP, or malformed-response failures
+
+The opt-in integration test is `tests/execution/test_upstox_sandbox_client.py`.
+It is skipped unless all of the following are supplied locally:
+
+```bash
+UPSTOX_SANDBOX_ACCESS_TOKEN
+UPSTOX_SANDBOX_INSTRUMENT_TOKEN
+UPSTOX_SANDBOX_PRICE
+UPSTOX_SANDBOX_CONFIRM=YES
+```
+
+The test places one sandbox LIMIT order, resolves it by tag, verifies broker-order
+lineage, attempts cancellation when the order is still cancellable, and reads
+sandbox positions. It is intentionally not part of ordinary CI and does not
+accept a live-provider URL.
+
+Provider documentation identifies sandbox as a risk-free integration environment
+and currently lists place, modify, and cancel order APIs as sandbox-enabled.
+Sandbox credentials are separate from live transactions.
+
+These tests provide a mechanism for real provider evidence, but **no sandbox
+evidence is claimed until the opt-in test has actually been run with a valid
+sandbox credential and instrument token**.
 
 **Live trading remains locked.**
