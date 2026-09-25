@@ -39,8 +39,7 @@ current provider contract and the complete live-readiness gates pass.
 - `PaperBrokerAdapter`: deterministic, no network I/O.
 - `UpstoxBrokerAdapter`: integration boundary only; live methods fail closed
   until an explicitly enabled, externally supplied client is validated.
-- `UpstoxSandboxClient`: sandbox-only HTTP transport; it accepts only the
-  dedicated `https://sandbox.upstox.com` host and never supports live endpoints.
+- `UpstoxSandboxClient`: legacy sandbox HTTP transport retained for isolated unit tests. It is not the preferred provider-evidence path.
 - `UpstoxSDKSandboxClient`: preferred sandbox transport for provider
   integration validation, backed by the official `upstox-python-sdk`.
 
@@ -109,13 +108,10 @@ The adapter intentionally depends on an externally supplied client with place_or
 
 ## UPSTOX-VALIDATION-02 — sandbox evidence harness
 
-`execution/adapters/upstox_sandbox.py` provides a deliberately sandbox-only
-transport client. It uses Upstox's dedicated sandbox host and supports the
-order placement, order-history lookup, and cancellation calls needed by the
-current adapter contract.
+`execution/adapters/upstox_sandbox.py` provides a legacy sandbox-only transport client retained for isolated contract tests. Provider evidence uses `UpstoxSDKSandboxClient`, because the official SDK's `Configuration(sandbox=True)` selects the current sandbox host and API surface.
 
 The client:
-- rejects any base URL other than `https://sandbox.upstox.com`
+- is restricted to its legacy sandbox base URL and is not used for the preferred provider-evidence path
 - requires a caller-supplied sandbox token
 - never logs or persists the token
 - never constructs a live API URL
@@ -148,5 +144,26 @@ sandbox credential, instrument token, and reachable provider endpoint**.
 
 A failed DNS/network preflight is an environment/infrastructure failure, not
 evidence of successful or unsuccessful broker authentication.
+
+**Live trading remains locked.**
+
+
+## Final certification checkpoint
+
+The execution hardening layer is implemented in `execution/certification.py` and
+covered by `tests/execution/test_production_execution.py`. It adds:
+
+- timeout/network-error validation that remains `UNKNOWN` without blind retry
+- duplicate replay/idempotency validation
+- bounded exponential backoff policy
+- operational preflight, incident, and shutdown runbook checks
+
+CI validation for commit `0d56ee6a941c7639e868845fef3afc2d9fd96d89`
+completed successfully for Execution Validation, Backtesting Validation, and
+Market Bot validation.
+
+This establishes the software-side execution certification boundary. It does
+not constitute live-broker certification. Real Upstox sandbox lifecycle evidence
+requires a valid externally supplied sandbox credential and remains opt-in.
 
 **Live trading remains locked.**
