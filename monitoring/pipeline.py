@@ -94,7 +94,8 @@ class MonitoringPipeline:
             if isinstance(value, (int, float)) and math.isfinite(float(value)):
                 self.engine.record_metric(f"model.{name}", float(value))
         for report in drift:
-            self.engine.record_metric("model.prediction_psi", report.psi)
+            if math.isfinite(float(report.psi)):
+                self.engine.record_metric("model.prediction_psi", float(report.psi))
         for code in alerts:
             requested = AlertSeverity.CRITICAL if "EXCEEDED" in code else AlertSeverity.WARNING
             self._alert(code, "model", code, requested)
@@ -110,10 +111,12 @@ class MonitoringPipeline:
     def evaluate_regime(self, snapshot) -> None:
         from .regime import evaluate_regime_monitoring
 
-        metrics = evaluate_regime_monitoring(snapshot)
+        metrics, alerts = evaluate_regime_monitoring(snapshot)
         for name, value in metrics.items():
             if isinstance(value, (int, float)) and math.isfinite(float(value)):
                 self.engine.record_metric(f"regime.{name}", float(value))
+        for code in alerts:
+            self._alert(code, "regime", code, AlertSeverity.WARNING)
 
     def evaluate_risk(self, snapshot: RiskMonitoringSnapshot) -> None:
         metrics, breaches = evaluate_risk_monitoring(snapshot)
