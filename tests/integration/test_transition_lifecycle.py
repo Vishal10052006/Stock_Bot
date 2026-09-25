@@ -328,9 +328,20 @@ def test_reverse_preserves_actual_projected_position_provenance() -> None:
     portfolio = PortfolioSnapshot(
         as_of=TIMESTAMP,
         equity=100_000.0,
-        positions=(
-            PortfolioPosition("ITC", 10.0, PRICE),
+        positions=(),
+    )
+
+    portfolio, _ = _execute_intent(
+        runtime=runtime,
+        portfolio=portfolio,
+        intent=TradeIntent(
+            "ITC",
+            10.0,
+            PRICE,
+            "BUY",
+            decision_id="bootstrap-long",
         ),
+        timestamp=TIMESTAMP,
     )
 
     intent = TradeIntent(
