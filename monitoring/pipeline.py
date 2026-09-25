@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
 
 from .alerts import AlertSeverity
 from .engine import MonitoringEngine
@@ -89,7 +90,7 @@ class MonitoringPipeline:
             warning_psi=self.policy.warning_prediction_psi,
         )
         for name, value in metrics.items():
-            if isinstance(value, (int, float)):
+            if isinstance(value, (int, float)) and math.isfinite(float(value)):
                 self.engine.record_metric(f"model.{name}", float(value))
         for report in drift:
             self.engine.record_metric("model.prediction_psi", report.psi)
