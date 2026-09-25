@@ -135,6 +135,19 @@ class LiveSignalEngine:
                 LiveSignalBlockReason.FUTURE_INPUT,
             )
 
+        previous = self._last_timestamp.get(symbol)
+        if previous is not None:
+            if timestamp < previous:
+                return self._blocked(
+                    strategy_input,
+                    LiveSignalBlockReason.OUT_OF_ORDER,
+                )
+            if timestamp == previous:
+                return self._blocked(
+                    strategy_input,
+                    LiveSignalBlockReason.DUPLICATE,
+                )
+
         age_seconds = (observed - timestamp).total_seconds()
         if age_seconds > self.max_staleness_seconds:
             return self._blocked(
