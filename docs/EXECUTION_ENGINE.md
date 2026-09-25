@@ -49,6 +49,9 @@ Run:
 ```bash
 pytest -q tests/execution tests/paper tests/risk
 pytest -q
+
+# Explicit provider integration validation (network + sandbox credentials required)
+pytest -q tests/execution/test_upstox_sandbox_client.py -m integration
 ```
 
 A clean repository-wide test run is required after any execution-engine change.
