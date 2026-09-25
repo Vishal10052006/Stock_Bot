@@ -13,7 +13,7 @@ from typing import Protocol
 
 import pandas as pd
 
-from ml.prediction.contracts import ClassificationPrediction, PredictionProvenance
+from ml.prediction.contracts import ClassificationPrediction, PredictionLineage, PredictionProvenance, hash_prediction_inputs
 from ml.prediction.storage import PredictionRecord, PredictionStore
 from ml.prediction.monitoring import PredictionTelemetry
 
@@ -73,9 +73,32 @@ class PredictionInferenceService:
         }
         if not expected.issubset(result.columns):
             raise ValueError("predictor returned an invalid classification schema")
+        if len(result) != len(request.features):
+            raise ValueError("predictor returned an unexpected row count")
 
         predictions: list[ClassificationPrediction] = []
-        for _, row in result.iterrows():
+        for position, (_, row) in enumerate(result.iterrows()):
+            request_row = request.identifiers.iloc[position]
+            if (
+                pd.Timestamp(row["timestamp"]) != pd.Timestamp(request_row["timestamp"])
+                or str(row["symbol"]).strip().upper()
+                != str(request_row["symbol"]).strip().upper()
+            ):
+                raise ValueError("predictor identifiers do not match the inference request")
+            feature_row = request.features.iloc[position].to_dict()
+            lineage = PredictionLineage(
+                source_type="prediction_inference_request",
+                source_version=self.api_version,
+                input_timestamp=pd.Timestamp(row["timestamp"]),
+                input_symbol=str(row["symbol"]).strip().upper(),
+                feature_names=tuple(str(name) for name in request.features.columns),
+                feature_hash=hash_prediction_inputs(feature_row),
+                context_hash=hash_prediction_inputs({
+                    "features": feature_row,
+                    "timestamp": str(row["timestamp"]),
+                    "symbol": str(row["symbol"]),
+                }),
+            )
             prediction = ClassificationPrediction(
                 timestamp=pd.Timestamp(row["timestamp"]),
                 symbol=str(row["symbol"]),
@@ -85,6 +108,7 @@ class PredictionInferenceService:
                     "NO_EDGE": float(row["no_edge_probability"]),
                 },
                 provenance=request.provenance,
+                lineage=lineage,
             )
             predictions.append(prediction)
 
