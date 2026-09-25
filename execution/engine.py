@@ -75,6 +75,14 @@ class OrderRequest:
     created_at: pd.Timestamp = field(default_factory=lambda: pd.Timestamp.now(tz="Asia/Kolkata"))
     authorization: ExecutionAuthorization | None = None
 
+    # Risk-approved trade economics and execution constraints are copied into
+    # the immutable request for auditability and enforcement.
+    entry_price: float | None = None
+    stop_price: float | None = None
+    target_price: float | None = None
+    max_slippage_bps: float | None = None
+    expires_at: pd.Timestamp | None = None
+
     def __post_init__(self) -> None:
         ts = pd.Timestamp(self.created_at)
         if ts.tzinfo is None:
@@ -89,8 +97,31 @@ class OrderRequest:
             raise ValueError("LIMIT orders require a positive limit_price")
         if self.order_type is OrderType.MARKET and self.limit_price is not None:
             raise ValueError("MARKET orders must not define limit_price")
+
+        for name, value in (
+            ("entry_price", self.entry_price),
+            ("stop_price", self.stop_price),
+            ("target_price", self.target_price),
+        ):
+            if value is not None and value <= 0:
+                raise ValueError(f"{name} must be positive when provided")
+
+        if self.max_slippage_bps is not None and self.max_slippage_bps < 0:
+            raise ValueError("max_slippage_bps must be non-negative")
+
+        expires_at = (
+            None
+            if self.expires_at is None
+            else pd.Timestamp(self.expires_at)
+        )
+        if expires_at is not None and expires_at.tzinfo is None:
+            raise ValueError("expires_at must be timezone-aware")
+        if expires_at is not None and expires_at < ts:
+            raise ValueError("expires_at must not precede created_at")
+
         object.__setattr__(self, "created_at", ts)
         object.__setattr__(self, "symbol", self.symbol.strip().upper())
+        object.__setattr__(self, "expires_at", expires_at)
 
 
 @dataclass(frozen=True, slots=True)
@@ -359,6 +390,11 @@ class ExecutionEngine:
             limit_price=limit_price,
             created_at=timestamp,
             authorization=authorization,
+            entry_price=authorization.entry_price,
+            stop_price=authorization.stop_price,
+            target_price=authorization.target_price,
+            max_slippage_bps=authorization.max_slippage_bps,
+            expires_at=authorization.expires_at,
         )
 
     def validate(self, order: OrderRequest) -> None:
@@ -377,6 +413,24 @@ class ExecutionEngine:
             raise ValueError("execution side does not match authorization")
         if order.quantity <= 0:
             raise ValueError("execution quantity must be positive")
+
+        # The immutable request must remain byte-for-byte aligned with the
+        # upstream Risk authorization for all constrained trade economics.
+        if order.entry_price != order.authorization.entry_price:
+            raise ValueError("execution entry_price does not match authorization")
+        if order.stop_price != order.authorization.stop_price:
+            raise ValueError("execution stop_price does not match authorization")
+        if order.target_price != order.authorization.target_price:
+            raise ValueError("execution target_price does not match authorization")
+        if order.max_slippage_bps != order.authorization.max_slippage_bps:
+            raise ValueError(
+                "execution max_slippage_bps does not match authorization"
+            )
+        if order.expires_at != order.authorization.expires_at:
+            raise ValueError("execution expiry does not match authorization")
+
+        if order.expires_at is not None and order.created_at > order.expires_at:
+            raise ValueError("execution order has expired")
 
     def submit(self, order: OrderRequest) -> ExecutionResult:
         """Validate, submit once, record broker acknowledgement, and return result.
