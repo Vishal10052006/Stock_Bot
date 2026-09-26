@@ -13,6 +13,7 @@ RiskConfig values and emits a JSON-safe comparison.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -47,8 +48,39 @@ REQUIRED_COLUMNS = (
 )
 
 
-def _load_input(path: Path) -> pd.DataFrame:
+def _sha256_file(path: Path) -> str:
+    """Return the exact byte-level SHA-256 used by the paper freeze manifest."""
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _verify_manifest(path: Path, manifest_path: Path) -> dict[str, object]:
+    """Fail closed unless the supplied artifact matches its frozen manifest."""
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    artifact = manifest.get("artifact", {})
+    expected_sha = artifact.get("sha256")
+    if not expected_sha:
+        raise ValueError("paper dataset manifest is missing artifact.sha256")
+
+    actual_sha = _sha256_file(path)
+    if actual_sha != expected_sha:
+        raise ValueError(
+            "paper dataset SHA-256 does not match the freeze manifest: "
+            f"expected {expected_sha}, got {actual_sha}"
+        )
+    return manifest
+
+
+def _load_input(path: Path, manifest_path: Path | None = None) -> pd.DataFrame:
     """Load the existing strategy-ready artifact without altering its rows."""
+    if manifest_path is not None:
+        if not manifest_path.is_file():
+            raise FileNotFoundError(manifest_path)
+        _verify_manifest(path, manifest_path)
+
     if path.suffix.lower() == ".parquet":
         rows = pd.read_parquet(path)
     elif path.suffix.lower() in {".csv", ".txt"}:
@@ -165,6 +197,13 @@ def main() -> None:
         help="JSON output path.",
     )
     parser.add_argument(
+        "--manifest",
+        help=(
+            "Optional EMP-02 paper dataset manifest. When supplied, the input "
+            "SHA-256 must match the frozen artifact before replay."
+        ),
+    )
+    parser.add_argument(
         "--starting-equity",
         type=float,
         default=100_000.0,
@@ -173,7 +212,8 @@ def main() -> None:
     args = parser.parse_args()
 
     input_path = Path(args.input)
-    rows = _load_input(input_path)
+    manifest_path = Path(args.manifest) if args.manifest else None
+    rows = _load_input(input_path, manifest_path)
 
     scenarios = (
         Scenario("frozen_75_hard_reject", 0.75, False),
@@ -190,6 +230,7 @@ def main() -> None:
             "robustness, or live-trading readiness."
         ),
         "input": str(input_path),
+        "input_manifest": str(manifest_path) if manifest_path else None,
         "starting_equity": float(args.starting_equity),
         "scenarios": [
             run_scenario(
