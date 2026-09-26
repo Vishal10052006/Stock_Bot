@@ -119,3 +119,7 @@ Each persisted shadow session now exposes a deterministic SHA-256 manifest finge
 ## M20.8 — monitoring telemetry bridge
 
 M20 now publishes real-time market-data quality snapshots into the existing MonitoringRuntime. The bridge records observational telemetry and exposes the existing dashboard; it cannot authorize, modify, or submit trades.
+
+## M20.9 — persistent monitoring telemetry
+
+When the optional shadow session journal is enabled, the existing MonitoringRuntime is now constructed with that same append-only journal. M20 market-data health, metrics, and alerts therefore become replayable session evidence without creating any trading authority.
