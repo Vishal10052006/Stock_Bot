@@ -11,7 +11,8 @@ on:
       - "tests/test_m20_shadow_runtime.py"
       - "tests/test_m20_shadow_runtime_lifecycle.py"
       - "tests/test_m20_shadow_candles.py"
-      - "tests/test_m20_shadow_decision.py"
+      - "tests/test_m20_shadow_decision.py tests/test_m20_research_runtime.py"
+      - "tests/test_m20_research_runtime.py"
   push:
     branches:
       - feat/m20-shadow-runtime
