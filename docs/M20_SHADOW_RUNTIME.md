@@ -115,3 +115,7 @@ The M20 runtime now optionally records its own lifecycle into the append-only sh
 ## M20.7 — deterministic session manifest
 
 Each persisted shadow session now exposes a deterministic SHA-256 manifest fingerprint binding the session ID, SHADOW safety posture, configured symbols, timeframe, completed-candle count, and journal-event count. The manifest is evidence metadata only and rejects any live-order or non-SHADOW configuration.
+
+## M20.8 — monitoring telemetry bridge
+
+M20 now publishes real-time market-data quality snapshots into the existing MonitoringRuntime. The bridge records observational telemetry and exposes the existing dashboard; it cannot authorize, modify, or submit trades.
