@@ -28,6 +28,7 @@ from .config import ShadowRuntimeConfig
 from .health import ShadowHealth
 from .mode import RuntimeSafety, load_runtime_safety
 from .shadow_candles import ShadowCandleBuffer
+from .shadow_decision import ShadowDecisionRecorder
 from .shadow_session import ShadowSessionJournal
 from .shadow_manifest import ShadowSessionManifest
 from .shadow_monitoring import ShadowMonitoringBridge
@@ -47,6 +48,7 @@ class ShadowRuntime:
     candle_buffer: ShadowCandleBuffer = field(default_factory=ShadowCandleBuffer)
     session_journal: ShadowSessionJournal | None = None
     monitoring: ShadowMonitoringBridge | None = None
+    decision_recorder: ShadowDecisionRecorder | None = None
     _session_started: bool = False
     _session_stopped: bool = False
 
@@ -111,6 +113,7 @@ class ShadowRuntime:
             monitoring=ShadowMonitoringBridge(
                 monitoring=build_shadow_monitoring(session_journal),
             ),
+            decision_recorder=ShadowDecisionRecorder(),
             session_journal=session_journal,
         )
 
@@ -135,6 +138,20 @@ class ShadowRuntime:
                 )
             yield candle
 
+    def run_decisions(self, rows) -> object:
+        """Run live-ready causal rows through Strategy -> Risk -> Paper only."""
+        self.safety.assert_safe()
+        if self.decision_recorder is None:
+            raise RuntimeError("decision recorder is not configured")
+        if self.monitoring is not None:
+            self.decision_recorder.paper_loop.monitoring = self.monitoring.monitoring
+        result = self.decision_recorder.run(rows)
+        if self.session_journal is not None:
+            self.session_journal.record(
+                event_type="SHADOW_DECISION_BATCH",
+                payload=self.decision_recorder.evidence(),
+            )
+        return result
     def stop(self) -> None:
         """Disconnect without invoking any order system."""
         self.pipeline.stop()
@@ -171,6 +188,10 @@ class ShadowRuntime:
         else:
             evidence["session_journal"] = None
             evidence["session_manifest"] = None
+        if self.decision_recorder is not None:
+            evidence["decision_trace"] = self.decision_recorder.evidence()
+        else:
+            evidence["decision_trace"] = None
         evidence["monitoring_dashboard"] = (
             self.monitoring.dashboard() if self.monitoring is not None else None
         )
