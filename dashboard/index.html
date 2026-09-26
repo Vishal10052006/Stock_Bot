@@ -2,76 +2,65 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>STOCK_BOT Operator Dashboard</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>STOCK_BOT Ops Center</title>
 <style>
-:root{color-scheme:dark;--bg:#0b1220;--panel:#111a2b;--panel2:#17233a;--text:#edf4ff;--muted:#9fb0c7;--border:#2a3a55;--good:#39d98a;--warn:#ffcc66;--bad:#ff7373}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
-.wrap{max-width:1400px;margin:0 auto;padding:24px}.head{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;margin-bottom:20px}h1{margin:0;font-size:28px}.sub{color:var(--muted);margin-top:6px}.controls{display:flex;gap:10px;flex-wrap:wrap}
-button,.file{border:1px solid var(--border);background:var(--panel);color:var(--text);border-radius:10px;padding:10px 14px;cursor:pointer;font:inherit}.file input{display:none}
-.banner{border:1px solid var(--border);border-radius:14px;padding:14px 16px;background:var(--panel);margin-bottom:18px;display:flex;justify-content:space-between;gap:12px;align-items:center}.locked{color:var(--warn);font-weight:800}
-.grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}.card{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:16px;min-width:0}.wide{grid-column:span 2}.full{grid-column:1/-1}
-.label{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.06em}.value{font-size:26px;font-weight:800;margin-top:5px}.small{color:var(--muted);font-size:13px;margin-top:6px}
-.metric,.health,.phase{display:flex;justify-content:space-between;gap:12px;padding:9px 0;border-bottom:1px solid var(--border)}.metric:last-child,.health:last-child,.phase:last-child{border-bottom:0}.pill{padding:4px 8px;border-radius:999px;background:var(--panel2);font-size:12px;white-space:nowrap}
-.warning{color:var(--warn)}.critical{color:var(--bad)}table{width:100%;border-collapse:collapse;font-size:13px}th,td{text-align:left;padding:9px;border-bottom:1px solid var(--border);vertical-align:top}th{color:var(--muted)}
-pre{white-space:pre-wrap;word-break:break-word;max-height:360px;overflow:auto;background:#0a101c;border:1px solid var(--border);border-radius:10px;padding:12px}
-@media(max-width:1000px){.grid{grid-template-columns:repeat(2,minmax(0,1fr))}.wide{grid-column:span 2}}@media(max-width:620px){.wrap{padding:14px}.head,.banner{flex-direction:column}.grid{grid-template-columns:1fr}.wide,.full{grid-column:1}}
+:root{color-scheme:dark;--bg:#090d13;--p:#0e151d;--p2:#121c25;--l:#26333f;--t:#dce5ed;--m:#7d8b98;--c:#16e0d1;--g:#43e58b;--y:#f4c95d;--r:#ff5c66}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 75% -10%,#17283a,#090d13 45%);color:var(--t);font:12px/1.4 Inter,system-ui,sans-serif}.app{display:grid;grid-template-columns:150px 1fr;min-height:100vh}.side{background:#0b1017;border-right:1px solid var(--l);padding:12px 9px;position:sticky;top:0;height:100vh}.brand{font:900 11px monospace;letter-spacing:.06em;margin:4px 7px 16px}.nav{display:grid;gap:4px}.nav button{border:0;background:transparent;color:#82909d;text-align:left;padding:7px;border-radius:4px;cursor:pointer}.nav button:hover,.nav button.active{background:#0d3037;color:var(--c)}.nav button.active:before{content:"";display:inline-block;width:3px;height:12px;background:var(--c);margin-right:6px;vertical-align:-2px}.sidefoot{position:absolute;bottom:12px;color:#61707c;font:9px monospace}
+main{min-width:0}.top{height:43px;border-bottom:1px solid var(--l);display:flex;align-items:center;gap:7px;padding:0 12px;background:#0b1017dd}.title{font:800 10px monospace}.badges{display:flex;gap:5px;flex-wrap:wrap}.badge{border:1px solid var(--l);padding:2px 6px;border-radius:10px;font:8px monospace;color:#8b99a6}.green{color:var(--g)!important}.yellow{color:var(--y)!important}.red{color:var(--r)!important}.cyan{color:var(--c)!important}.spacer{flex:1}.clock{font:9px monospace;color:#aab7c1}.toolbar button,.file{border:1px solid var(--l);background:#0d141c;color:#aebac4;border-radius:4px;padding:5px 7px;cursor:pointer;font-size:9px}.file input{display:none}
+.content{padding:9px 12px}.strip{display:grid;grid-template-columns:1.4fr 1fr 1fr 1fr;gap:6px;margin-bottom:7px}.box,.panel{background:linear-gradient(#111a23,#0d131a);border:1px solid var(--l);border-radius:5px}.box{padding:7px 9px}.ey{font:8px monospace;color:#70808d;text-transform:uppercase}.big{font:800 12px monospace;margin-top:3px}.banner{display:flex;gap:8px;align-items:center;padding:6px 8px;margin-bottom:7px;border:1px solid var(--l);border-radius:5px;background:#0d151d;font:8px monospace}.dot{width:6px;height:6px;border-radius:50%;background:var(--g)}.lock{margin-left:auto}.grid{display:grid;grid-template-columns:1.25fr 1fr 1fr;gap:7px}.wide{grid-column:span 2}.full{grid-column:1/-1}.panel{padding:8px;min-width:0}.head{display:flex;gap:7px;border-bottom:1px solid var(--l);padding-bottom:6px;margin-bottom:5px}.head h2{margin:0;font:9px monospace}.head span{margin-left:auto;color:#687784;font:8px monospace}.trace{display:grid;grid-template-columns:repeat(7,minmax(100px,1fr));gap:5px;overflow:auto}.node{min-height:85px;border:1px solid var(--l);background:#0b1219;border-radius:4px;padding:6px;position:relative}.node:after{content:"›";position:absolute;right:-7px;top:30px;color:#40505d}.node:last-child:after{display:none}.node b{font:8px monospace;color:#687985}.node strong{display:block;font-size:10px;margin:3px 0}.node span{font:8px monospace;color:#748491}.meter{height:3px;background:#18242e;margin-top:7px}.meter i{display:block;height:100%;background:var(--c)}.agent{border:1px solid var(--l);background:#0b1219;border-radius:4px;padding:6px;margin:5px 0}.agenttop{display:flex;gap:6px}.agentname{font-weight:800}.state{margin-left:auto;font:8px monospace}.kvgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;margin-top:5px}.kv{background:#0e161e;border:1px solid #1b2731;border-radius:3px;padding:4px}.kv b{display:block;font:7px monospace;color:#6d7c88}.kv span{font:8px monospace}.feed{max-height:290px;overflow:auto;font:8px monospace}.event{display:grid;grid-template-columns:54px 43px 1fr 34px;gap:5px;padding:5px 1px;border-bottom:1px solid #18222b}.event .muted{color:#60717e}.event .tag{color:var(--c)}.healthgrid{display:grid;grid-template-columns:repeat(6,1fr);gap:5px}.health{background:#0b1219;border:1px solid var(--l);border-radius:4px;padding:6px}.health b{font-size:9px}.health span{display:block;font:8px monospace;margin-top:3px}.learning{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}.stage{background:#0b1219;border:1px solid var(--l);border-radius:4px;padding:6px;min-height:64px}.stage b{font:7px monospace;color:#697985}.stage strong{display:block;font-size:8px;margin:3px 0}.stage span{display:block;font:7px monospace;color:#7c8b97}pre{margin:0;max-height:220px;overflow:auto;white-space:pre-wrap;background:#080d12;border:1px solid #1a252f;border-radius:4px;padding:7px;color:#8fa0ad;font:8px monospace}.hidden{display:none!important}
+@media(max-width:1050px){.app{grid-template-columns:120px 1fr}.grid{grid-template-columns:1fr 1fr}.wide{grid-column:1/-1}.trace{grid-template-columns:repeat(4,145px)}.healthgrid{grid-template-columns:repeat(3,1fr)}}@media(max-width:700px){.app{display:block}.side{height:auto;position:relative}.sidefoot{display:none}.nav{grid-template-columns:repeat(4,1fr)}.strip,.grid{grid-template-columns:1fr}.learning{grid-template-columns:repeat(2,1fr)}.healthgrid{grid-template-columns:repeat(2,1fr)}}
 </style>
 </head>
 <body>
-<main class="wrap">
-<header class="head">
-<div><h1>STOCK_BOT Operator Dashboard</h1><div class="sub">Research • Analysis • Market • Prediction • Strategy • Risk • Execution</div></div>
-<div class="controls"><label class="file">Load monitoring JSON<input id="file" type="file" accept=".json,application/json"></label><button id="clear" type="button">Clear</button></div>
-</header>
-
-<div class="banner"><div><strong>System mode</strong><div class="small" id="timestamp">No snapshot loaded</div></div><div class="locked">LIVE BROKER EXECUTION: LOCKED</div></div>
-
-<section class="grid" aria-live="polite">
-<article class="card"><div class="label">Healthy components</div><div class="value" id="health">—</div><div class="small">MonitoringRuntime health observations</div></article>
-<article class="card"><div class="label">Predictions</div><div class="value" id="predictions">—</div><div class="small">Observed model inference events</div></article>
-<article class="card"><div class="label">Strategy signal rate</div><div class="value" id="signals">—</div><div class="small">When strategy telemetry is present</div></article>
-<article class="card"><div class="label">Alerts</div><div class="value" id="alertsCount">—</div><div class="small" id="alertsSummary">No snapshot loaded</div></article>
-
-<article class="card wide"><div class="label">Model telemetry</div><div id="model"></div></article>
-<article class="card wide"><div class="label">Risk telemetry</div><div id="risk"></div></article>
-<article class="card wide"><div class="label">Strategy telemetry</div><div id="strategy"></div></article>
-<article class="card wide"><div class="label">Execution telemetry</div><div id="execution"></div></article>
-<article class="card wide"><div class="label">Performance telemetry</div><div id="performance"></div></article>
-<article class="card wide"><div class="label">Alerts</div><div id="alertTable"></div></article>
-<article class="card full"><div class="label">Component health</div><div id="healthRows"></div></article>
-<article class="card full"><div class="label">Pipeline status</div><div id="phases"></div></article>
-<article class="card full"><div class="label">Raw snapshot</div><pre id="raw">—</pre></article>
-</section>
-</main>
+<div class="app">
+<aside class="side"><div class="brand">STOCK_BOT // OPS_CENTER</div><div class="nav">
+<button class="active" data-tab="overview">OVERVIEW</button><button data-tab="agents">AGENTS</button><button data-tab="trace">PIPELINE TRACE</button><button data-tab="decision">DECISION INSPECTOR</button><button data-tab="models">MODEL OBSERVABILITY</button><button data-tab="health">SYSTEM HEALTH</button><button data-tab="learning">LEARNING LOOP</button><button data-tab="events">EVENT LOG</button>
+</div><div class="sidefoot">OPS UI v0.2<br>OBSERVATIONAL ONLY<br>NO ORDER AUTHORITY</div></aside>
+<main>
+<header class="top"><div class="title">STOCK_BOT / OPS_CENTER</div><div class="badges"><span class="badge yellow">● TELEMETRY: DEMO</span><span class="badge green">◉ CAUSALITY: ENFORCED</span><span class="badge">ENV: RESEARCH/PAPER</span><span class="badge">MKT: NSE</span><span class="badge">TF: 5M</span><span class="badge red">LIVE: LOCKED</span></div><div class="spacer"></div><div class="clock" id="clock"></div><div class="toolbar"><label class="file">LOAD JSON<input id="file" type="file" accept=".json,application/json"></label><button id="replay">REPLAY STEP</button><button id="demo">DEMO</button></div></header>
+<section class="content">
+<div class="strip"><div class="box"><div class="ey">FOCUS SYMBOL</div><div class="big cyan" id="focus">RELIANCE • 10:45 IST [M5]</div></div><div class="box"><div class="ey">TOTAL LATENCY</div><div class="big" id="latency">3.4ms</div></div><div class="box"><div class="ey">PIPELINE STATE</div><div class="big green" id="pipeline">CASCADE / REPLAY</div></div><div class="box"><div class="ey">TRADING AUTHORITY</div><div class="big red">LOCKED</div></div></div>
+<div class="banner"><span class="dot"></span><b>PIPELINE CASCADE</b><span>MonitoringRuntime telemetry surface</span><span class="cyan">CONTRACT RB-12.1</span><span class="lock red">LIVE TRADING: LOCKED / PAPER ONLY</span></div>
+<div id="tab-overview" class="tab"><div class="grid">
+<section class="panel full"><div class="head"><h2>01 PIPELINE TRACE // RELIANCE @ 10:45:00 IST</h2><span>RESEARCH → ANALYSIS → MARKET → PREDICTION → STRATEGY → RISK → EXECUTION</span></div><div class="trace" id="trace"></div></section>
+<section class="panel wide"><div class="head"><h2>02 AGENT ACTIVITY ROSTER</h2><span>EXPAND DIAGNOSTICS</span></div><div id="agents"></div></section>
+<section class="panel"><div class="head"><h2>CONTRACT / PROTOCOL</h2><span>RB-12.1</span></div><div id="contract"></div></section>
+<section class="panel wide"><div class="head"><h2>CONTROLLED SELF-LEARNING & MODEL EVOLUTION</h2><span>NO AUTO-PROMOTION</span></div><div class="learning" id="learning"></div></section>
+<section class="panel"><div class="head"><h2>TELEMETRY STREAM</h2><span>REPLAY</span></div><div class="feed" id="feed"></div></section>
+<section class="panel full"><div class="head"><h2>SYSTEM HEALTH / OBSERVABILITY</h2><span>SNAPSHOT</span></div><div class="healthgrid" id="health"></div></section>
+<section class="panel full"><div class="head"><h2>RAW MONITORING SNAPSHOT</h2><span>MONITORINGRUNTIME.DASHBOARD()</span></div><pre id="raw">No snapshot loaded.</pre></section>
+</div></div>
+<div id="tab-agents" class="tab hidden"><section class="panel"><div class="head"><h2>AGENT REGISTRY</h2></div><div id="agents2"></div></section></div>
+<div id="tab-trace" class="tab hidden"><section class="panel"><div class="head"><h2>PIPELINE TRACE</h2></div><div class="trace" id="trace2"></div></section></div>
+<div id="tab-decision" class="tab hidden"><section class="panel"><div class="head"><h2>DECISION INSPECTOR</h2></div><pre id="decision"></pre></section></div>
+<div id="tab-models" class="tab hidden"><section class="panel"><div class="head"><h2>MODEL OBSERVABILITY</h2></div><div id="modelMetrics"></div></section></div>
+<div id="tab-health" class="tab hidden"><section class="panel"><div class="head"><h2>SYSTEM HEALTH</h2></div><div class="healthgrid" id="health2"></div></section></div>
+<div id="tab-learning" class="tab hidden"><section class="panel"><div class="head"><h2>SELF-LEARNING LOOP</h2></div><div class="learning" id="learning2"></div></section></div>
+<div id="tab-events" class="tab hidden"><section class="panel"><div class="head"><h2>EVENT LOG</h2></div><div class="feed" id="feed2"></div></section></div>
+</section></main></div>
 <script>
 "use strict";
-const phases=[
-["Research Bot","COMPLETE / FROZEN"],["Analysis Bot","COMPLETE / FROZEN"],["Market Bot","COMPLETE / FROZEN"],
-["Prediction Bot","RESEARCH / VALIDATING"],["Strategy Engine","IMPLEMENTED"],["Risk Engine","IMPLEMENTED / FROZEN"],
-["Execution Engine","IMPLEMENTED / LIVE LOCKED"],["Monitoring","OBSERVATIONAL"],["Self-Learning","CONTROLLED / NO AUTO-PROMOTION"]
-];
+const phases=[["01","RESEARCH","COMPLETE / FROZEN","Information Gathering"],["02","ANALYSIS","ACTIVE / OBSERVING","Feature + Context"],["03","MARKET","WAITING","Regime / Flow"],["04","PREDICTION","RESEARCH / VALIDATING","Forecast / Probability"],["05","STRATEGY","IMPLEMENTED","Decision Logic"],["06","RISK","FROZEN","Hard Limits"],["07","EXECUTION","LOCKED","Paper / Broker"]];
+const agents=[["01","RESEARCH_BOT","COMPLETE / FROZEN","133,420","21,390","422","1,159 PASS"],["02","ANALYSIS_BOT","ACTIVE INFERENCE","40","40","0","100% INPUT VALID"],["03","MARKET_BOT","WAITING","—","—","—","REGIME CONTEXT READY"],["04","PREDICTION_BOT","WAITING","—","—","—","MODEL NOT ACTIVE"],["05","STRATEGY_BOT","WAITING","—","—","—","NO ACTIONABLE SIGNAL"],["06","RISK_BOT","STANDBY","—","—","—","GATE STANDBY"],["07","EXECUTION_BOT","LOCKED","—","—","—","PAPER SIMULATION"]];
+const learn=[["STAGE 01","TRADE OUTCOME","RELIANCE +0.28%","Paper outcome"],["STAGE 02","ERROR ANALYSIS","REGIME SHIFT","Residual analysis"],["STAGE 03","EXPERIENCE ACCRUAL","+1 CAUSAL SAMPLE","125,560 recorded"],["STAGE 04","DATASET UPDATE","POST-TRADE JOIN","Immutable batch"],["STAGE 05","MODEL RETRAINING","SCHEDULED","Post-market"],["STAGE 06","OOS WALK-FORWARD","FOLD 42/45","Purged + embargo"],["STAGE 07","PROMOTION GATE","HUMAN REVIEW","No auto-promotion"]];
+let events=[["10:45:00","AG-02","Building feature vector","3.4ms"],["10:45:00","AG-02","Ingested 12.2 ticks","0.6ms"],["10:45:00","AG-02","40 causal features","1.4ms"],["10:45:00","AG-03","Waiting: regime context","WAIT"],["10:45:00","AG-04","Waiting: prediction input","WAIT"],["10:45:00","SYS","Safety lock: live execution","LOCKED"]];
+const health=[["DATA","HEALTHY","freshness within SLA"],["FEATURES","HEALTHY","decision-time only"],["CAUSALITY","HEALTHY","future ticks: 0"],["RISK","HEALTHY","hard limits enforced"],["EXECUTION","LOCKED","paper simulation"],["MODEL","OBSERVING","research gate"]];
+const demo={timestamp:new Date().toISOString(),mode:"research_paper_demo",focus_symbol:"RELIANCE",decision_time:"10:45:00+05:30",total_latency_ms:3.4,pipeline_state:"CASCADE / REPLAY",metrics:{"model.prediction_count":0,"strategy.signal_rate":0,"risk.gross_exposure_utilization":0,"risk.daily_loss_utilization":0,"execution.fill_count":0,"execution.rejection_rate":0,"performance.total_return":0,"performance.max_drawdown":0},health:health.map(x=>({component:x[0],status:x[1],message:x[2]})),alerts:[],alert_summary:{total:0,by_severity:{},by_code:{}}};
+let snapshot=demo,step=0;
 const $=id=>document.getElementById(id);
-const fmt=v=>v===null||v===undefined?"—":typeof v==="number"?(Number.isFinite(v)?Math.abs(v)>=1000?v.toLocaleString(undefined,{maximumFractionDigits:2}):v.toLocaleString(undefined,{maximumFractionDigits:6}):"—"):String(v);
-function metricList(id,m,prefix){const root=$(id);root.innerHTML="";const entries=Object.entries(m||{}).filter(([k])=>k.startsWith(prefix)).sort(([a],[b])=>a.localeCompare(b));if(!entries.length){root.innerHTML='<div class="small">No telemetry available.</div>';return}for(const [k,v] of entries){const row=document.createElement("div");row.className="metric";row.innerHTML="<span>"+k+"</span><strong>"+fmt(v)+"</strong>";root.appendChild(row)}}
-function render(s){
- if(!s||typeof s!=="object")throw new Error("Snapshot must be a JSON object.");
- const m=s.metrics||{},h=Array.isArray(s.health)?s.health:[],a=Array.isArray(s.alerts)?s.alerts:[];
- const good=h.filter(x=>x.status==="HEALTHY").length;
- $("health").textContent=h.length?good+"/"+h.length:"—";$("predictions").textContent=fmt(m["model.prediction_count"]);$("signals").textContent=fmt(m["strategy.signal_rate"]);$("alertsCount").textContent=fmt(s.alert_summary?.total??a.length);
- const sev=s.alert_summary?.by_severity||{};$("alertsSummary").textContent=Object.entries(sev).map(([k,v])=>k+": "+v).join(" • ")||"No alerts";$("timestamp").textContent=s.timestamp?("Snapshot: "+s.timestamp):"No snapshot loaded";
- metricList("model",m,"model.");metricList("risk",m,"risk.");metricList("strategy",m,"strategy.");metricList("execution",m,"execution.");metricList("performance",m,"performance.");
- const ar=$("alertTable");ar.innerHTML="";const table=document.createElement("table");table.innerHTML="<thead><tr><th>Severity</th><th>Component</th><th>Code</th><th>Message</th></tr></thead>";const body=document.createElement("tbody");
- for(const x of a){const tr=document.createElement("tr");const cls=String(x.severity||"").toLowerCase();tr.innerHTML="<td class='"+cls+"'>"+fmt(x.severity)+"</td><td>"+fmt(x.component)+"</td><td>"+fmt(x.code)+"</td><td>"+fmt(x.message)+"</td>";body.appendChild(tr)}
- if(!a.length){const tr=document.createElement("tr");tr.innerHTML='<td colspan="4" class="small">No alerts in this snapshot.</td>';body.appendChild(tr)}table.appendChild(body);ar.appendChild(table);
- const hr=$("healthRows");hr.innerHTML="";for(const x of h){const row=document.createElement("div");row.className="health";row.innerHTML="<span>"+fmt(x.component)+"<span class='small'>"+fmt(x.message)+"</span></span><span class='pill'>"+fmt(x.status)+"</span>";hr.appendChild(row)}if(!h.length)hr.innerHTML='<div class="small">No component health observations.</div>';
- const pr=$("phases");pr.innerHTML="";for(const [n,st] of phases){const row=document.createElement("div");row.className="phase";row.innerHTML="<span>"+n+"</span><span class='pill'>"+st+"</span>";pr.appendChild(row)}
- $("raw").textContent=JSON.stringify(s,null,2);
-}
-const empty=()=>({timestamp:"",health:[],metrics:{},alerts:[],alert_summary:{total:0,by_severity:{},by_code:{}}});
-$("file").addEventListener("change",async e=>{const f=e.target.files?.[0];if(!f)return;try{render(JSON.parse(await f.text()))}catch(err){window.alert("Dashboard load failed: "+err.message)}});
-$("clear").addEventListener("click",()=>{ $("file").value="";render(empty()) });
-render(empty());
+function renderTrace(id){$(id).innerHTML=phases.map(p=>'<div class="node"><b>'+p[0]+'</b><strong>'+p[1]+'</strong><span class="'+(p[2].includes("LOCKED")?"red":p[2].includes("WAIT")?"yellow":"green")+'">'+p[2]+'</span><span>'+p[3]+'</span><div class="meter"><i style="width:'+(p[2].includes("COMPLETE")||p[2].includes("FROZEN")?"100":p[2].includes("ACTIVE")?"78":p[2].includes("IMPLEMENTED")?"90":"24")+'%"></i></div></div>').join("")}
+function renderAgents(id){$(id).innerHTML=agents.map(a=>'<div class="agent"><div class="agenttop"><span>'+a[0]+'</span><b class="agentname">'+a[1]+'</b><span class="state '+(a[2].includes("LOCKED")?"red":a[2].includes("WAIT")?"yellow":"green")+'">'+a[2]+'</span></div><div class="kvgrid">'+["DOCS","CAUSAL OBS","OOS FOLDS","STATUS"].map((x,i)=>'<div class="kv"><b>'+x+'</b><span>'+a[i+3]+'</span></div>').join("")+'</div></div>').join("")}
+function renderLearning(id){$(id).innerHTML=learn.map(s=>'<div class="stage"><b>'+s[0]+'</b><strong>'+s[1]+'</strong><span>'+s[2]+'</span><span>'+s[3]+'</span></div>').join("")}
+function renderFeed(id){$(id).innerHTML=events.map(e=>'<div class="event"><span class="muted">'+e[0]+'</span><span class="tag">'+e[1]+'</span><span>'+e[2]+'</span><span class="'+(e[3]==="LOCKED"?"red":"muted")+'">'+e[3]+'</span></div>').join("")}
+function renderHealth(id){$(id).innerHTML=health.map(h=>'<div class="health"><b>'+h[0]+'</b><span class="'+(h[1]==="HEALTHY"?"green":h[1]==="LOCKED"?"red":"yellow")+'">● '+h[1]+'</span><span class="muted">'+h[2]+'</span></div>').join("")}
+function renderMetrics(){const m=snapshot.metrics||{};document.getElementById("modelMetrics").innerHTML=Object.entries(m).map(x=>'<div class="event"><span class="tag">'+x[0]+'</span><span></span><span>'+x[1]+'</span><span></span></div>').join("")||'<span class="muted">No telemetry.</span>'}
+function render(){document.getElementById("focus").textContent=(snapshot.focus_symbol||"RELIANCE")+" • "+(snapshot.decision_time||"10:45 IST")+" [M5]";document.getElementById("latency").textContent=(snapshot.total_latency_ms??3.4)+"ms";document.getElementById("pipeline").textContent=snapshot.pipeline_state||"CASCADE / REPLAY";document.getElementById("raw").textContent=JSON.stringify(snapshot,null,2);renderTrace("trace");renderTrace("trace2");renderAgents("agents");renderAgents("agents2");renderLearning("learning");renderLearning("learning2");renderFeed("feed");renderFeed("feed2");renderHealth("health");renderHealth("health2");renderMetrics();document.getElementById("decision").textContent=JSON.stringify({symbol:snapshot.focus_symbol||"RELIANCE",decision_time:snapshot.decision_time||"10:45:00+05:30",pipeline:"research→analysis→market→prediction→strategy→risk→execution",trade_authority:"LOCKED",mode:"paper_only",metrics:snapshot.metrics||{}},null,2)}
+document.querySelectorAll(".nav button").forEach(b=>b.addEventListener("click",function(){document.querySelectorAll(".nav button").forEach(x=>x.classList.remove("active"));this.classList.add("active");document.querySelectorAll(".tab").forEach(x=>x.classList.add("hidden"));document.getElementById("tab-"+this.dataset.tab).classList.remove("hidden")}));
+document.getElementById("file").addEventListener("change",async e=>{const f=e.target.files&&e.target.files[0];if(!f)return;try{snapshot=JSON.parse(await f.text());render()}catch(err){alert("Invalid monitoring JSON: "+err.message)}});
+document.getElementById("demo").addEventListener("click",()=>{snapshot=demo;render()});
+document.getElementById("replay").addEventListener("click",()=>{step++;events.push([new Date().toLocaleTimeString("en-IN",{hour12:false}),"SYS","Replay step "+String(step).padStart(4,"0"),"0.8ms"]);if(events.length>12)events.shift();renderFeed("feed");renderFeed("feed2")});
+setInterval(()=>document.getElementById("clock").textContent=new Date().toLocaleTimeString("en-IN",{hour12:false})+" IST",1000);render();
 </script>
 </body>
 </html>
