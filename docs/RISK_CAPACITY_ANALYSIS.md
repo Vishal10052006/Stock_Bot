@@ -75,3 +75,24 @@ python -m scripts.trading.analyze_risk_capacity \
   --starting-equity 100000 \
   --manifest data/paper/paper_dataset_manifest.json
 ```
+
+
+## Provenance in the output
+
+When `--manifest` is supplied, the JSON report records the exact frozen
+dataset identity used for replay:
+
+- manifest version;
+- dataset version;
+- artifact SHA-256;
+- row count;
+- symbols;
+- period start/end.
+
+The manifest is verified before replay. A missing dataset version or SHA-256,
+or any byte-level artifact mismatch, fails closed. Without a manifest, the
+report explicitly records that frozen provenance was not supplied.
+
+This provenance identifies the input artifact; it does not convert the
+counterfactual results into profitability, robustness, or live-readiness
+evidence.
