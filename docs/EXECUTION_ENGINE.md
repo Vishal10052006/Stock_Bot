@@ -50,3 +50,14 @@ pytest -q
 ```
 
 A clean repository-wide test run is required after any execution-engine change.
+
+## Contract validation
+
+The broker-neutral execution boundary is contract-tested independently of live
+broker credentials. The paper adapter must satisfy the `BrokerAdapter`
+protocol, preserve deterministic idempotency, and expose order/position state.
+The Phase 25 locked gateway is separately tested to reject submit, order-state,
+cancel, and position operations, including LIVE configuration.
+
+These tests validate interface behavior only; they do not constitute current
+Upstox API verification or live-readiness evidence.
