@@ -47,7 +47,9 @@ governance explicitly validate any change.
 The tool accepts the existing Phase 9 strategy-ready artifact in either CSV or
 Parquet form. It requires the canonical decision-time columns consumed by
 `HistoricalBacktestEngine`; it does not rebuild indicators, features, regime,
-or strategy decisions.
+or strategy decisions. When an EMP-02 paper dataset manifest is supplied, the
+replay fails closed unless the artifact SHA-256 exactly matches the frozen
+manifest.
 
 The backtest starting equity defaults to 100,000 and can be made explicit with
 `--starting-equity`.
@@ -60,7 +62,8 @@ CSV:
 python -m scripts.trading.analyze_risk_capacity \
   --input <strategy-ready.csv> \
   --output data/research/risk_capacity_counterfactual.json \
-  --starting-equity 100000
+  --starting-equity 100000 \
+  --manifest data/paper/paper_dataset_manifest.json
 ```
 
 Parquet:
@@ -69,5 +72,6 @@ Parquet:
 python -m scripts.trading.analyze_risk_capacity \
   --input <strategy-ready.parquet> \
   --output data/research/risk_capacity_counterfactual.json \
-  --starting-equity 100000
+  --starting-equity 100000 \
+  --manifest data/paper/paper_dataset_manifest.json
 ```
