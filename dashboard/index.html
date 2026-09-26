@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>STOCK_BOT Operator Dashboard</title>
+<style>
+:root{color-scheme:dark;--bg:#0b1220;--panel:#111a2b;--panel2:#17233a;--text:#edf4ff;--muted:#9fb0c7;--border:#2a3a55;--good:#39d98a;--warn:#ffcc66;--bad:#ff7373}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
+.wrap{max-width:1400px;margin:0 auto;padding:24px}.head{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;margin-bottom:20px}h1{margin:0;font-size:28px}.sub{color:var(--muted);margin-top:6px}.controls{display:flex;gap:10px;flex-wrap:wrap}
+button,.file{border:1px solid var(--border);background:var(--panel);color:var(--text);border-radius:10px;padding:10px 14px;cursor:pointer;font:inherit}.file input{display:none}
+.banner{border:1px solid var(--border);border-radius:14px;padding:14px 16px;background:var(--panel);margin-bottom:18px;display:flex;justify-content:space-between;gap:12px;align-items:center}.locked{color:var(--warn);font-weight:800}
+.grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}.card{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:16px;min-width:0}.wide{grid-column:span 2}.full{grid-column:1/-1}
+.label{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.06em}.value{font-size:26px;font-weight:800;margin-top:5px}.small{color:var(--muted);font-size:13px;margin-top:6px}
+.metric,.health,.phase{display:flex;justify-content:space-between;gap:12px;padding:9px 0;border-bottom:1px solid var(--border)}.metric:last-child,.health:last-child,.phase:last-child{border-bottom:0}.pill{padding:4px 8px;border-radius:999px;background:var(--panel2);font-size:12px;white-space:nowrap}
+.warning{color:var(--warn)}.critical{color:var(--bad)}table{width:100%;border-collapse:collapse;font-size:13px}th,td{text-align:left;padding:9px;border-bottom:1px solid var(--border);vertical-align:top}th{color:var(--muted)}
+pre{white-space:pre-wrap;word-break:break-word;max-height:360px;overflow:auto;background:#0a101c;border:1px solid var(--border);border-radius:10px;padding:12px}
+@media(max-width:1000px){.grid{grid-template-columns:repeat(2,minmax(0,1fr))}.wide{grid-column:span 2}}@media(max-width:620px){.wrap{padding:14px}.head,.banner{flex-direction:column}.grid{grid-template-columns:1fr}.wide,.full{grid-column:1}}
+</style>
+</head>
+<body>
+<main class="wrap">
+<header class="head">
+<div><h1>STOCK_BOT Operator Dashboard</h1><div class="sub">Research • Analysis • Market • Prediction • Strategy • Risk • Execution</div></div>
+<div class="controls"><label class="file">Load monitoring JSON<input id="file" type="file" accept=".json,application/json"></label><button id="clear" type="button">Clear</button></div>
+</header>
+
+<div class="banner"><div><strong>System mode</strong><div class="small" id="timestamp">No snapshot loaded</div></div><div class="locked">LIVE BROKER EXECUTION: LOCKED</div></div>
+
+<section class="grid" aria-live="polite">
+<article class="card"><div class="label">Healthy components</div><div class="value" id="health">—</div><div class="small">MonitoringRuntime health observations</div></article>
+<article class="card"><div class="label">Predictions</div><div class="value" id="predictions">—</div><div class="small">Observed model inference events</div></article>
+<article class="card"><div class="label">Strategy signal rate</div><div class="value" id="signals">—</div><div class="small">When strategy telemetry is present</div></article>
+<article class="card"><div class="label">Alerts</div><div class="value" id="alertsCount">—</div><div class="small" id="alertsSummary">No snapshot loaded</div></article>
+
+<article class="card wide"><div class="label">Model telemetry</div><div id="model"></div></article>
+<article class="card wide"><div class="label">Risk telemetry</div><div id="risk"></div></article>
+<article class="card wide"><div class="label">Strategy telemetry</div><div id="strategy"></div></article>
+<article class="card wide"><div class="label">Execution telemetry</div><div id="execution"></div></article>
+<article class="card wide"><div class="label">Performance telemetry</div><div id="performance"></div></article>
+<article class="card wide"><div class="label">Alerts</div><div id="alertTable"></div></article>
+<article class="card full"><div class="label">Component health</div><div id="healthRows"></div></article>
+<article class="card full"><div class="label">Pipeline status</div><div id="phases"></div></article>
+<article class="card full"><div class="label">Raw snapshot</div><pre id="raw">—</pre></article>
+</section>
+</main>
+<script>
+"use strict";
+const phases=[
+["Research Bot","COMPLETE / FROZEN"],["Analysis Bot","COMPLETE / FROZEN"],["Market Bot","COMPLETE / FROZEN"],
+["Prediction Bot","RESEARCH / VALIDATING"],["Strategy Engine","IMPLEMENTED"],["Risk Engine","IMPLEMENTED / FROZEN"],
+["Execution Engine","IMPLEMENTED / LIVE LOCKED"],["Monitoring","OBSERVATIONAL"],["Self-Learning","CONTROLLED / NO AUTO-PROMOTION"]
+];
+const $=id=>document.getElementById(id);
+const fmt=v=>v===null||v===undefined?"—":typeof v==="number"?(Number.isFinite(v)?Math.abs(v)>=1000?v.toLocaleString(undefined,{maximumFractionDigits:2}):v.toLocaleString(undefined,{maximumFractionDigits:6}):"—"):String(v);
+function metricList(id,m,prefix){const root=$(id);root.innerHTML="";const entries=Object.entries(m||{}).filter(([k])=>k.startsWith(prefix)).sort(([a],[b])=>a.localeCompare(b));if(!entries.length){root.innerHTML='<div class="small">No telemetry available.</div>';return}for(const [k,v] of entries){const row=document.createElement("div");row.className="metric";row.innerHTML="<span>"+k+"</span><strong>"+fmt(v)+"</strong>";root.appendChild(row)}}
+function render(s){
+ if(!s||typeof s!=="object")throw new Error("Snapshot must be a JSON object.");
+ const m=s.metrics||{},h=Array.isArray(s.health)?s.health:[],a=Array.isArray(s.alerts)?s.alerts:[];
+ const good=h.filter(x=>x.status==="HEALTHY").length;
+ $("health").textContent=h.length?good+"/"+h.length:"—";$("predictions").textContent=fmt(m["model.prediction_count"]);$("signals").textContent=fmt(m["strategy.signal_rate"]);$("alertsCount").textContent=fmt(s.alert_summary?.total??a.length);
+ const sev=s.alert_summary?.by_severity||{};$("alertsSummary").textContent=Object.entries(sev).map(([k,v])=>k+": "+v).join(" • ")||"No alerts";$("timestamp").textContent=s.timestamp?("Snapshot: "+s.timestamp):"No snapshot loaded";
+ metricList("model",m,"model.");metricList("risk",m,"risk.");metricList("strategy",m,"strategy.");metricList("execution",m,"execution.");metricList("performance",m,"performance.");
+ const ar=$("alertTable");ar.innerHTML="";const table=document.createElement("table");table.innerHTML="<thead><tr><th>Severity</th><th>Component</th><th>Code</th><th>Message</th></tr></thead>";const body=document.createElement("tbody");
+ for(const x of a){const tr=document.createElement("tr");const cls=String(x.severity||"").toLowerCase();tr.innerHTML="<td class='"+cls+"'>"+fmt(x.severity)+"</td><td>"+fmt(x.component)+"</td><td>"+fmt(x.code)+"</td><td>"+fmt(x.message)+"</td>";body.appendChild(tr)}
+ if(!a.length){const tr=document.createElement("tr");tr.innerHTML='<td colspan="4" class="small">No alerts in this snapshot.</td>';body.appendChild(tr)}table.appendChild(body);ar.appendChild(table);
+ const hr=$("healthRows");hr.innerHTML="";for(const x of h){const row=document.createElement("div");row.className="health";row.innerHTML="<span>"+fmt(x.component)+"<span class='small'>"+fmt(x.message)+"</span></span><span class='pill'>"+fmt(x.status)+"</span>";hr.appendChild(row)}if(!h.length)hr.innerHTML='<div class="small">No component health observations.</div>';
+ const pr=$("phases");pr.innerHTML="";for(const [n,st] of phases){const row=document.createElement("div");row.className="phase";row.innerHTML="<span>"+n+"</span><span class='pill'>"+st+"</span>";pr.appendChild(row)}
+ $("raw").textContent=JSON.stringify(s,null,2);
+}
+const empty=()=>({timestamp:"",health:[],metrics:{},alerts:[],alert_summary:{total:0,by_severity:{},by_code:{}}});
+$("file").addEventListener("change",async e=>{const f=e.target.files?.[0];if(!f)return;try{render(JSON.parse(await f.text()))}catch(err){window.alert("Dashboard load failed: "+err.message)}});
+$("clear").addEventListener("click",()=>{ $("file").value="";render(empty()) });
+render(empty());
+</script>
+</body>
+</html>
