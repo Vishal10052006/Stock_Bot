@@ -373,6 +373,14 @@ class UpstoxHistoricalMarketDataProvider(
             key=lambda bar: bar.timestamp,
         )
 
+        # Historical data is an immutable time series. Duplicate timestamps
+        # would make downstream joins, indicators, and labels ambiguous.
+        timestamps = [bar.timestamp for bar in sorted_bars]
+        if len(timestamps) != len(set(timestamps)):
+            raise UpstoxHistoricalDataError(
+                "Upstox returned duplicate historical candle timestamps"
+            )
+
         if request.start is not None:
             sorted_bars = [
                 bar
@@ -388,3 +396,14 @@ class UpstoxHistoricalMarketDataProvider(
             ]
 
         return tuple(sorted_bars)
+
+    def evidence(self) -> dict[str, object]:
+        """Return non-secret provider evidence for historical-data runs."""
+        return {
+            "provider": "upstox",
+            "role": self.role.value,
+            "base_url": self.base_url,
+            "timeout_seconds": self.timeout_seconds,
+            "access_token_configured": bool(self.access_token),
+            "live_broker_order_submission": False,
+        }
