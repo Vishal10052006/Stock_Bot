@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
+from market.candles.models import Candle
+
 from runtime.health import ShadowHealth
 from runtime.mode import RuntimeSafety
 from runtime.shadow_runtime import ShadowRuntime
@@ -27,8 +29,18 @@ class _FakePipeline:
 
     def run(self):
         self.run_calls += 1
-        yield object()
-        yield object()
+        for minute in (15, 20):
+            yield Candle(
+                symbol="ITC",
+                exchange="NSE",
+                timeframe_minutes=5,
+                timestamp=datetime(2026, 9, 28, 9, minute, tzinfo=timezone.utc),
+                open=100.0,
+                high=101.0,
+                low=99.0,
+                close=100.5,
+                volume=1000.0,
+            )
 
     def stop(self) -> None:
         self.stop_calls += 1
@@ -107,7 +119,7 @@ def test_shadow_runtime_candles_update_health() -> None:
     assert len(candles) == 2
     assert pipeline.run_calls == 1
     assert runtime.health.candles_completed == 2
-    assert runtime.candle_buffer.count("ITC") == 0
+    assert runtime.candle_buffer.count("ITC") == 2
 
 
 def test_shadow_runtime_stop_is_graceful() -> None:
