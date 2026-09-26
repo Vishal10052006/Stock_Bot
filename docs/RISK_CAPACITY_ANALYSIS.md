@@ -42,10 +42,32 @@ that a changed policy is appropriate, profitable, robust, or live-ready.
 The frozen 75% policy remains the reference case until separate evidence and
 governance explicitly validate any change.
 
+## Input contract
+
+The tool accepts the existing Phase 9 strategy-ready artifact in either CSV or
+Parquet form. It requires the canonical decision-time columns consumed by
+`HistoricalBacktestEngine`; it does not rebuild indicators, features, regime,
+or strategy decisions.
+
+The backtest starting equity defaults to 100,000 and can be made explicit with
+`--starting-equity`.
+
 ## Usage
+
+CSV:
 
 ```bash
 python -m scripts.trading.analyze_risk_capacity \
   --input <strategy-ready.csv> \
-  --output data/research/risk_capacity_counterfactual.json
+  --output data/research/risk_capacity_counterfactual.json \
+  --starting-equity 100000
+```
+
+Parquet:
+
+```bash
+python -m scripts.trading.analyze_risk_capacity \
+  --input <strategy-ready.parquet> \
+  --output data/research/risk_capacity_counterfactual.json \
+  --starting-equity 100000
 ```
