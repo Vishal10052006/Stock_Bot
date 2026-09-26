@@ -49,6 +49,7 @@ class _FakeMetrics:
         events_rejected = 0
         stale_events = 0
         duplicate_events = 0
+        latency_sample_count = 2
         latency_avg_ms = 1.0
         latency_p95_ms = 2.0
         clock_skew_events = 0
