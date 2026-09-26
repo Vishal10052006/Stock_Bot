@@ -8,6 +8,7 @@ import pytest
 
 from scripts.trading.analyze_risk_capacity import (
     Scenario,
+    _manifest_provenance,
     _verify_manifest,
     run_scenario,
 )
@@ -84,11 +85,26 @@ def test_manifest_verification_fails_closed_on_tampered_artifact(tmp_path):
     digest = hashlib.sha256(artifact.read_bytes()).hexdigest()
     manifest = tmp_path / "paper_dataset_manifest.json"
     manifest.write_text(
-        json.dumps({"manifest_version": "PAPER-DATASET-MANIFEST-v1", "artifact": {"sha256": digest}}),
+        json.dumps({
+            "manifest_version": "PAPER-DATASET-MANIFEST-v1",
+            "dataset_version": "paper-test-v1",
+            "artifact": {
+                "sha256": digest,
+                "rows": 1,
+                "symbols": ["TEST"],
+                "period_start": "2026-09-21T10:00:00+00:00",
+                "period_end": "2026-09-21T10:00:00+00:00",
+            },
+        }),
         encoding="utf-8",
     )
 
-    _verify_manifest(artifact, manifest)
+    verified = _verify_manifest(artifact, manifest)
+    provenance = _manifest_provenance(verified)
+    assert provenance["dataset_version"] == "paper-test-v1"
+    assert provenance["sha256"] == digest
+    assert provenance["rows"] == 1
+    assert provenance["symbols"] == ["TEST"]
 
     artifact.write_text(
         "timestamp,symbol\\n2026-09-21T10:05:00Z,TEST\\n",
