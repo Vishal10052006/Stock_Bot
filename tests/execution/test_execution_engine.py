@@ -298,3 +298,72 @@ def test_execution_metrics_include_fills_and_fees():
     assert metrics.filled_quantity == 100.0
     assert metrics.fill_ratio == 1.0
     assert metrics.total_fees > 0.0
+
+
+@pytest.mark.parametrize("quantity", [float("nan"), float("inf"), float("-inf")])
+def test_order_request_rejects_non_finite_quantity(quantity: float) -> None:
+    """Reject non-finite quantities before they can reach a broker."""
+    auth = authorization()
+    with pytest.raises(ValueError, match="positive and finite"):
+        OrderRequest(
+            client_order_id="SB-nonfinite",
+            decision_id="nonfinite",
+            symbol="ITC",
+            side=OrderSide.BUY,
+            quantity=quantity,
+            authorization=auth,
+        )
+
+
+@pytest.mark.parametrize(
+    "price",
+    [float("nan"), float("inf"), float("-inf")],
+)
+def test_paper_adapter_rejects_non_finite_price(price: float) -> None:
+    """Provider output must never inject NaN/Infinity into fills."""
+    adapter = PaperBrokerAdapter(price_provider=lambda _order: price)
+    engine = ExecutionEngine(adapter)
+    with pytest.raises(ValueError, match="positive and finite"):
+        engine.submit(order_request())
+
+
+def test_repeated_missing_broker_refresh_stays_unknown() -> None:
+    """Repeated UNKNOWN refreshes are idempotent and do not create an invalid transition."""
+    adapter = PaperBrokerAdapter()
+    engine = ExecutionEngine(adapter)
+    request = order_request()
+    engine.submit(request)
+    adapter._orders.pop(request.client_order_id)
+
+    first = engine.refresh(request.client_order_id)
+    second = engine.refresh(request.client_order_id)
+
+    assert first.status is OrderStatus.UNKNOWN
+    assert second.status is OrderStatus.UNKNOWN
+    assert len(engine.journal) == 1
+
+
+def test_refresh_rejects_foreign_client_order_id() -> None:
+    """Broker state for another order must never attach to the requested order."""
+    adapter = PaperBrokerAdapter()
+    engine = ExecutionEngine(adapter)
+    request = order_request()
+    engine.submit(request)
+
+    foreign = adapter.get_order(request.client_order_id)
+    assert foreign is not None
+    object.__setattr__(foreign, "client_order_id", "FOREIGN")
+
+    adapter._orders[request.client_order_id] = foreign
+
+    with pytest.raises(ValueError, match="client_order_id mismatch"):
+        engine.refresh(request.client_order_id)
+
+
+@pytest.mark.parametrize("quantity", [float("nan"), float("inf")])
+def test_reconciliation_rejects_non_finite_position(quantity: float) -> None:
+    """Reconciliation snapshots must contain finite broker quantities."""
+    from execution.reconciliation import BrokerPosition
+
+    with pytest.raises(ValueError, match="finite and non-negative"):
+        BrokerPosition("ITC", quantity, 100.0)
