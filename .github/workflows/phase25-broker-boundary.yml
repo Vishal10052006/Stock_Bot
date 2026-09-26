@@ -1,0 +1,29 @@
+name: Phase 25 Broker Boundary Validation
+
+on:
+  pull_request:
+    paths:
+      - "execution/broker_gateway.py"
+      - "execution/engine.py"
+      - "tests/execution/test_broker_gateway.py"
+      - "docs/PHASE_25_BROKER_INTEGRATION.md"
+  push:
+    branches:
+      - feat/m20-shadow-runtime
+
+jobs:
+  phase25-boundary:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install numpy pandas pytest
+      - name: Locked broker boundary tests
+        run: python -m pytest -q tests/execution/test_broker_gateway.py
+      - name: Compile broker boundary
+        run: python -m py_compile execution/broker_gateway.py execution/engine.py
