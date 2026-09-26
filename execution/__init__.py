@@ -29,6 +29,7 @@ from .readiness import (
 from .reconciliation import (
     BrokerPosition,
     BrokerReconciler,
+    ReconciliationConfig,
     ReconciliationReport,
     ReconciliationStatus,
 )
@@ -50,6 +51,7 @@ __all__ = [
     "BrokerAdapter",
     "BrokerPosition",
     "BrokerReconciler",
+    "ReconciliationConfig",
     "ExecutionReadiness",
     "ExecutionResult",
     "Fill",
