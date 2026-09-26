@@ -99,3 +99,7 @@ Completed canonical candles are retained in a bounded in-memory buffer per symbo
 ## M20.3 — shadow decision trace
 
 The M20 branch now exposes a trace boundary around the existing authoritative PaperDecisionLoop. Each processed decision records strategy direction/reason, Risk status/reason, ExecutionAuthorization status/reason, and any paper-order status. This is observational/paper-only and does not add broker submission authority.
+
+## M20.4 — approved research/evidence runtime
+
+The branch now composes the existing RBI/PIB RSS providers with the causal ResearchContextBuilder. Evidence is deduplicated by document ID, ordered deterministically, and filtered through the existing point-in-time availability boundary before symbol contexts are built. The research layer has no authority to mutate production Strategy/Risk/Model state or submit broker orders.
