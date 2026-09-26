@@ -80,6 +80,8 @@ class _Handler(BaseHTTPRequestHandler):
             return self._json(self.service.pipeline())
         if path == "/api/models":
             return self._json(self.service.models())
+        if path == "/api/market":
+            return self._json(self.service.market())
         if path == "/api/health":
             return self._json(self.service.health())
         if path == "/api/learning":
