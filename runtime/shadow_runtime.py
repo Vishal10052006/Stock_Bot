@@ -31,7 +31,7 @@ from .shadow_candles import ShadowCandleBuffer
 from .shadow_session import ShadowSessionJournal
 from .shadow_manifest import ShadowSessionManifest
 from .shadow_monitoring import ShadowMonitoringBridge
-from monitoring.runtime import MonitoringRuntime
+from .shadow_monitoring_factory import build_shadow_monitoring
 
 
 @dataclass(slots=True)
@@ -89,6 +89,15 @@ class ShadowRuntime:
             metrics=metrics,
         )
 
+        session_journal = (
+            ShadowSessionJournal.open(
+                os.getenv("STOCK_BOT_SHADOW_JOURNAL", "data/shadow/m20_shadow.jsonl"),
+                session_id=os.getenv("STOCK_BOT_SHADOW_SESSION_ID") or None,
+            )
+            if os.getenv("STOCK_BOT_SHADOW_JOURNAL", "").strip()
+            else None
+        )
+
         return cls(
             config=config,
             safety=safety,
@@ -99,15 +108,10 @@ class ShadowRuntime:
                 started_at=datetime.now(timezone.utc),
             ),
             candle_buffer=ShadowCandleBuffer(),
-            monitoring=ShadowMonitoringBridge(monitoring=MonitoringRuntime()),
-            session_journal=(
-                ShadowSessionJournal.open(
-                    os.getenv("STOCK_BOT_SHADOW_JOURNAL", "data/shadow/m20_shadow.jsonl"),
-                    session_id=os.getenv("STOCK_BOT_SHADOW_SESSION_ID") or None,
-                )
-                if os.getenv("STOCK_BOT_SHADOW_JOURNAL", "").strip()
-                else None
+            monitoring=ShadowMonitoringBridge(
+                monitoring=build_shadow_monitoring(session_journal),
             ),
+            session_journal=session_journal,
         )
 
     def start(self) -> None:
