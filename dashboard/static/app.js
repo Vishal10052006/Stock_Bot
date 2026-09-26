@@ -47,12 +47,30 @@ function ev(){
   }).join("")
 }
 
+function marketContext(){
+  var m=S.data.market||{};
+  if(!m.observed)
+    return '<div class="notice">No causal MarketContext has been observed by the runtime yet. Run the Market Bot with the shared MonitoringRuntime to populate this panel.</div>';
+  var c=m.context||{}, state=c.regime?c:{};
+  return '<div class="market-grid">'+
+    '<div class="metric"><b>'+esc(c.benchmark||"--")+'</b><small>BENCHMARK</small></div>'+
+    '<div class="metric"><b>'+esc(c.regime||"--")+'</b><small>REGIME</small></div>'+
+    '<div class="metric"><b>'+esc(c.trend_state||"--")+'</b><small>TREND</small></div>'+
+    '<div class="metric"><b>'+esc(c.volatility_state||"--")+'</b><small>VOLATILITY</small></div>'+
+    '<div class="metric"><b>'+esc(c.breadth_state||"--")+'</b><small>BREADTH</small></div>'+
+    '<div class="metric"><b>'+esc(c.rotation_state||"--")+'</b><small>ROTATION</small></div>'+
+    '<div class="metric"><b>'+esc(c.liquidity_state||"--")+'</b><small>LIQUIDITY</small></div>'+
+    '<div class="metric"><b>'+esc(c.availability||"--")+'</b><small>AVAILABILITY</small></div>'+
+    '</div><div class="sub">CAUSAL TIMESTAMP: '+esc(m.timestamp)+'</div>';
+}
+
 function overview(){
   var s=S.data.summary,l=S.data.learning;
   return '<div class="grid">'+
     panel("01 | PIPELINE TRACE / CURRENT CASCADE",'<div class="pipeline">'+pipe()+'</div>','full')+
     panel("02 | AGENT ACTIVE ROSTER",'<div class="cards">'+S.data.agents.map(agent).join("")+'</div>')+
     panel("03 | TELEMETRY STREAM",'<div class="sub">REAL EVENTS • SYNTHETIC REPLAY MUST BE EXPLICIT</div>'+ev())+
+    panel("03A | CAUSAL MARKET CONTEXT",marketContext())+
     panel("04 | CONTROLLED SELF-LEARNING & MODEL EVOLUTION",
       '<div class="metric-grid">'+l.stages.map(function(x){
         return '<div class="metric"><b>'+x.count+'</b><small>'+esc(x.name)+'</small></div>'
@@ -137,6 +155,7 @@ function ai(){
       '<button onclick="askAI(\'What is happening in the market right now?\')">WHAT\'S HAPPENING</button>'+
       '<button onclick="askAI(\'Give me the current STOCK_BOT system status.\')">SYSTEM STATUS</button>'+
       '<button onclick="askAI(\'Explain the current pipeline and any missing telemetry.\')">PIPELINE HEALTH</button>'+
+      '<button onclick="askAI(\'Explain the latest causal MarketContext observed by STOCK_BOT.\')">MARKET CONTEXT</button>'+
     '</div>'+
     '<div id="chat-log" class="chat-log">'+
       (S.chat.length?S.chat.map(chatBubble).join(""):'<div class="chat-empty"><b>JARVIS READY</b><span>Try: “What is going on in the market?” or “Give me the overall STOCK_BOT status.”</span></div>')+
