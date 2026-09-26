@@ -1032,3 +1032,25 @@ def test_provider_evidence_does_not_expose_access_token():
     assert evidence["access_token_configured"] is True
     assert evidence["live_broker_order_submission"] is False
     assert "test-access-token" not in str(evidence)
+
+
+def test_provider_fingerprint_is_deterministic_and_request_bound():
+    """The provenance fingerprint must be stable and change with the request."""
+    provider, _ = make_provider(valid_payload())
+    request = make_request()
+
+    first = provider.fingerprint(request)
+    second = provider.fingerprint(request)
+
+    assert first == second
+    assert len(first) == 64
+
+    changed = HistoricalDataRequest(
+        symbol="RELIANCE",
+        exchange="NSE",
+        timeframe_minutes=15,
+        start=request.start,
+        end=request.end,
+    )
+
+    assert provider.fingerprint(changed) != first
