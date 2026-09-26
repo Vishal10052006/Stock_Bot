@@ -147,6 +147,11 @@ class ShadowRuntime:
             self.decision_recorder.paper_loop.monitoring = self.monitoring.monitoring
         result = self.decision_recorder.run(rows)
         if self.session_journal is not None:
+            for trace in self.decision_recorder.traces():
+                self.session_journal.record(
+                    event_type="SHADOW_DECISION",
+                    payload=trace.to_mapping(),
+                )
             self.session_journal.record(
                 event_type="SHADOW_DECISION_BATCH",
                 payload=self.decision_recorder.evidence(),
