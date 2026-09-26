@@ -60,6 +60,10 @@ def _sha256_file(path: Path) -> str:
 def _verify_manifest(path: Path, manifest_path: Path) -> dict[str, object]:
     """Fail closed unless the supplied artifact matches its frozen manifest."""
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    dataset_version = manifest.get("dataset_version")
+    if not dataset_version:
+        raise ValueError("paper dataset manifest is missing dataset_version")
+
     artifact = manifest.get("artifact", {})
     expected_sha = artifact.get("sha256")
     if not expected_sha:
@@ -72,6 +76,28 @@ def _verify_manifest(path: Path, manifest_path: Path) -> dict[str, object]:
             f"expected {expected_sha}, got {actual_sha}"
         )
     return manifest
+
+
+def _manifest_provenance(
+    manifest: dict[str, object] | None,
+) -> dict[str, object] | None:
+    """Return frozen dataset identity needed to reproduce a report."""
+    if manifest is None:
+        return None
+
+    artifact = manifest.get("artifact", {})
+    if not isinstance(artifact, dict):
+        raise ValueError("paper dataset manifest has an invalid artifact section")
+
+    return {
+        "manifest_version": manifest.get("manifest_version"),
+        "dataset_version": manifest.get("dataset_version"),
+        "sha256": artifact.get("sha256"),
+        "rows": artifact.get("rows"),
+        "symbols": artifact.get("symbols"),
+        "period_start": artifact.get("period_start"),
+        "period_end": artifact.get("period_end"),
+    }
 
 
 def _load_input(path: Path, manifest_path: Path | None = None) -> pd.DataFrame:
@@ -213,7 +239,15 @@ def main() -> None:
 
     input_path = Path(args.input)
     manifest_path = Path(args.manifest) if args.manifest else None
-    rows = _load_input(input_path, manifest_path)
+
+    # Verify once here so the emitted report records the exact frozen identity
+    # that was actually used for the counterfactual replay.
+    verified_manifest = (
+        _verify_manifest(input_path, manifest_path)
+        if manifest_path is not None
+        else None
+    )
+    rows = _load_input(input_path)
 
     scenarios = (
         Scenario("frozen_75_hard_reject", 0.75, False),
@@ -229,8 +263,11 @@ def main() -> None:
             "supplied chronological dataset and do not establish profitability, "
             "robustness, or live-trading readiness."
         ),
-        "input": str(input_path),
-        "input_manifest": str(manifest_path) if manifest_path else None,
+        "input": {
+            "path": str(input_path),
+            "manifest": str(manifest_path) if manifest_path else None,
+            "provenance": _manifest_provenance(verified_manifest),
+        },
         "starting_equity": float(args.starting_equity),
         "scenarios": [
             run_scenario(
