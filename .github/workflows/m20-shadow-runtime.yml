@@ -5,6 +5,7 @@ on:
     paths:
       - "runtime/**"
       - "scripts/run_m20_shadow.py"
+      - "scripts/run_jarvis.py"
       - "scripts/smoke_test_upstox_feed.py"
       - "market/data/**"
       - "market/candles/**"
@@ -17,11 +18,11 @@ on:
       - "tests/test_m20_shadow_manifest.py"
       - "tests/test_m20_shadow_monitoring.py"
       - "tests/test_m20_shadow_monitoring_factory.py"
-      - "tests/test_m20_jarvis_scheduler.py"
       - "tests/test_m20_jarvis.py"
-      - "scripts/run_jarvis.py"
+      - "tests/test_m20_jarvis_scheduler.py"
       - ".env.example"
       - "docs/M20_SHADOW_RUNTIME.md"
+      - "docs/JARVIS_M20_IMPLEMENTATION.md"
   push:
     branches:
       - feat/m20-shadow-runtime
@@ -29,28 +30,18 @@ on:
 jobs:
   m20-shadow-runtime:
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-
       - name: Install runtime test dependencies
         run: |
           python -m pip install --upgrade pip
           python -m pip install numpy pandas pytest requests protobuf websocket-client
-
       - name: M20 tests
         run: |
-          python -m pytest -q             tests/test_m20_shadow_runtime.py             tests/test_m20_shadow_runtime_lifecycle.py             tests/test_m20_shadow_candles.py             tests/test_m20_shadow_decision.py             tests/test_m20_research_runtime.py             tests/test_m20_shadow_session.py \
-            tests/test_m20_shadow_manifest.py \
-            tests/test_m20_shadow_monitoring.py \
-            tests/test_m20_shadow_monitoring_factory.py \
-            tests/test_m20_jarvis.py \
-            tests/test_m20_jarvis_scheduler.py
-
+          python -m pytest -q             tests/test_m20_shadow_runtime.py             tests/test_m20_shadow_runtime_lifecycle.py             tests/test_m20_shadow_candles.py             tests/test_m20_shadow_decision.py             tests/test_m20_research_runtime.py             tests/test_m20_shadow_session.py             tests/test_m20_shadow_manifest.py             tests/test_m20_shadow_monitoring.py             tests/test_m20_shadow_monitoring_factory.py             tests/test_m20_jarvis.py             tests/test_m20_jarvis_scheduler.py
       - name: Compile M20 runtime
         run: |
-          python -m py_compile             runtime/__init__.py             runtime/mode.py             runtime/config.py             runtime/health.py             runtime/shadow_runtime.py             runtime/shadow_candles.py             runtime/shadow_decision.py             runtime/shadow_session.py             runtime/research_runtime.py             scripts/run_m20_shadow.py
+          python -m py_compile             runtime/__init__.py             runtime/mode.py             runtime/config.py             runtime/health.py             runtime/shadow_runtime.py             runtime/shadow_candles.py             runtime/shadow_decision.py             runtime/shadow_session.py             runtime/shadow_manifest.py             runtime/shadow_monitoring.py             runtime/shadow_monitoring_factory.py             runtime/research_runtime.py             runtime/jarvis.py             runtime/jarvis_scheduler.py             runtime/jarvis_dashboard.py             runtime/learning_runtime.py             scripts/run_m20_shadow.py             scripts/run_jarvis.py
