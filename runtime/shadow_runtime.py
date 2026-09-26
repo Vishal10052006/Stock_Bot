@@ -30,6 +30,8 @@ from .mode import RuntimeSafety, load_runtime_safety
 from .shadow_candles import ShadowCandleBuffer
 from .shadow_session import ShadowSessionJournal
 from .shadow_manifest import ShadowSessionManifest
+from .shadow_monitoring import ShadowMonitoringBridge
+from monitoring.runtime import MonitoringRuntime
 
 
 @dataclass(slots=True)
@@ -44,6 +46,7 @@ class ShadowRuntime:
     health: ShadowHealth
     candle_buffer: ShadowCandleBuffer = field(default_factory=ShadowCandleBuffer)
     session_journal: ShadowSessionJournal | None = None
+    monitoring: ShadowMonitoringBridge | None = None
     _session_started: bool = False
     _session_stopped: bool = False
 
@@ -96,6 +99,7 @@ class ShadowRuntime:
                 started_at=datetime.now(timezone.utc),
             ),
             candle_buffer=ShadowCandleBuffer(),
+            monitoring=ShadowMonitoringBridge(monitoring=MonitoringRuntime()),
             session_journal=(
                 ShadowSessionJournal.open(
                     os.getenv("STOCK_BOT_SHADOW_JOURNAL", "data/shadow/m20_shadow.jsonl"),
@@ -137,7 +141,10 @@ class ShadowRuntime:
     def evidence(self) -> dict[str, object]:
         """Return current no-order operational evidence."""
         self.safety.assert_safe()
-        evidence = self.health.snapshot(self.metrics.snapshot())
+        quality_snapshot = self.metrics.snapshot()
+        if self.monitoring is not None:
+            self.monitoring.observe_market_data(quality_snapshot)
+        evidence = self.health.snapshot(quality_snapshot)
         evidence["shadow_candle_buffer_symbols"] = list(self.candle_buffer.symbols())
         evidence["shadow_candle_buffer_counts"] = {
             symbol: self.candle_buffer.count(symbol)
@@ -160,4 +167,7 @@ class ShadowRuntime:
         else:
             evidence["session_journal"] = None
             evidence["session_manifest"] = None
+        evidence["monitoring_dashboard"] = (
+            self.monitoring.dashboard() if self.monitoring is not None else None
+        )
         return evidence
