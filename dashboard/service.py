@@ -50,6 +50,11 @@ class DashboardService:
             status=AgentStatus.LOCKED.value if a["locked"] else AgentStatus.WAITING.value
             if obs: status=mapping.get(str(obs.get("status","UNKNOWN")).upper(),AgentStatus.UNKNOWN.value)
             related=[e for e in events if SOURCE_TO_AGENT.get(str(e.get("source","")).lower())==a["agent_id"]]
+            if not obs and related:
+                health_events=[e for e in related if str(e.get("event_type","")).upper()=="HEALTH"]
+                if health_events:
+                    severity=str(health_events[-1].get("severity","INFO")).upper()
+                    status=mapping.get(severity, AgentStatus.UNKNOWN.value)
             out.append({**a,"status":status,"observed":bool(obs),"event_count":len(related),"last_event":related[-1] if related else None})
         return out
 
