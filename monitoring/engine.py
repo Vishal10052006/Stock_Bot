@@ -132,7 +132,7 @@ class MonitoringEngine:
         return MonitoringSnapshot(
             datetime.now(timezone.utc).isoformat(),
             tuple(self._health.values()),
-            {s.name: s.value for s in self.metrics.snapshot()},
+            self.metrics.latest_values(),
             self.alerts.snapshot(),
         )
 
