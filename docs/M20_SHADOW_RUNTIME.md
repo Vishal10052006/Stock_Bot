@@ -95,3 +95,7 @@ authorization for live trading.
 ## M20.3 — causal shadow candle buffer
 
 Completed canonical candles are retained in a bounded in-memory buffer per symbol. The buffer enforces chronological ordering, rejects duplicate timestamps, keeps symbols independent, and exposes an OHLCV DataFrame for later causal feature/context stages. It does not generate signals, authorize trades, or call a broker.
+
+## M20.3 — shadow decision trace
+
+The M20 branch now exposes a trace boundary around the existing authoritative PaperDecisionLoop. Each processed decision records strategy direction/reason, Risk status/reason, ExecutionAuthorization status/reason, and any paper-order status. This is observational/paper-only and does not add broker submission authority.
