@@ -103,3 +103,7 @@ The M20 branch now exposes a trace boundary around the existing authoritative Pa
 ## M20.4 — approved research/evidence runtime
 
 The branch now composes the existing RBI/PIB RSS providers with the causal ResearchContextBuilder. Evidence is deduplicated by document ID, ordered deterministically, and filtered through the existing point-in-time availability boundary before symbol contexts are built. The research layer has no authority to mutate production Strategy/Risk/Model state or submit broker orders.
+
+## M20.5 — shadow session evidence journal
+
+Each shadow session can now use an append-only JSONL journal with a stable session correlation ID. Start, completed-candle, and stop events are recorded through the existing MonitoringEvent/MonitoringJournal contracts, allowing deterministic session replay without granting trading authority.
