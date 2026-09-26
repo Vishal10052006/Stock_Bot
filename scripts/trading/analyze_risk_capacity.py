@@ -32,16 +32,54 @@ class Scenario:
     allow_resize: bool
 
 
-def _drawdown(outcomes) -> float:
+REQUIRED_COLUMNS = (
+    "timestamp",
+    "symbol",
+    "close",
+    "regime",
+    "regime_probability",
+    "vwap_distance_pct",
+    "rvol_20",
+    "higher_high",
+    "higher_low",
+    "lower_low",
+    "lower_high",
+)
+
+
+def _load_input(path: Path) -> pd.DataFrame:
+    """Load the existing strategy-ready artifact without altering its rows."""
+    if path.suffix.lower() == ".parquet":
+        rows = pd.read_parquet(path)
+    elif path.suffix.lower() in {".csv", ".txt"}:
+        rows = pd.read_csv(path)
+    else:
+        raise ValueError(
+            "input must be a .csv or .parquet strategy-ready artifact"
+        )
+
+    missing = sorted(set(REQUIRED_COLUMNS).difference(rows.columns))
+    if missing:
+        raise ValueError(
+            "strategy-ready input is missing required columns: "
+            f"{missing}"
+        )
+
+    return rows.loc[:, list(REQUIRED_COLUMNS)].copy()
+
+
+def _drawdown(outcomes, *, starting_equity: float) -> float:
     """Calculate max percentage drawdown from chronological trade net P&L."""
-    equity = 100_000.0
+    equity = float(starting_equity)
     peak = equity
     max_dd = 0.0
+
     for outcome in outcomes:
         equity += float(outcome.net_pnl)
         peak = max(peak, equity)
         if peak > 0:
             max_dd = max(max_dd, (peak - equity) / peak)
+
     return max_dd
 
 
@@ -52,8 +90,16 @@ def _profit_factor(outcomes) -> float | None:
     return wins / losses if losses else None
 
 
-def run_scenario(rows: pd.DataFrame, scenario: Scenario) -> dict[str, object]:
+def run_scenario(
+    rows: pd.DataFrame,
+    scenario: Scenario,
+    *,
+    starting_equity: float = 100_000.0,
+) -> dict[str, object]:
     """Replay identical chronological data under one counterfactual policy."""
+    if starting_equity <= 0:
+        raise ValueError("starting_equity must be positive")
+
     risk = RiskEngine(
         RiskConfig(
             max_gross_exposure=scenario.max_gross_exposure,
@@ -61,7 +107,7 @@ def run_scenario(rows: pd.DataFrame, scenario: Scenario) -> dict[str, object]:
         )
     )
     result = HistoricalBacktestEngine(
-        config=BacktestConfig(),
+        config=BacktestConfig(starting_equity=starting_equity),
         risk_engine=risk,
     ).run(rows)
 
@@ -73,13 +119,13 @@ def run_scenario(rows: pd.DataFrame, scenario: Scenario) -> dict[str, object]:
         step for step in result.steps if step.risk.status.value == "REJECTED"
     ]
     gross_rejections = sum(
-        any(code.value == "MAX_GROSS_EXPOSURE" for code in step.risk.reason_codes)
+        step.risk.reason_code.value == "MAX_GROSS_EXPOSURE"
         for step in risk_rejections
     )
     reason_counts: dict[str, int] = {}
     for step in risk_rejections:
-        for code in step.risk.reason_codes:
-            reason_counts[code.value] = reason_counts.get(code.value, 0) + 1
+        code = step.risk.reason_code.value
+        reason_counts[code] = reason_counts.get(code, 0) + 1
 
     return {
         "scenario": asdict(scenario),
@@ -90,7 +136,9 @@ def run_scenario(rows: pd.DataFrame, scenario: Scenario) -> dict[str, object]:
         "paper_fills": len(result.orders),
         "completed_trades": result.completed_trades,
         "net_pnl": float(result.net_pnl),
-        "max_drawdown": float(_drawdown(result.outcomes)),
+        "max_drawdown": float(
+            _drawdown(result.outcomes, starting_equity=starting_equity)
+        ),
         "profit_factor": _profit_factor(result.outcomes),
         "expectancy": (
             float(result.net_pnl / result.completed_trades)
@@ -103,12 +151,30 @@ def run_scenario(rows: pd.DataFrame, scenario: Scenario) -> dict[str, object]:
 
 def main() -> None:
     """Run the counterfactual sweep against an existing causal dataset."""
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--input", required=True, help="CSV containing the frozen strategy-ready rows.")
-    parser.add_argument("--output", required=True, help="JSON output path.")
+    parser = argparse.ArgumentParser(
+        description="Analyze Risk capacity without changing frozen Risk policy."
+    )
+    parser.add_argument(
+        "--input",
+        required=True,
+        help="CSV or Parquet containing the frozen strategy-ready rows.",
+    )
+    parser.add_argument(
+        "--output",
+        required=True,
+        help="JSON output path.",
+    )
+    parser.add_argument(
+        "--starting-equity",
+        type=float,
+        default=100_000.0,
+        help="Backtest starting equity; default: 100000.",
+    )
     args = parser.parse_args()
 
-    rows = pd.read_csv(args.input)
+    input_path = Path(args.input)
+    rows = _load_input(input_path)
+
     scenarios = (
         Scenario("frozen_75_hard_reject", 0.75, False),
         Scenario("hypothetical_85_hard_reject", 0.85, False),
@@ -123,13 +189,24 @@ def main() -> None:
             "supplied chronological dataset and do not establish profitability, "
             "robustness, or live-trading readiness."
         ),
-        "input": str(Path(args.input)),
-        "scenarios": [run_scenario(rows, scenario) for scenario in scenarios],
+        "input": str(input_path),
+        "starting_equity": float(args.starting_equity),
+        "scenarios": [
+            run_scenario(
+                rows,
+                scenario,
+                starting_equity=args.starting_equity,
+            )
+            for scenario in scenarios
+        ],
     }
 
     output = Path(args.output)
     output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(json.dumps(report, indent=2, sort_keys=True), encoding="utf-8")
+    output.write_text(
+        json.dumps(report, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
 
 
 if __name__ == "__main__":
