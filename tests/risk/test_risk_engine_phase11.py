@@ -291,3 +291,22 @@ def test_optional_drawdown_limit_has_distinct_reason_code() -> None:
 
     assert assessment.decision.status.value == "REJECTED"
     assert assessment.decision.reason_code is RiskReasonCode.MAX_DRAWDOWN_LIMIT
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("symbol_exposure", {"ITC": float("nan")}),
+        ("symbol_exposure", {"ITC": float("inf")}),
+        ("sector_exposure", {"ENERGY": float("nan")}),
+        ("pairwise_correlation", {"TCS": float("nan")}),
+        ("pairwise_correlation", {"TCS": 1.5}),
+    ],
+)
+def test_risk_input_rejects_non_finite_portfolio_context(
+    field: str,
+    value: dict[str, float],
+) -> None:
+    """Portfolio context must be finite before risk decisions are evaluated."""
+    with pytest.raises(ValueError):
+        make_input(**{field: value})
