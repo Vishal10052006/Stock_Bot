@@ -39,6 +39,9 @@ current provider contract and the complete live-readiness gates pass.
 - `PaperBrokerAdapter`: deterministic, no network I/O.
 - `UpstoxBrokerAdapter`: integration boundary only; live methods fail closed
   until an explicitly enabled, externally supplied client is validated.
+- `UpstoxSandboxClient`: legacy sandbox HTTP transport retained for isolated unit tests. It is not the preferred provider-evidence path.
+- `UpstoxSDKSandboxClient`: preferred sandbox transport for provider
+  integration validation, backed by the official `upstox-python-sdk`.
 
 ## Required validation
 
@@ -47,6 +50,120 @@ Run:
 ```bash
 pytest -q tests/execution tests/paper tests/risk
 pytest -q
+
+# Explicit provider integration validation (network + sandbox credentials required)
+pytest -q tests/execution/test_upstox_sandbox_client.py -m integration
 ```
 
 A clean repository-wide test run is required after any execution-engine change.
+
+## Completion extension — execution recovery and exits
+
+The execution boundary now includes the remaining production-safety pieces that can be implemented without enabling live broker trading:
+
+13. **UNKNOWN recovery** — `recover_unknown()` re-queries authoritative broker state and updates the lifecycle only when the broker can resolve the order. A missing broker record remains `UNKNOWN`; the engine never blindly resubmits the uncertain order.
+14. **Exit execution** — `from_exit_authorization()` creates an explicit `purpose="EXIT"` order, requires the authorization quantity to match the requested exit quantity, requires the authorization direction to oppose the current signed position, and prevents exits larger than the observed position.
+15. **Execution lineage** — lifecycle events retain `decision_id` and `purpose`, while deterministic client order IDs include the execution purpose. This links decision → authorization → order lifecycle without introducing a second journal system.
+16. **Failure-matrix tests** — coverage now includes late broker acknowledgements, unresolved UNKNOWN orders, exit-size limits, exit idempotency, and lifecycle lineage.
+
+### Safety invariant
+
+An UNKNOWN submission is **not** evidence that the broker did not receive the order. The only safe automatic action is to query broker truth. If the broker cannot resolve the order, execution remains blocked in `UNKNOWN` and requires external operational resolution; no automatic duplicate submission is performed.
+
+### Live execution status
+
+These changes do **not** enable Upstox/live trading. The existing live lock, independent safety gate, broker validation requirements, reconciliation gates, and readiness provenance remain authoritative.
+
+## Production-side completion
+
+Production validation controls now live in `execution/production.py`: adapter contract checks, partial-fill and rejection coverage, restart rehydration, signed position reconciliation, kill-switch tests, execution monitoring, paper soak execution, backtest cost-assumption parity, and a fail-closed production readiness gate.
+
+`ExecutionEngine.rehydrate()` rebuilds order state from broker truth using client IDs recovered from durable journal storage. Missing broker state remains unresolved rather than being recreated by duplicate submission.
+
+`.github/workflows/execution-engine.yml` runs the execution suite and full repository regression for execution-related changes.
+
+The final readiness gate remains blocked until provider-specific integration evidence exists for authentication, submission, acknowledgement, partial fills, rejection, cancellation, lookup, position reconciliation, rate limiting, timeout recovery, and process restart recovery.
+
+Live broker execution remains locked.
+
+## Upstox provider-contract validation
+
+The Upstox adapter implements provider request/response mapping behind an injected client boundary. The adapter remains disabled by default and does not construct HTTP clients or read credentials.
+
+The current Upstox V3 order contract uses quantity, product, validity, price, tag, instrument_token, order_type, and transaction_type; successful placement returns provider order IDs. The adapter preserves the Stock_Bot deterministic client order ID as the Upstox tag.
+
+`execution/adapters/upstox_sdk.py` provides the official SDK-backed sandbox transport. It constructs `Configuration(sandbox=True)` internally, so callers cannot accidentally select a live base URL. The repository pins `upstox-python-sdk==2.23.0` in `requirements-execution.txt`.
+
+Provider-specific mapping tests cover:
+- request payload construction
+- filled-order response mapping
+- partial-fill mapping
+- broker rejection mapping
+- broker-order lookup
+- cancellation using the provider order ID
+- signed position mapping
+- disabled/fail-closed behavior
+
+The adapter intentionally depends on an externally supplied client with place_order, find_order_by_tag, cancel_order, and get_positions methods. This keeps authentication and transport outside the execution domain.
+
+## UPSTOX-VALIDATION-02 — sandbox evidence harness
+
+`execution/adapters/upstox_sandbox.py` provides a legacy sandbox-only transport client retained for isolated contract tests. Provider evidence uses `UpstoxSDKSandboxClient`, because the official SDK's `Configuration(sandbox=True)` selects the current sandbox host and API surface.
+
+The client:
+- is restricted to its legacy sandbox base URL and is not used for the preferred provider-evidence path
+- requires a caller-supplied sandbox token
+- never logs or persists the token
+- never constructs a live API URL
+- normalizes order history into the adapter's provider-client shape
+- raises `UpstoxSandboxError` on transport, HTTP, or malformed-response failures
+
+The opt-in integration test is `tests/execution/test_upstox_sandbox_client.py`.
+It is skipped unless all of the following are supplied locally:
+
+```bash
+UPSTOX_SANDBOX_ACCESS_TOKEN
+UPSTOX_SANDBOX_INSTRUMENT_TOKEN
+UPSTOX_SANDBOX_PRICE
+UPSTOX_SANDBOX_CONFIRM=YES
+```
+
+The test places one sandbox LIMIT order, resolves it by tag, verifies broker-order
+lineage, and attempts cancellation when the order is still cancellable.
+
+Current Upstox documentation explicitly lists Place Order and Cancel Order as
+sandbox-enabled APIs. Upstox's sandbox announcement also describes order
+details/history as available for sandbox orders, while the current sandbox
+capability list does not include portfolio/position APIs. Therefore position
+reconciliation is **not** claimed as sandbox evidence by this test; it remains
+a separate provider/readiness gate.
+
+These tests provide a mechanism for real provider evidence, but **no sandbox
+evidence is claimed until the opt-in test has actually been run with a valid
+sandbox credential, instrument token, and reachable provider endpoint**.
+
+A failed DNS/network preflight is an environment/infrastructure failure, not
+evidence of successful or unsuccessful broker authentication.
+
+**Live trading remains locked.**
+
+
+## Final certification checkpoint
+
+The execution hardening layer is implemented in `execution/certification.py` and
+covered by `tests/execution/test_production_execution.py`. It adds:
+
+- timeout/network-error validation that remains `UNKNOWN` without blind retry
+- duplicate replay/idempotency validation
+- bounded exponential backoff policy
+- operational preflight, incident, and shutdown runbook checks
+
+CI validation for commit `0d56ee6a941c7639e868845fef3afc2d9fd96d89`
+completed successfully for Execution Validation, Backtesting Validation, and
+Market Bot validation.
+
+This establishes the software-side execution certification boundary. It does
+not constitute live-broker certification. Real Upstox sandbox lifecycle evidence
+requires a valid externally supplied sandbox credential and remains opt-in.
+
+**Live trading remains locked.**

@@ -23,8 +23,7 @@ class BrokerPosition:
     def __post_init__(self) -> None:
         if not self.symbol.strip():
             raise ValueError("symbol must not be empty")
-        if self.quantity < 0:
-            raise ValueError("quantity must not be negative")
+        # Signed quantity: positive=LONG, negative=SHORT.
         if self.average_price < 0:
             raise ValueError("average_price must not be negative")
 
@@ -52,7 +51,12 @@ class BrokerReconciler:
         self,
         local: tuple[BrokerPosition, ...] | None,
         broker: tuple[BrokerPosition, ...] | None,
+        *,
+        quantity_tolerance: float = 1e-12,
+        price_tolerance: float = 1e-12,
     ) -> ReconciliationReport:
+        if quantity_tolerance < 0 or price_tolerance < 0:
+            raise ValueError("reconciliation tolerances must be non-negative")
         if local is None or broker is None:
             return ReconciliationReport(
                 status=ReconciliationStatus.BLOCKED,
@@ -67,7 +71,10 @@ class BrokerReconciler:
         for symbol in symbols:
             left = local_map.get(symbol, (0.0, 0.0))
             right = broker_map.get(symbol, (0.0, 0.0))
-            if left != right:
+            if (
+                abs(left[0] - right[0]) > quantity_tolerance
+                or abs(left[1] - right[1]) > price_tolerance
+            ):
                 mismatches.append(
                     f"{symbol}: local={left} broker={right}"
                 )

@@ -10,6 +10,7 @@ from ml.integration.analysis_prediction import predict_from_analysis
 from ml.models.logistic import LogisticOutcomeModel
 from ml.preprocessing.pipeline import FeaturePreprocessor
 from ml.preprocessing.models import NUMERIC_FEATURES, BOOLEAN_FEATURES
+from market.features.builder import FEATURE_COLUMNS
 from monitoring.runtime import MonitoringRuntime
 
 
@@ -126,8 +127,13 @@ def test_analysis_integration_emits_monitoring_telemetry() -> None:
 
     X_train, _ = _training_frame()
     features = X_train.copy()
+    features = features.loc[:, list(FEATURE_COLUMNS)].copy()
     features.insert(0, "symbol", "RELIANCE")
-    features.insert(0, "timestamp", pd.date_range("2026-09-20", periods=len(features), tz="UTC"))
+    features.insert(
+        0,
+        "timestamp",
+        pd.date_range("2026-09-20", periods=len(features), tz="UTC"),
+    )
     runtime = MonitoringRuntime()
     context = build_analysis_context(
         features,
