@@ -29,6 +29,7 @@ from .health import ShadowHealth
 from .mode import RuntimeSafety, load_runtime_safety
 from .shadow_candles import ShadowCandleBuffer
 from .shadow_decision import ShadowDecisionRecorder
+from .live_signal import LiveSignalEngine
 from .shadow_session import ShadowSessionJournal
 from .shadow_manifest import ShadowSessionManifest
 from .shadow_monitoring import ShadowMonitoringBridge
@@ -49,6 +50,7 @@ class ShadowRuntime:
     session_journal: ShadowSessionJournal | None = None
     monitoring: ShadowMonitoringBridge | None = None
     decision_recorder: ShadowDecisionRecorder | None = None
+    live_signal_engine: LiveSignalEngine | None = None
     _session_started: bool = False
     _session_stopped: bool = False
 
@@ -114,6 +116,7 @@ class ShadowRuntime:
                 monitoring=build_shadow_monitoring(session_journal),
             ),
             decision_recorder=ShadowDecisionRecorder(),
+            live_signal_engine=LiveSignalEngine(),
             session_journal=session_journal,
         )
 
@@ -137,6 +140,23 @@ class ShadowRuntime:
                     timestamp=candle.timestamp,
                 )
             yield candle
+
+    def evaluate_live_signal(self, strategy_input, *, observed_at=None):
+        """Evaluate one live causal input through Strategy only."""
+        self.safety.assert_safe()
+        if self.live_signal_engine is None:
+            raise RuntimeError("live signal engine is not configured")
+        result = self.live_signal_engine.evaluate(
+            strategy_input,
+            observed_at=observed_at,
+        )
+        if self.session_journal is not None:
+            self.session_journal.record(
+                event_type="LIVE_SIGNAL_OBSERVED",
+                payload=result.signal.to_mapping(),
+                timestamp=result.signal.timestamp.to_pydatetime(),
+            )
+        return result
 
     def run_decisions(self, rows) -> object:
         """Run live-ready causal rows through Strategy -> Risk -> Paper only."""
@@ -196,6 +216,11 @@ class ShadowRuntime:
             evidence["session_manifest"] = None
         if self.decision_recorder is not None:
             evidence["decision_trace"] = self.decision_recorder.evidence()
+        evidence["live_signal_engine"] = {
+            "enabled": self.live_signal_engine is not None,
+            "authority": "STRATEGY_ONLY",
+            "live_broker_order_submission": False,
+        }
         else:
             evidence["decision_trace"] = None
         evidence["monitoring_dashboard"] = (
