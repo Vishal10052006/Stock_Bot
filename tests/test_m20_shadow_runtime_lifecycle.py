@@ -107,6 +107,7 @@ def test_shadow_runtime_candles_update_health() -> None:
     assert len(candles) == 2
     assert pipeline.run_calls == 1
     assert runtime.health.candles_completed == 2
+    assert runtime.candle_buffer.count("ITC") == 0
 
 
 def test_shadow_runtime_stop_is_graceful() -> None:
