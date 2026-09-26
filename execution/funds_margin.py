@@ -13,10 +13,10 @@ class FundsMarginSnapshot:
 
     timestamp: datetime
     available_cash: float
-    used_margin: float
-    available_margin: float
-    total_margin: float
-    source: str
+    used_margin: float = 0.0
+    available_margin: float = 0.0
+    total_margin: float = 0.0
+    source: str = "paper"
 
     def __post_init__(self) -> None:
         if self.timestamp.tzinfo is None or self.timestamp.utcoffset() is None:
