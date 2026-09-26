@@ -18,7 +18,7 @@ from enum import Enum
 import hashlib
 import json
 import time
-from typing import Protocol
+from typing import Protocol, runtime_checkable
 
 import pandas as pd
 
@@ -230,6 +230,7 @@ class ExecutionMetrics:
     rejection_rate: float
 
 
+@runtime_checkable
 class BrokerAdapter(Protocol):
     """Minimal broker contract; broker-specific details stay outside execution."""
 
@@ -285,6 +286,11 @@ class OrderStateMachine:
             OrderStatus.UNKNOWN,
         },
         OrderStatus.CANCEL_PENDING: {OrderStatus.CANCELLED, OrderStatus.FILLED, OrderStatus.UNKNOWN},
+        OrderStatus.FILLED: {OrderStatus.UNKNOWN},
+        OrderStatus.CANCELLED: {OrderStatus.UNKNOWN},
+        OrderStatus.REJECTED_BROKER: {OrderStatus.UNKNOWN},
+        OrderStatus.EXPIRED: {OrderStatus.UNKNOWN},
+        OrderStatus.FAILED: {OrderStatus.UNKNOWN},
         OrderStatus.UNKNOWN: {
             OrderStatus.SUBMITTED,
             OrderStatus.OPEN,
