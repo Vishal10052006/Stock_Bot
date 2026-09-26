@@ -1,0 +1,30 @@
+name: Phase 26 Deployment Gate Validation
+
+on:
+  push:
+    paths:
+      - "execution/deployment_gate.py"
+      - "execution/readiness.py"
+      - "tests/execution/test_deployment_gate.py"
+      - ".github/workflows/phase26-deployment.yml"
+  pull_request:
+    paths:
+      - "execution/deployment_gate.py"
+      - "execution/readiness.py"
+      - "tests/execution/test_deployment_gate.py"
+      - ".github/workflows/phase26-deployment.yml"
+
+jobs:
+  phase26:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Phase 26 tests
+        run: pytest -q tests/execution/test_deployment_gate.py
+      - name: Compile deployment boundary
+        run: python -m py_compile execution/deployment_gate.py execution/readiness.py
