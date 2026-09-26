@@ -1,0 +1,17 @@
+name: dashboard
+on:
+  push:
+    paths: [dashboard/**,scripts/run_dashboard.py,scripts/verify_dashboard.py,tests/dashboard/**,tests/test_runtime_dashboard_journal.py,trading/runtime_pipeline.py,docs/DASHBOARD_PHASE_0_20.md,.github/workflows/dashboard.yml]
+  pull_request:
+    paths: [dashboard/**,scripts/run_dashboard.py,scripts/verify_dashboard.py,tests/dashboard/**,tests/test_runtime_dashboard_journal.py,trading/runtime_pipeline.py,docs/DASHBOARD_PHASE_0_20.md,.github/workflows/dashboard.yml]
+jobs:
+  dashboard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.11"}
+      - name: Dashboard smoke tests
+        run: python -m unittest discover -s tests/dashboard -p "test_*.py" -v
+      - name: Dashboard completion verification
+        run: python scripts/verify_dashboard.py
