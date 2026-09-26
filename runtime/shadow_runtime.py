@@ -221,7 +221,7 @@ class ShadowRuntime:
             "authority": "STRATEGY_ONLY",
             "live_broker_order_submission": False,
         }
-        else:
+        if self.decision_recorder is None:
             evidence["decision_trace"] = None
         evidence["monitoring_dashboard"] = (
             self.monitoring.dashboard() if self.monitoring is not None else None
