@@ -8,14 +8,17 @@ complete horizon required by Phase 7 is available.
 from __future__ import annotations
 
 from datetime import datetime, timezone
-import math
 
+import numpy as np
 import pandas as pd
 
 from ml.labeling import LabelingConfig, label_decision
-from ml.labeling.models import TradeCandidate as LabelingTradeCandidate, TradeDirection
-from trading.signals.models import CandidateConfig
+from ml.labeling.models import (
+    TradeCandidate as LabelingTradeCandidate,
+    TradeDirection,
+)
 from trading.signals.directional import build_directional_candidates
+from trading.signals.models import CandidateConfig
 
 from .models import LiveOutcome, LivePrediction, OutcomeStatus
 
@@ -48,17 +51,24 @@ class LiveOutcomeResolver:
         """Snapshot causal candidate inputs alongside a model prediction."""
         if not isinstance(decision_row, pd.Series):
             raise TypeError("decision_row must be a pandas Series")
+
         prediction_timestamp = pd.Timestamp(timestamp)
         row_timestamp = pd.Timestamp(decision_row.get("timestamp"))
+
         if prediction_timestamp.tzinfo is None or row_timestamp.tzinfo is None:
             raise ValueError(
                 "prediction and decision-row timestamps must be timezone-aware"
             )
+
         if row_timestamp != prediction_timestamp:
             raise ValueError(
                 "decision_row timestamp must match prediction timestamp"
             )
-        if str(decision_row.get("symbol", symbol)).strip().upper() != str(symbol).strip().upper():
+
+        if (
+            str(decision_row.get("symbol", symbol)).strip().upper()
+            != str(symbol).strip().upper()
+        ):
             raise ValueError("decision_row symbol must match prediction symbol")
 
         long_candidate, short_candidate = build_directional_candidates(
@@ -73,7 +83,10 @@ class LiveOutcomeResolver:
             model_version=model_version,
             feature_version=feature_version,
             dataset_version=dataset_version,
-            predicted_class=max(probabilities, key=probabilities.get),
+            predicted_class=max(
+                probabilities,
+                key=probabilities.get,
+            ),
             probabilities=probabilities,
             generated_at=generated_at,
             horizon_bars=self.labeling_config.horizon_bars,
@@ -91,13 +104,17 @@ class LiveOutcomeResolver:
         *,
         resolved_at: datetime | pd.Timestamp | None = None,
     ) -> LiveOutcome:
-        """Resolve one prediction or return PENDING while the horizon is open."""
+        """Resolve one prediction or return PENDING while its horizon is open."""
         if not isinstance(prediction, LivePrediction):
             raise TypeError("prediction must be a LivePrediction")
-        self._validate_candles(candles, prediction)
+
+        self._validate_candles(candles)
 
         working = candles.copy()
-        working["symbol"] = working["symbol"].astype(str).str.strip().str.upper()
+        working["symbol"] = (
+            working["symbol"].astype(str).str.strip().str.upper()
+        )
+
         future = working.loc[
             (working["symbol"] == prediction.symbol)
             & (working["timestamp"] > prediction.timestamp)
@@ -111,6 +128,8 @@ class LiveOutcomeResolver:
 
         horizon = future.iloc[: prediction.horizon_bars]
         cutoff = pd.Timestamp(horizon.iloc[-1]["timestamp"])
+
+        # Only bars through the closed horizon are supplied to Phase 7.
         usable = working.loc[
             (working["symbol"] == prediction.symbol)
             & (working["timestamp"] <= cutoff)
@@ -144,13 +163,8 @@ class LiveOutcomeResolver:
         if observed_at.tzinfo is None:
             raise ValueError("resolved_at must be timezone-aware")
 
-        outcome_timestamp = outcome.outcome_timestamp
-        if outcome_timestamp is None:
-            outcome_timestamp = cutoff
-
-        outcome_bars = outcome.outcome_bars
-        if outcome_bars is None:
-            outcome_bars = prediction.horizon_bars
+        outcome_timestamp = outcome.outcome_timestamp or cutoff
+        outcome_bars = outcome.outcome_bars or prediction.horizon_bars
 
         return LiveOutcome(
             prediction_id=prediction.prediction_id,
@@ -163,10 +177,8 @@ class LiveOutcomeResolver:
         )
 
     @staticmethod
-    def _validate_candles(
-        candles: pd.DataFrame,
-        prediction: LivePrediction,
-    ) -> None:
+    def _validate_candles(candles: pd.DataFrame) -> None:
+        """Fail closed on malformed, duplicate, or non-finite candle data."""
         required = {
             "timestamp",
             "symbol",
@@ -176,37 +188,66 @@ class LiveOutcomeResolver:
             "close",
             "volume",
         }
+
         if not isinstance(candles, pd.DataFrame):
             raise TypeError("candles must be a pandas DataFrame")
+
         missing = required.difference(candles.columns)
         if missing:
             raise ValueError(
                 f"candles missing required columns: {sorted(missing)}"
             )
+
         if candles.empty:
             raise ValueError("candles must not be empty")
-        if not isinstance(candles["timestamp"].dtype, pd.DatetimeTZDtype):
+
+        if not isinstance(
+            candles["timestamp"].dtype,
+            pd.DatetimeTZDtype,
+        ):
             raise ValueError("candle timestamps must be timezone-aware")
 
         working = candles.copy()
-        working["symbol"] = working["symbol"].astype(str).str.strip().str.upper()
-        working = working.sort_values(["symbol", "timestamp"], kind="stable")
+        working["symbol"] = (
+            working["symbol"].astype(str).str.strip().str.upper()
+        )
+        working = working.sort_values(
+            ["symbol", "timestamp"],
+            kind="stable",
+        )
 
-        if working.duplicated(["symbol", "timestamp"]).any():
+        if working.duplicated(
+            ["symbol", "timestamp"]
+        ).any():
             raise ValueError(
                 "candles contain duplicate symbol/timestamp observations"
             )
-        if not working.groupby("symbol", sort=False)["timestamp"].apply(
-            lambda values: values.is_monotonic_increasing
-        ).all():
-            raise ValueError("candles must be chronological within each symbol")
+
+        for _, group in working.groupby("symbol", sort=False):
+            if not group["timestamp"].is_monotonic_increasing:
+                raise ValueError(
+                    "candles must be chronological within each symbol"
+                )
 
         numeric = working[
             ["open", "high", "low", "close", "volume"]
         ].to_numpy(dtype=float)
+
         if not np.isfinite(numeric).all():
-            raise ValueError("candles contain non-finite numeric values")
-        if (working[["open", "high", "low", "close"]] <= 0).any().any():
-            raise ValueError("candles contain non-positive OHLC values")
+            raise ValueError(
+                "candles contain non-finite numeric values"
+            )
+
+        if (
+            working[
+                ["open", "high", "low", "close"]
+            ] <= 0
+        ).any().any():
+            raise ValueError(
+                "candles contain non-positive OHLC values"
+            )
+
         if (working["volume"] < 0).any():
-            raise ValueError("candles contain negative volume")
+            raise ValueError(
+                "candles contain negative volume"
+            )
