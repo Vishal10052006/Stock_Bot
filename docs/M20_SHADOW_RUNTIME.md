@@ -107,3 +107,7 @@ The branch now composes the existing RBI/PIB RSS providers with the causal Resea
 ## M20.5 — shadow session evidence journal
 
 Each shadow session can now use an append-only JSONL journal with a stable session correlation ID. Start, completed-candle, and stop events are recorded through the existing MonitoringEvent/MonitoringJournal contracts, allowing deterministic session replay without granting trading authority.
+
+## M20.6 — runtime-integrated session journaling
+
+The M20 runtime now optionally records its own lifecycle into the append-only shadow session journal. Set `STOCK_BOT_SHADOW_JOURNAL` to enable persistence; if unset, no journal file is created. The runtime records session start, each completed candle, and session stop, and exposes the journal evidence in its operational snapshot. The journal remains observational and cannot submit broker orders.
