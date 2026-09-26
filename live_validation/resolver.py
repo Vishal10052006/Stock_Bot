@@ -1,8 +1,8 @@
 """Resolve live predictions using the existing Phase 7 labeling contract.
 
-The resolver never labels a prediction until its complete future horizon is
-available. It uses the same candidate construction and tie-breaking semantics
-as supervised training, preventing a second, subtly different live label rule.
+A prediction is never marked NO_EDGE merely because the live session has not
+yet supplied the full future horizon. Resolution stays PENDING until the same
+complete horizon required by Phase 7 is available.
 """
 
 from __future__ import annotations
@@ -13,10 +13,9 @@ import math
 import pandas as pd
 
 from ml.labeling import LabelingConfig, label_decision
-from ml.labeling.models import TradeCandidate as LabelingTradeCandidate
-from trading.signals.models import CandidateConfig, CandidateDirection, TradeCandidate
+from ml.labeling.models import TradeCandidate as LabelingTradeCandidate, TradeDirection
+from trading.signals.models import CandidateConfig
 from trading.signals.directional import build_directional_candidates
-from trading.signals.labeling_adapter import to_labeling_candidate
 
 from .models import LiveOutcome, LivePrediction, OutcomeStatus
 
@@ -49,6 +48,18 @@ class LiveOutcomeResolver:
         """Snapshot causal candidate inputs alongside a model prediction."""
         if not isinstance(decision_row, pd.Series):
             raise TypeError("decision_row must be a pandas Series")
+        prediction_timestamp = pd.Timestamp(timestamp)
+        row_timestamp = pd.Timestamp(decision_row.get("timestamp"))
+        if prediction_timestamp.tzinfo is None or row_timestamp.tzinfo is None:
+            raise ValueError(
+                "prediction and decision-row timestamps must be timezone-aware"
+            )
+        if row_timestamp != prediction_timestamp:
+            raise ValueError(
+                "decision_row timestamp must match prediction timestamp"
+            )
+        if str(decision_row.get("symbol", symbol)).strip().upper() != str(symbol).strip().upper():
+            raise ValueError("decision_row symbol must match prediction symbol")
 
         long_candidate, short_candidate = build_directional_candidates(
             decision_row,
@@ -57,7 +68,7 @@ class LiveOutcomeResolver:
 
         return LivePrediction(
             prediction_id=prediction_id,
-            timestamp=timestamp,
+            timestamp=prediction_timestamp,
             symbol=symbol,
             model_version=model_version,
             feature_version=feature_version,
@@ -85,11 +96,12 @@ class LiveOutcomeResolver:
             raise TypeError("prediction must be a LivePrediction")
         self._validate_candles(candles, prediction)
 
-        future = candles.loc[
-            (candles["symbol"].astype(str).str.upper() == prediction.symbol)
-            & (candles["timestamp"] > prediction.timestamp)
-        ].copy()
-        future = future.sort_values("timestamp", kind="stable")
+        working = candles.copy()
+        working["symbol"] = working["symbol"].astype(str).str.strip().str.upper()
+        future = working.loc[
+            (working["symbol"] == prediction.symbol)
+            & (working["timestamp"] > prediction.timestamp)
+        ].sort_values("timestamp", kind="stable")
 
         if len(future) < prediction.horizon_bars:
             return LiveOutcome(
@@ -97,26 +109,24 @@ class LiveOutcomeResolver:
                 status=OutcomeStatus.PENDING,
             )
 
-        horizon_timestamps = future["timestamp"].iloc[: prediction.horizon_bars]
-        cutoff = pd.Timestamp(horizon_timestamps.iloc[-1])
-
-        usable = candles.loc[
-            (candles["symbol"].astype(str).str.upper() == prediction.symbol)
-            & (candles["timestamp"] <= cutoff)
-        ].copy()
-        usable = usable.sort_values("timestamp", kind="stable")
+        horizon = future.iloc[: prediction.horizon_bars]
+        cutoff = pd.Timestamp(horizon.iloc[-1]["timestamp"])
+        usable = working.loc[
+            (working["symbol"] == prediction.symbol)
+            & (working["timestamp"] <= cutoff)
+        ].sort_values("timestamp", kind="stable")
 
         long_candidate = LabelingTradeCandidate(
             timestamp=prediction.timestamp,
             symbol=prediction.symbol,
-            direction=self._label_direction(CandidateDirection.LONG),
+            direction=TradeDirection.LONG,
             entry_price=prediction.long_entry_price,
             stop_price=prediction.long_stop_price,
         )
         short_candidate = LabelingTradeCandidate(
             timestamp=prediction.timestamp,
             symbol=prediction.symbol,
-            direction=self._label_direction(CandidateDirection.SHORT),
+            direction=TradeDirection.SHORT,
             entry_price=prediction.short_entry_price,
             stop_price=prediction.short_stop_price,
         )
@@ -128,76 +138,75 @@ class LiveOutcomeResolver:
             config=self.labeling_config,
         )
 
-        actual = outcome.label.value
-        outcome_timestamp = pd.Timestamp(outcome.timestamp)
-        observed_at = pd.Timestamp(resolved_at or datetime.now(timezone.utc))
+        observed_at = pd.Timestamp(
+            resolved_at or datetime.now(timezone.utc)
+        )
         if observed_at.tzinfo is None:
             raise ValueError("resolved_at must be timezone-aware")
-        if outcome_timestamp.tzinfo is None:
-            raise ValueError("label outcome timestamp must be timezone-aware")
 
-        outcome_bars = int(
-            (
-                future["timestamp"]
-                .iloc[: prediction.horizon_bars]
-                .le(outcome_timestamp)
-            ).sum()
-        )
-        if outcome_bars <= 0:
-            # NO_EDGE can legitimately be resolved at the end of the horizon.
+        outcome_timestamp = outcome.outcome_timestamp
+        if outcome_timestamp is None:
+            outcome_timestamp = cutoff
+
+        outcome_bars = outcome.outcome_bars
+        if outcome_bars is None:
             outcome_bars = prediction.horizon_bars
 
         return LiveOutcome(
             prediction_id=prediction.prediction_id,
             status=OutcomeStatus.RESOLVED,
-            actual_class=actual,
-            outcome_timestamp=outcome_timestamp,
-            outcome_bars=outcome_bars,
-            outcome_reason=self._outcome_reason(outcome),
+            actual_class=outcome.label.value,
+            outcome_timestamp=pd.Timestamp(outcome_timestamp),
+            outcome_bars=int(outcome_bars),
+            outcome_reason=outcome.outcome_reason,
             resolved_at=observed_at,
         )
 
     @staticmethod
-    def _label_direction(direction: CandidateDirection):
-        """Convert signal candidate direction into Phase 7 direction."""
-        from ml.labeling.models import TradeDirection
-
-        if direction is CandidateDirection.LONG:
-            return TradeDirection.LONG
-        if direction is CandidateDirection.SHORT:
-            return TradeDirection.SHORT
-        raise ValueError("direction must be LONG or SHORT")
-
-    @staticmethod
-    def _outcome_reason(outcome) -> str:
-        """Return an auditable label reason without changing Phase 7 semantics."""
-        return (
-            f"long={outcome.long_outcome.outcome_reason};"
-            f"short={outcome.short_outcome.outcome_reason}"
-        )
-
-    @staticmethod
-    def _validate_candles(candles: pd.DataFrame, prediction: LivePrediction) -> None:
-        required = {"timestamp", "symbol", "open", "high", "low", "close", "volume"}
+    def _validate_candles(
+        candles: pd.DataFrame,
+        prediction: LivePrediction,
+    ) -> None:
+        required = {
+            "timestamp",
+            "symbol",
+            "open",
+            "high",
+            "low",
+            "close",
+            "volume",
+        }
         if not isinstance(candles, pd.DataFrame):
             raise TypeError("candles must be a pandas DataFrame")
         missing = required.difference(candles.columns)
         if missing:
-            raise ValueError(f"candles missing required columns: {sorted(missing)}")
+            raise ValueError(
+                f"candles missing required columns: {sorted(missing)}"
+            )
         if candles.empty:
             raise ValueError("candles must not be empty")
         if not isinstance(candles["timestamp"].dtype, pd.DatetimeTZDtype):
             raise ValueError("candle timestamps must be timezone-aware")
 
         working = candles.copy()
-        working["symbol"] = working["symbol"].astype(str).str.upper()
+        working["symbol"] = working["symbol"].astype(str).str.strip().str.upper()
         working = working.sort_values(["symbol", "timestamp"], kind="stable")
 
         if working.duplicated(["symbol", "timestamp"]).any():
-            raise ValueError("candles contain duplicate symbol/timestamp observations")
+            raise ValueError(
+                "candles contain duplicate symbol/timestamp observations"
+            )
         if not working.groupby("symbol", sort=False)["timestamp"].apply(
             lambda values: values.is_monotonic_increasing
         ).all():
             raise ValueError("candles must be chronological within each symbol")
-        if not math.isfinite(float(prediction.timestamp.value)):
-            raise ValueError("prediction timestamp is invalid")
+
+        numeric = working[
+            ["open", "high", "low", "close", "volume"]
+        ].to_numpy(dtype=float)
+        if not np.isfinite(numeric).all():
+            raise ValueError("candles contain non-finite numeric values")
+        if (working[["open", "high", "low", "close"]] <= 0).any().any():
+            raise ValueError("candles contain non-positive OHLC values")
+        if (working["volume"] < 0).any():
+            raise ValueError("candles contain negative volume")
