@@ -956,3 +956,101 @@ def test_provider_fetches_phase9_sector_index_historical_candles():
         "https://example.test/v3/historical-candle/"
         "NSE_INDEX%7CNifty%20Metal/minutes/5/2026-09-01/2026-09-01"
     )
+
+def test_provider_rejects_duplicate_historical_timestamps():
+    """Duplicate bars must fail instead of creating an ambiguous series."""
+    provider, session = make_provider(
+        {
+            "status": "success",
+            "data": {
+                "candles": [
+                    [
+                        "2026-09-01T09:15:00+00:00",
+                        100,
+                        101,
+                        99,
+                        100,
+                        1000,
+                        0,
+                    ],
+                    [
+                        "2026-09-01T09:15:00+00:00",
+                        100,
+                        102,
+                        98,
+                        101,
+                        1200,
+                        0,
+                    ],
+                ]
+            },
+        }
+    )
+
+    session.response = FakeResponse(
+        {
+            "status": "success",
+            "data": {
+                "candles": [
+                    [
+                        "2026-09-01T09:15:00+00:00",
+                        100,
+                        101,
+                        99,
+                        100,
+                        1000,
+                        0,
+                    ],
+                    [
+                        "2026-09-01T09:15:00+00:00",
+                        100,
+                        102,
+                        98,
+                        101,
+                        1200,
+                        0,
+                    ],
+                ]
+            },
+        }
+    )
+
+    with pytest.raises(
+        UpstoxHistoricalDataError,
+        match="duplicate historical candle timestamps",
+    ):
+        provider.get_bars(make_request())
+
+
+def test_provider_evidence_does_not_expose_access_token():
+    """Historical provider evidence must never contain the credential."""
+    provider, _ = make_provider(valid_payload())
+
+    evidence = provider.evidence()
+
+    assert evidence["provider"] == "upstox"
+    assert evidence["access_token_configured"] is True
+    assert evidence["live_broker_order_submission"] is False
+    assert "test-access-token" not in str(evidence)
+
+
+def test_provider_fingerprint_is_deterministic_and_request_bound():
+    """The provenance fingerprint must be stable and change with the request."""
+    provider, _ = make_provider(valid_payload())
+    request = make_request()
+
+    first = provider.fingerprint(request)
+    second = provider.fingerprint(request)
+
+    assert first == second
+    assert len(first) == 64
+
+    changed = HistoricalDataRequest(
+        symbol="RELIANCE",
+        exchange="NSE",
+        timeframe_minutes=15,
+        start=request.start,
+        end=request.end,
+    )
+
+    assert provider.fingerprint(changed) != first

@@ -373,6 +373,14 @@ class UpstoxHistoricalMarketDataProvider(
             key=lambda bar: bar.timestamp,
         )
 
+        # Historical data is an immutable time series. Duplicate timestamps
+        # would make downstream joins, indicators, and labels ambiguous.
+        timestamps = [bar.timestamp for bar in sorted_bars]
+        if len(timestamps) != len(set(timestamps)):
+            raise UpstoxHistoricalDataError(
+                "Upstox returned duplicate historical candle timestamps"
+            )
+
         if request.start is not None:
             sorted_bars = [
                 bar
@@ -388,3 +396,36 @@ class UpstoxHistoricalMarketDataProvider(
             ]
 
         return tuple(sorted_bars)
+
+    def evidence(self) -> dict[str, object]:
+        """Return non-secret provider evidence for historical-data runs."""
+        return {
+            "provider": "upstox",
+            "role": self.role.value,
+            "base_url": self.base_url,
+            "timeout_seconds": self.timeout_seconds,
+            "access_token_configured": bool(self.access_token),
+            "live_broker_order_submission": False,
+        }
+
+    def fingerprint(self, request: HistoricalDataRequest) -> str:
+        """Return deterministic non-secret provenance for a request."""
+        import hashlib
+        import json
+
+        payload = {
+            "provider": self.provenance(request),
+            "request": {
+                "symbol": request.symbol.strip().upper(),
+                "exchange": request.exchange.strip().upper(),
+                "timeframe_minutes": request.timeframe_minutes,
+                "start": request.start.isoformat() if request.start else None,
+                "end": request.end.isoformat() if request.end else None,
+            },
+        }
+        encoded = json.dumps(
+            payload,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+        return hashlib.sha256(encoded).hexdigest()

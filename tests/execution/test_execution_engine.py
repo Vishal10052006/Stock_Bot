@@ -298,3 +298,59 @@ def test_execution_metrics_include_fills_and_fees():
     assert metrics.filled_quantity == 100.0
     assert metrics.fill_ratio == 1.0
     assert metrics.total_fees > 0.0
+
+
+def test_order_reconciliation_detects_broker_identity_mismatch():
+    adapter = PaperBrokerAdapter()
+    engine = ExecutionEngine(adapter)
+    request = order_request()
+    engine.submit(request)
+
+    prior = adapter._orders[request.client_order_id]
+    adapter._orders[request.client_order_id] = type(prior)(
+        broker_order_id="PAPER-DIFFERENT",
+        client_order_id=prior.client_order_id,
+        status=prior.status,
+        requested_quantity=prior.requested_quantity,
+        filled_quantity=prior.filled_quantity,
+        average_fill_price=prior.average_fill_price,
+        reason=prior.reason,
+        updated_at=prior.updated_at,
+        fills=prior.fills,
+    )
+
+    assert not engine.reconcile_order(request.client_order_id)
+
+
+def test_unknown_order_must_be_reconciled_before_cancel():
+    adapter = PaperBrokerAdapter()
+    engine = ExecutionEngine(adapter)
+    request = order_request()
+    engine.submit(request)
+    adapter._orders.pop(request.client_order_id)
+
+    refreshed = engine.refresh(request.client_order_id)
+
+    assert refreshed.status is OrderStatus.UNKNOWN
+    with pytest.raises(ValueError, match="UNKNOWN order"):
+        engine.cancel(request.client_order_id)
+
+
+def test_position_reconciliation_uses_tolerance_for_float_rounding():
+    adapter = PaperBrokerAdapter(
+        config=PaperAdapterConfig(slippage_bps=0.0, fee_bps=0.0)
+    )
+    engine = ExecutionEngine(adapter)
+    engine.submit(order_request())
+
+    broker_positions = adapter.positions()
+    rounded = tuple(
+        type(position)(
+            symbol=position.symbol,
+            quantity=position.quantity + 1e-13,
+            average_price=position.average_price + 1e-13,
+        )
+        for position in broker_positions
+    )
+
+    assert engine.reconcile_positions(rounded)
