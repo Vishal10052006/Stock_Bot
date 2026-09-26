@@ -227,7 +227,7 @@ function sendAI(event){
   fetch("/api/chat",{
     method:"POST",
     headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({message:message,history:S.chat.slice(-12)})
+    body:JSON.stringify({message:message,history:S.chat.slice(0,-1).slice(-12)})
   }).then(function(r){
     return r.json().then(function(body){
       if(!r.ok)throw Error(body.error||r.status);
