@@ -84,12 +84,12 @@ class ContinuousModelMonitoring:
         if self._observations and timestamp <= self._observations[-1].observed_at:
             raise ValueError("model observations must have strictly increasing timestamps")
 
-        result = self.runtime.observe_model(snapshot)
+        before_alerts = len(self.runtime.engine.snapshot().alerts)
+        self.runtime.observe_model(snapshot)
         monitoring_snapshot = self.runtime.engine.snapshot()
         alerts = tuple(
             alert.code
-            for alert in monitoring_snapshot.alerts[result.metrics_recorded * 0 :]
-            if alert.timestamp <= timestamp.isoformat()
+            for alert in monitoring_snapshot.alerts[before_alerts:]
         )
         observation = ModelMonitoringObservation(
             observed_at=timestamp,
