@@ -4,6 +4,7 @@ This package links prediction-only observations to later, fully resolved
 Phase 7 outcomes without granting trading or broker authority.
 """
 
+from .bridge import LivePredictionValidationBridge
 from .evaluator import LivePredictionEvaluator
 from .journal import LiveValidationJournal
 from .models import (
@@ -20,6 +21,7 @@ __all__ = [
     "LivePrediction",
     "LivePredictionEvaluator",
     "LivePredictionReport",
+    "LivePredictionValidationBridge",
     "LiveValidationJournal",
     "OutcomeStatus",
 ]
