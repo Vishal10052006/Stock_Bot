@@ -39,6 +39,7 @@ main{padding:8px;max-width:1500px;width:100%;margin:auto;min-width:0}
 .stage{min-height:72px}.stage b{display:block;margin:4px 0}.pipe-arrow{display:flex;align-items:center;justify-content:center;color:var(--c)}
 .metric-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:5px}
 .metric b{display:block;font-size:15px}.metric small{color:var(--m)}
+.market-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:5px}
 table{width:100%;border-collapse:collapse;font-size:9px}
 th,td{border:1px solid var(--l);padding:5px;text-align:left}th{color:var(--c);background:var(--p2)}
 .event{display:grid;grid-template-columns:110px 110px 1fr 60px;border-bottom:1px solid #1c2630;padding:5px 0;font-size:9px}
@@ -87,6 +88,7 @@ th,td{border:1px solid var(--l);padding:5px;text-align:left}th{color:var(--c);ba
   .inspector-slot{position:relative;top:auto;max-height:none}
   .pipeline{grid-template-columns:repeat(4,1fr)}
   .metric-grid{grid-template-columns:repeat(2,1fr)}
+  .market-grid{grid-template-columns:repeat(2,1fr)}
 }
 @media(max-width:700px){
   .layout{grid-template-columns:1fr}
