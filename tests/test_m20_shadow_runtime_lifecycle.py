@@ -162,4 +162,8 @@ def test_shadow_runtime_persists_session_evidence(tmp_path) -> None:
         "SHADOW_SESSION_STOPPED",
     ]
     assert pipeline.stop_calls == 1
-    assert runtime.evidence()["session_journal"]["event_count"] == 4
+    evidence = runtime.evidence()
+    assert evidence["session_journal"]["event_count"] == 4
+    assert evidence["session_manifest"]["mode"] == "SHADOW"
+    assert evidence["session_manifest"]["live_broker_order_submission"] is False
+    assert len(evidence["session_manifest"]["manifest_fingerprint"]) == 64
