@@ -15,6 +15,7 @@ on:
       - "tests/test_m20_research_runtime.py"
       - "tests/test_m20_shadow_session.py"
       - "tests/test_m20_shadow_manifest.py"
+      - "tests/test_m20_shadow_monitoring.py"
       - ".env.example"
       - "docs/M20_SHADOW_RUNTIME.md"
   push:
@@ -40,7 +41,8 @@ jobs:
       - name: M20 tests
         run: |
           python -m pytest -q             tests/test_m20_shadow_runtime.py             tests/test_m20_shadow_runtime_lifecycle.py             tests/test_m20_shadow_candles.py             tests/test_m20_shadow_decision.py             tests/test_m20_research_runtime.py             tests/test_m20_shadow_session.py \
-            tests/test_m20_shadow_manifest.py
+            tests/test_m20_shadow_manifest.py \
+            tests/test_m20_shadow_monitoring.py
 
       - name: Compile M20 runtime
         run: |
