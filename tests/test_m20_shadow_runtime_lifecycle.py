@@ -141,3 +141,25 @@ def test_shadow_runtime_evidence_preserves_no_order_posture() -> None:
 
     assert evidence["mode"] == "SHADOW"
     assert evidence["live_broker_order_submission"] is False
+
+
+def test_shadow_runtime_persists_session_evidence(tmp_path) -> None:
+    runtime, pipeline = _runtime()
+    runtime.session_journal = ShadowSessionJournal.open(
+        tmp_path / "m20.jsonl",
+        session_id="m20-lifecycle",
+    )
+
+    runtime.start()
+    list(runtime.candles())
+    runtime.stop()
+
+    events = runtime.session_journal.events()
+    assert [event.event_type for event in events] == [
+        "SHADOW_SESSION_STARTED",
+        "SHADOW_CANDLE_COMPLETED",
+        "SHADOW_CANDLE_COMPLETED",
+        "SHADOW_SESSION_STOPPED",
+    ]
+    assert pipeline.stop_calls == 1
+    assert runtime.evidence()["session_journal"]["event_count"] == 4
