@@ -74,6 +74,22 @@ class MonitoringRuntime:
         self.pipeline.record_metric("market.latency_seconds", float(metrics.latency_seconds))
         return self._result("market_bot", before_metrics, before_alerts)
 
+    def observe_market_context(self, context: Any) -> RuntimeTelemetryResult:
+        """Persist the latest descriptive MarketContext for observability/JARVIS only."""
+        before_metrics = len(self.engine.snapshot().metrics)
+        before_alerts = len(self.engine.snapshot().alerts)
+        if self.engine.journal is not None:
+            self.engine.record_event(
+                MonitoringEvent.create(
+                    event_type="MARKET_CONTEXT",
+                    source="market_bot",
+                    timestamp=context.timestamp,
+                    correlation_id=f"market:{context.timestamp.isoformat()}",
+                    payload=context.to_mapping(),
+                )
+            )
+        return self._result("market_bot", before_metrics, before_alerts)
+
     def observe_analysis(self, metrics: Any) -> RuntimeTelemetryResult:
         before_metrics = len(self.engine.snapshot().metrics)
         before_alerts = len(self.engine.snapshot().alerts)
