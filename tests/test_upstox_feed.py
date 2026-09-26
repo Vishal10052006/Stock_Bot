@@ -771,3 +771,48 @@ def test_invalid_event_is_filtered_and_recorded():
     assert snapshot.events_received == 1
     assert snapshot.events_accepted == 0
     assert snapshot.events_rejected == 1
+
+
+def test_subscribe_is_idempotent_for_existing_symbols():
+    """Repeated subscriptions must not emit duplicate provider requests."""
+    websocket = FakeWebSocket()
+    websocket_module = FakeWebSocketModule(websocket)
+    feed = make_feed(websocket_module)
+    feed._ws = websocket
+
+    feed.subscribe(["RELIANCE", "TCS"])
+    feed.subscribe(["reliance", "TCS"])
+
+    assert len(websocket.sent) == 1
+    assert feed._subscribed_symbols == {"RELIANCE", "TCS"}
+
+
+def test_subscribe_rejects_non_string_items():
+    """Invalid symbol values must fail before provider I/O."""
+    websocket = FakeWebSocket()
+    websocket_module = FakeWebSocketModule(websocket)
+    feed = make_feed(websocket_module)
+    feed._ws = websocket
+
+    with pytest.raises(ValueError, match="at least one non-empty symbol"):
+        feed.subscribe([None, 123])
+
+
+def test_disconnect_clears_state_when_provider_close_fails():
+    """Cleanup must remain fail-safe when the provider close raises."""
+    websocket = FakeWebSocket()
+
+    def failing_close():
+        raise RuntimeError("simulated close failure")
+
+    websocket.close = failing_close
+
+    websocket_module = FakeWebSocketModule(websocket)
+    feed = make_feed(websocket_module)
+    feed._ws = websocket
+    feed._subscribed_symbols.add("RELIANCE")
+
+    feed.disconnect()
+
+    assert feed._ws is None
+    assert feed._subscribed_symbols == set()
