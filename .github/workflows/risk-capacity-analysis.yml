@@ -1,0 +1,40 @@
+name: Risk Capacity Analysis Validation
+
+on:
+  pull_request:
+    paths:
+      - "scripts/trading/analyze_risk_capacity.py"
+      - "tests/research/test_risk_capacity_analysis.py"
+      - "docs/RISK_CAPACITY_ANALYSIS.md"
+      - "pytest.ini"
+      - "backtesting/**"
+      - "risk/**"
+      - "strategy/**"
+      - "trading/**"
+      - "config/**"
+  push:
+    branches:
+      - research/risk-capacity-analysis
+
+jobs:
+  risk-capacity:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install research dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pandas numpy pytest yfinance scikit-learn scipy ta pyarrow
+
+      - name: Run Risk-capacity research tests
+        run: |
+          python -m pytest -q             tests/research/test_risk_capacity_analysis.py
+
+      - name: Compile Risk-capacity analysis module
+        run: |
+          python -m py_compile scripts/trading/analyze_risk_capacity.py
