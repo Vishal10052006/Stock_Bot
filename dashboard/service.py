@@ -164,6 +164,25 @@ class DashboardService:
             )
         return output
 
+    def market(self) -> dict[str, Any]:
+        """Return the latest causal MarketContext observed by the runtime."""
+        for event in reversed(self._events()):
+            if event.get("event_type") == "MARKET_CONTEXT" and event.get("source") == "market_bot":
+                payload = event.get("payload")
+                if isinstance(payload, dict):
+                    return {
+                        "observed": True,
+                        "timestamp": event.get("timestamp"),
+                        "correlation_id": event.get("correlation_id"),
+                        "context": payload,
+                    }
+        return {
+            "observed": False,
+            "timestamp": None,
+            "correlation_id": None,
+            "context": {},
+        }
+
     def models(self) -> list[dict[str, Any]]:
         if self.model_registry is None:
             return []
@@ -297,6 +316,7 @@ class DashboardService:
             "agents": agents,
             "pipeline": self.pipeline(),
             "models": self.models(),
+            "market": self.market(),
             "learning": self.learning(),
             "health": self.health(),
             "events": events,
@@ -368,6 +388,7 @@ class DashboardService:
             ],
             "learning": snapshot["learning"],
             "health": snapshot["health"],
+            "market": snapshot["market"],
             "recent_events": snapshot["events"][-20:],
         }
 
