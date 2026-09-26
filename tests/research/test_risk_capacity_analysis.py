@@ -8,6 +8,7 @@ import pytest
 
 from scripts.trading.analyze_risk_capacity import (
     Scenario,
+    _load_input,
     _manifest_provenance,
     _verify_manifest,
     run_scenario,
@@ -78,24 +79,43 @@ def test_resize_counterfactual_can_convert_capacity_rejection_to_fill():
     assert result["risk_rejection_reasons"].get("MAX_GROSS_EXPOSURE", 0) == 0
 
 
+def test_load_input_preserves_candidate_columns(tmp_path):
+    # Candidate construction needs decision-time stop inputs in addition to the
+    # Strategy columns. The replay loader must not silently strip them.
+    artifact = tmp_path / "strategy_ready.csv"
+    frame = _rows()
+    frame.to_csv(artifact, index=False)
+
+    loaded = _load_input(artifact)
+
+    assert "atr_14" in loaded.columns
+    assert "support_20" in loaded.columns
+    assert len(loaded) == len(frame)
+
+
 def test_manifest_verification_fails_closed_on_tampered_artifact(tmp_path):
     artifact = tmp_path / "strategy_ready.csv"
-    artifact.write_text("timestamp,symbol\\n2026-09-21T10:00:00Z,TEST\\n", encoding="utf-8")
+    artifact.write_text(
+        "timestamp,symbol\\n2026-09-21T10:00:00Z,TEST\\n",
+        encoding="utf-8",
+    )
 
     digest = hashlib.sha256(artifact.read_bytes()).hexdigest()
     manifest = tmp_path / "paper_dataset_manifest.json"
     manifest.write_text(
-        json.dumps({
-            "manifest_version": "PAPER-DATASET-MANIFEST-v1",
-            "dataset_version": "paper-test-v1",
-            "artifact": {
-                "sha256": digest,
-                "rows": 1,
-                "symbols": ["TEST"],
-                "period_start": "2026-09-21T10:00:00+00:00",
-                "period_end": "2026-09-21T10:00:00+00:00",
-            },
-        }),
+        json.dumps(
+            {
+                "manifest_version": "PAPER-DATASET-MANIFEST-v1",
+                "dataset_version": "paper-test-v1",
+                "artifact": {
+                    "sha256": digest,
+                    "rows": 1,
+                    "symbols": ["TEST"],
+                    "period_start": "2026-09-21T10:00:00+00:00",
+                    "period_end": "2026-09-21T10:00:00+00:00",
+                },
+            }
+        ),
         encoding="utf-8",
     )
 
