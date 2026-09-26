@@ -407,3 +407,25 @@ class UpstoxHistoricalMarketDataProvider(
             "access_token_configured": bool(self.access_token),
             "live_broker_order_submission": False,
         }
+
+    def fingerprint(self, request: HistoricalDataRequest) -> str:
+        """Return deterministic non-secret provenance for a request."""
+        import hashlib
+        import json
+
+        payload = {
+            "provider": self.provenance(request),
+            "request": {
+                "symbol": request.symbol.strip().upper(),
+                "exchange": request.exchange.strip().upper(),
+                "timeframe_minutes": request.timeframe_minutes,
+                "start": request.start.isoformat() if request.start else None,
+                "end": request.end.isoformat() if request.end else None,
+            },
+        }
+        encoded = json.dumps(
+            payload,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+        return hashlib.sha256(encoded).hexdigest()
