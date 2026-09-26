@@ -1,8 +1,16 @@
 from __future__ import annotations
 
-import pandas as pd
+import hashlib
+import json
 
-from scripts.trading.analyze_risk_capacity import Scenario, run_scenario
+import pandas as pd
+import pytest
+
+from scripts.trading.analyze_risk_capacity import (
+    Scenario,
+    _verify_manifest,
+    run_scenario,
+)
 
 
 def _rows() -> pd.DataFrame:
@@ -67,3 +75,25 @@ def test_resize_counterfactual_can_convert_capacity_rejection_to_fill():
     assert result["strategy_signals"] >= 1
     assert result["paper_fills"] >= 1
     assert result["risk_rejection_reasons"].get("MAX_GROSS_EXPOSURE", 0) == 0
+
+
+def test_manifest_verification_fails_closed_on_tampered_artifact(tmp_path):
+    artifact = tmp_path / "strategy_ready.csv"
+    artifact.write_text("timestamp,symbol\\n2026-09-21T10:00:00Z,TEST\\n", encoding="utf-8")
+
+    digest = hashlib.sha256(artifact.read_bytes()).hexdigest()
+    manifest = tmp_path / "paper_dataset_manifest.json"
+    manifest.write_text(
+        json.dumps({"manifest_version": "PAPER-DATASET-MANIFEST-v1", "artifact": {"sha256": digest}}),
+        encoding="utf-8",
+    )
+
+    _verify_manifest(artifact, manifest)
+
+    artifact.write_text(
+        "timestamp,symbol\\n2026-09-21T10:05:00Z,TEST\\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="SHA-256"):
+        _verify_manifest(artifact, manifest)
