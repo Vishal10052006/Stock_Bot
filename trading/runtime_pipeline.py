@@ -7,10 +7,14 @@ Monitoring remains observational; this module does not alter trading authority.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import os
 
 import pandas as pd
 
 from market.bot.contracts import MarketContext
+from monitoring.engine import MonitoringEngine
+from monitoring.journal import MonitoringJournal
+from monitoring.pipeline import MonitoringPipeline
 from monitoring.runtime import MonitoringRuntime
 from ml.integration.analysis_prediction import PredictionContext, predict_from_analysis
 from ml.models.logistic import LogisticOutcomeModel
@@ -22,8 +26,6 @@ from trading.paper.decision_loop import PaperDecisionLoop, PaperDecisionRun
 
 @dataclass(frozen=True, slots=True)
 class TradingRuntimeResult:
-    """Outputs produced by one shared monitoring runtime."""
-
     analysis: MarketAnalysisResult
     prediction: PredictionContext
     paper_run: PaperDecisionRun | None
@@ -33,8 +35,26 @@ class TradingRuntimeResult:
 class TradingResearchRuntime:
     """Application-level composition root for a coherent research/paper run."""
 
-    def __init__(self, *, monitoring: MonitoringRuntime | None = None) -> None:
-        self.monitoring = monitoring or MonitoringRuntime()
+    def __init__(
+        self,
+        *,
+        monitoring: MonitoringRuntime | None = None,
+        monitoring_journal_path: str | None = None,
+    ) -> None:
+        if monitoring is not None and monitoring_journal_path is not None:
+            raise ValueError("provide monitoring or monitoring_journal_path, not both")
+        if monitoring is not None:
+            self.monitoring = monitoring
+        else:
+            path = monitoring_journal_path or os.getenv("STOCK_BOT_MONITORING_JOURNAL")
+            if path:
+                journal = MonitoringJournal(path)
+                engine = MonitoringEngine(journal=journal)
+                self.monitoring = MonitoringRuntime(
+                    pipeline=MonitoringPipeline(engine=engine)
+                )
+            else:
+                self.monitoring = MonitoringRuntime()
         self.paper_loop = PaperDecisionLoop(monitoring=self.monitoring)
 
     def market_analysis_and_prediction(
@@ -52,12 +72,6 @@ class TradingResearchRuntime:
         feature_version: str | None = None,
         model_version: str = "phase9-logistic-v1",
     ) -> tuple[MarketAnalysisResult, PredictionContext]:
-        """Run Market Bot composition through Analysis and Prediction.
-
-        The same MonitoringRuntime owned by this composition root is passed to
-        every producer. Market Bot provenance remains attached by its existing
-        composition boundary.
-        """
         analysis = build_market_analysis_from_market_bot(
             candles,
             symbol=symbol,
@@ -69,7 +83,6 @@ class TradingResearchRuntime:
             feature_version=feature_version,
             monitoring=self.monitoring,
         )
-
         prediction = predict_from_analysis(
             analysis.analysis,
             model=model,
@@ -77,7 +90,6 @@ class TradingResearchRuntime:
             model_version=model_version,
             monitoring=self.monitoring,
         )
-
         return analysis, prediction
 
     def paper_decisions(
@@ -87,13 +99,7 @@ class TradingResearchRuntime:
         price_column: str = "close",
         quantity: float = 1.0,
     ) -> PaperDecisionRun:
-        """Run Strategy -> Risk -> Execution on the same monitoring runtime."""
-        return self.paper_loop.run(
-            rows,
-            price_column=price_column,
-            quantity=quantity,
-        )
+        return self.paper_loop.run(rows, price_column=price_column, quantity=quantity)
 
     def report(self) -> dict:
-        """Return the coherent dashboard for this runtime instance."""
         return self.monitoring.dashboard()
