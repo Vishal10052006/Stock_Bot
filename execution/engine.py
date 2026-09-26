@@ -434,6 +434,21 @@ class ExecutionEngine:
             raise ValueError("broker response client_order_id mismatch")
         if snapshot.requested_quantity != order.quantity:
             raise ValueError("broker response quantity mismatch")
+        if snapshot.status is OrderStatus.UNKNOWN:
+            self._transition(
+                order.client_order_id,
+                OrderStatus.UNKNOWN,
+                snapshot.reason or "broker returned unknown order state",
+            )
+            self._orders[order.client_order_id] = snapshot
+            self._fills[order.client_order_id] = tuple(snapshot.fills)
+            return ExecutionResult(
+                request=order,
+                snapshot=snapshot,
+                accepted=False,
+                latency_ms=latency_ms,
+                error=snapshot.reason or "broker returned unknown order state",
+            )
 
         self._transition(
             order.client_order_id,
@@ -512,10 +527,29 @@ class ExecutionEngine:
         broker = self.adapter.get_order(client_order_id)
         if local is None or broker is None:
             return False
+        return self._order_snapshots_match(local, broker)
+
+    @staticmethod
+    def _order_snapshots_match(
+        local: OrderSnapshot,
+        broker: OrderSnapshot,
+    ) -> bool:
+        """Compare authoritative order identity, lifecycle, fills and economics."""
         return (
-            local.status is broker.status
+            local.broker_order_id == broker.broker_order_id
+            and local.client_order_id == broker.client_order_id
+            and local.status is broker.status
+            and local.requested_quantity == broker.requested_quantity
             and abs(local.filled_quantity - broker.filled_quantity) <= 1e-12
-            and local.average_fill_price == broker.average_fill_price
+            and (
+                (local.average_fill_price is None and broker.average_fill_price is None)
+                or (
+                    local.average_fill_price is not None
+                    and broker.average_fill_price is not None
+                    and abs(local.average_fill_price - broker.average_fill_price) <= 1e-12
+                )
+            )
+            and local.fills == broker.fills
         )
 
     def cancel(self, client_order_id: str) -> OrderSnapshot:
@@ -523,8 +557,16 @@ class ExecutionEngine:
         prior = self._orders.get(client_order_id)
         if prior is None:
             raise KeyError(f"unknown local order: {client_order_id}")
-        if prior.status in {OrderStatus.FILLED, OrderStatus.CANCELLED, OrderStatus.REJECTED_BROKER}:
+        if prior.status in {
+            OrderStatus.FILLED,
+            OrderStatus.CANCELLED,
+            OrderStatus.REJECTED_BROKER,
+        }:
             raise ValueError(f"cannot cancel order in state {prior.status.value}")
+        if prior.status is OrderStatus.UNKNOWN:
+            raise ValueError(
+                "cannot cancel an UNKNOWN order before authoritative reconciliation"
+            )
 
         self._transition(client_order_id, OrderStatus.CANCEL_PENDING, "cancellation requested")
         snapshot = self.adapter.cancel(client_order_id)
@@ -605,9 +647,21 @@ class ExecutionEngine:
     def reconcile_positions(self, local: tuple[PositionSnapshot, ...]) -> bool:
         """Compare local positions with the authoritative broker snapshot."""
         broker = self.adapter.positions()
-        local_map = {item.symbol: (item.quantity, item.average_price) for item in local}
-        broker_map = {item.symbol: (item.quantity, item.average_price) for item in broker}
-        return local_map == broker_map
+        local_map = {
+            item.symbol: (float(item.quantity), float(item.average_price))
+            for item in local
+        }
+        broker_map = {
+            item.symbol: (float(item.quantity), float(item.average_price))
+            for item in broker
+        }
+        if set(local_map) != set(broker_map):
+            return False
+        return all(
+            abs(local_map[symbol][0] - broker_map[symbol][0]) <= 1e-12
+            and abs(local_map[symbol][1] - broker_map[symbol][1]) <= 1e-12
+            for symbol in local_map
+        )
 
 
 class ExecutionReadiness:
