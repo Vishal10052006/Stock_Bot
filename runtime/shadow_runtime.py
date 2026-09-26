@@ -7,7 +7,7 @@ That separation is the primary M20 live-order safety boundary.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Iterator
 
@@ -26,6 +26,7 @@ from market.data.validation import MarketEventValidator
 from .config import ShadowRuntimeConfig
 from .health import ShadowHealth
 from .mode import RuntimeSafety, load_runtime_safety
+from .shadow_candles import ShadowCandleBuffer
 
 
 @dataclass(slots=True)
@@ -38,6 +39,7 @@ class ShadowRuntime:
     pipeline: RealtimeMarketDataPipeline
     metrics: DataQualityMetrics
     health: ShadowHealth
+    candle_buffer: ShadowCandleBuffer = field(default_factory=ShadowCandleBuffer)
 
     @classmethod
     def from_environment(
@@ -87,6 +89,7 @@ class ShadowRuntime:
             health=ShadowHealth(
                 started_at=datetime.now(timezone.utc),
             ),
+            candle_buffer=ShadowCandleBuffer(),
         )
 
     def start(self) -> None:
@@ -99,6 +102,7 @@ class ShadowRuntime:
         self.safety.assert_safe()
         for candle in self.pipeline.run():
             self.health.record_candle()
+            self.candle_buffer.append(candle)
             yield candle
 
     def stop(self) -> None:
