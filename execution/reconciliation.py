@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import hashlib
+import math
 import json
 from enum import Enum
 
@@ -23,10 +24,10 @@ class BrokerPosition:
     def __post_init__(self) -> None:
         if not self.symbol.strip():
             raise ValueError("symbol must not be empty")
-        if self.quantity < 0:
-            raise ValueError("quantity must not be negative")
-        if self.average_price < 0:
-            raise ValueError("average_price must not be negative")
+        if not math.isfinite(float(self.quantity)) or self.quantity < 0:
+            raise ValueError("quantity must be finite and non-negative")
+        if not math.isfinite(float(self.average_price)) or self.average_price < 0:
+            raise ValueError("average_price must be finite and non-negative")
 
 
 @dataclass(frozen=True, slots=True)
