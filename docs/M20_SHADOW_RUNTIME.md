@@ -90,3 +90,8 @@ M20.2 is complete when a real Upstox market-data session demonstrates:
 
 M20 completion is evidence of a working real-market data path, not
 authorization for live trading.
+
+
+## M20.3 — causal shadow candle buffer
+
+Completed canonical candles are retained in a bounded in-memory buffer per symbol. The buffer enforces chronological ordering, rejects duplicate timestamps, keeps symbols independent, and exposes an OHLCV DataFrame for later causal feature/context stages. It does not generate signals, authorize trades, or call a broker.
