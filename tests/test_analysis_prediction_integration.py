@@ -10,6 +10,7 @@ from ml.integration.analysis_prediction import predict_from_analysis
 from ml.models.logistic import LogisticOutcomeModel
 from ml.preprocessing.pipeline import FeaturePreprocessor
 from ml.preprocessing.models import NUMERIC_FEATURES, BOOLEAN_FEATURES
+from market.features.builder import FEATURE_COLUMNS
 from monitoring.runtime import MonitoringRuntime
 
 
@@ -38,7 +39,8 @@ def _training_frame(rows: int = 12) -> tuple[pd.DataFrame, pd.Series]:
         name="label",
     )
 
-    return pd.DataFrame(data), labels
+    frame = pd.DataFrame(data)
+    return frame.loc[:, FEATURE_COLUMNS], labels
 
 
 def test_ab25_analysis_context_produces_phase9_probabilities() -> None:
