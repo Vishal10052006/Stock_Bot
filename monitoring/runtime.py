@@ -22,6 +22,7 @@ from .pipeline import MonitoringPipeline
 from .performance import PerformanceMonitoringSnapshot
 from .regime import RegimeMonitoringSnapshot
 from .models import ModelMonitoringSnapshot
+from .journal import MonitoringEvent
 
 
 @dataclass(frozen=True, slots=True)
