@@ -145,9 +145,10 @@ class ShadowRuntime:
             raise RuntimeError("decision recorder is not configured")
         if self.monitoring is not None:
             self.decision_recorder.paper_loop.monitoring = self.monitoring.monitoring
+        before_count = len(self.decision_recorder.traces())
         result = self.decision_recorder.run(rows)
         if self.session_journal is not None:
-            for trace in self.decision_recorder.traces():
+            for trace in self.decision_recorder.traces()[before_count:]:
                 self.session_journal.record(
                     event_type="SHADOW_DECISION",
                     payload=trace.to_mapping(),
