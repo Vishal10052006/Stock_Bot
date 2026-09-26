@@ -111,3 +111,7 @@ Each shadow session can now use an append-only JSONL journal with a stable sessi
 ## M20.6 — runtime-integrated session journaling
 
 The M20 runtime now optionally records its own lifecycle into the append-only shadow session journal. Set `STOCK_BOT_SHADOW_JOURNAL` to enable persistence; if unset, no journal file is created. The runtime records session start, each completed candle, and session stop, and exposes the journal evidence in its operational snapshot. The journal remains observational and cannot submit broker orders.
+
+## M20.7 — deterministic session manifest
+
+Each persisted shadow session now exposes a deterministic SHA-256 manifest fingerprint binding the session ID, SHADOW safety posture, configured symbols, timeframe, completed-candle count, and journal-event count. The manifest is evidence metadata only and rejects any live-order or non-SHADOW configuration.
