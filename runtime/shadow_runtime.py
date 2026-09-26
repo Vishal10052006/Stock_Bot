@@ -29,6 +29,7 @@ from .health import ShadowHealth
 from .mode import RuntimeSafety, load_runtime_safety
 from .shadow_candles import ShadowCandleBuffer
 from .shadow_session import ShadowSessionJournal
+from .shadow_manifest import ShadowSessionManifest
 
 
 @dataclass(slots=True)
@@ -143,7 +144,20 @@ class ShadowRuntime:
             for symbol in self.candle_buffer.symbols()
         }
         if self.session_journal is not None:
-            evidence["session_journal"] = self.session_journal.evidence()
+            journal_evidence = self.session_journal.evidence()
+            evidence["session_journal"] = journal_evidence
+            evidence["session_manifest"] = ShadowSessionManifest(
+                session_id=self.session_journal.session_id,
+                mode=str(evidence["mode"]),
+                live_broker_order_submission=bool(
+                    evidence["live_broker_order_submission"]
+                ),
+                symbols=self.config.symbols,
+                timeframe_minutes=self.config.timeframe_minutes,
+                candles_completed=self.health.candles_completed,
+                journal_event_count=int(journal_evidence["event_count"]),
+            ).evidence()
         else:
             evidence["session_journal"] = None
+            evidence["session_manifest"] = None
         return evidence
