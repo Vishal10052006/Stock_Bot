@@ -101,7 +101,7 @@ def _manifest_provenance(
 
 
 def _load_input(path: Path, manifest_path: Path | None = None) -> pd.DataFrame:
-    """Load the existing strategy-ready artifact without altering its rows."""
+    """Load the strategy-ready artifact while preserving candidate inputs."""
     if manifest_path is not None:
         if not manifest_path.is_file():
             raise FileNotFoundError(manifest_path)
@@ -123,7 +123,12 @@ def _load_input(path: Path, manifest_path: Path | None = None) -> pd.DataFrame:
             f"{missing}"
         )
 
-    return rows.loc[:, list(REQUIRED_COLUMNS)].copy()
+    # Preserve all decision-time columns supplied by the frozen artifact.
+    # HistoricalBacktestEngine -> candidate construction requires fields such
+    # as atr_14/support_20/resistance_20/swing levels when they are present.
+    # Selecting only REQUIRED_COLUMNS here silently stripped those fields and
+    # converted candidate-construction failures into GENERIC_REJECT results.
+    return rows.copy()
 
 
 def _drawdown(outcomes, *, starting_equity: float) -> float:
