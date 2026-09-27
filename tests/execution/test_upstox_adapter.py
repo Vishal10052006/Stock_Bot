@@ -285,3 +285,60 @@ def test_positions_reject_malformed_numeric_values():
     }
     with pytest.raises(ValueError, match="quantity"):
         adapter(client).positions()
+
+
+def test_production_position_transport_normalizes_provider_response():
+    from execution.adapters.upstox_positions import fetch_upstox_positions
+
+    result = fetch_upstox_positions(
+        lambda: {
+            "status": "success",
+            "data": [
+                {
+                    "trading_symbol": "ITC",
+                    "quantity": 12,
+                    "average_price": 455.25,
+                },
+                {
+                    "trading_symbol": "TCS",
+                    "quantity": -3,
+                    "average_price": 3005.0,
+                },
+            ],
+        }
+    )
+
+    assert result["status"] == "success"
+    assert result["data"]["positions"][0]["trading_symbol"] == "ITC"
+    assert result["data"]["positions"][1]["quantity"] == -3
+
+
+@pytest.mark.parametrize(
+    "response",
+    [
+        None,
+        {"status": "success", "data": {}},
+        {"status": "success", "data": [{"trading_symbol": "ITC"}, "bad"]},
+    ],
+)
+def test_production_position_transport_rejects_malformed_response(response):
+    from execution.adapters.upstox_positions import (
+        UpstoxPositionTransportError,
+        fetch_upstox_positions,
+    )
+
+    with pytest.raises(UpstoxPositionTransportError):
+        fetch_upstox_positions(lambda response=response: response)
+
+
+def test_production_position_transport_wraps_provider_failure():
+    from execution.adapters.upstox_positions import (
+        UpstoxPositionTransportError,
+        fetch_upstox_positions,
+    )
+
+    def failing_request():
+        raise TimeoutError("provider timeout")
+
+    with pytest.raises(UpstoxPositionTransportError, match="request failed"):
+        fetch_upstox_positions(failing_request)
