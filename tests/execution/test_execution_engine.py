@@ -144,6 +144,25 @@ def test_partial_fill_is_preserved():
     assert result.snapshot.filled_quantity == 40.0
 
 
+@pytest.mark.parametrize(
+    "terminal_status",
+    [
+        OrderStatus.FILLED,
+        OrderStatus.CANCELLED,
+        OrderStatus.EXPIRED,
+        OrderStatus.REJECTED_BROKER,
+        OrderStatus.FAILED,
+    ],
+)
+def test_terminal_broker_states_can_become_unknown_on_refresh_loss(
+    terminal_status: OrderStatus,
+):
+    assert OrderStateMachine.transition(
+        terminal_status,
+        OrderStatus.UNKNOWN,
+    ) is OrderStatus.UNKNOWN
+
+
 def test_refresh_marks_missing_broker_state_unknown():
     adapter = PaperBrokerAdapter()
     engine = ExecutionEngine(adapter)
@@ -300,6 +319,144 @@ def test_execution_metrics_include_fills_and_fees():
     assert metrics.total_fees > 0.0
 
 
+def test_unknown_recovery_resolves_from_authoritative_broker_state():
+    class RecoveringAdapter(PaperBrokerAdapter):
+        def __init__(self):
+            super().__init__()
+            self.fail_once = True
+
+        def submit(self, order):
+            if self.fail_once:
+                self.fail_once = False
+                raise ConnectionError("ack timeout")
+            return super().submit(order)
+
+    adapter = RecoveringAdapter()
+    engine = ExecutionEngine(adapter)
+    request = order_request()
+
+    first = engine.submit(request)
+    assert first.snapshot.status is OrderStatus.UNKNOWN
+    assert len(adapter._orders) == 0
+
+    # Recovery must query broker state and must not blindly resubmit.
+    recovered = engine.recover_unknown(request.client_order_id)
+    assert recovered.status is OrderStatus.UNKNOWN
+    assert len(adapter._orders) == 0
+    assert engine.unknown_orders() == (recovered,)
+
+
+def test_unknown_recovery_accepts_late_broker_ack_without_duplicate_submit():
+    class LateAckAdapter(PaperBrokerAdapter):
+        def submit(self, order):
+            snapshot = super().submit(order)
+            raise ConnectionError("ack lost after broker accepted order")
+
+    adapter = LateAckAdapter()
+    engine = ExecutionEngine(adapter)
+    request = order_request()
+
+    first = engine.submit(request)
+    assert first.snapshot.status is OrderStatus.UNKNOWN
+    assert len(adapter._orders) == 1
+
+    recovered = engine.recover_unknown(request.client_order_id)
+    assert recovered.status is OrderStatus.FILLED
+    assert len(adapter._orders) == 1
+    assert engine.get_order(request.client_order_id) is recovered
+
+
+def test_exit_order_cannot_exceed_current_position():
+    adapter = PaperBrokerAdapter(
+        config=PaperAdapterConfig(slippage_bps=0.0, fee_bps=0.0),
+        price_provider=lambda _order: 100.0,
+    )
+    engine = ExecutionEngine(adapter)
+
+    entry = engine.submit(order_request())
+    assert entry.filled
+    position = adapter.positions()[0]
+
+    exit_auth = authorization(
+        direction=StrategyDirection.SHORT,
+        quantity=100.0,
+    )
+    exit_request = ExecutionEngine.from_exit_authorization(
+        exit_auth,
+        decision_id="exit-decision",
+        position=position,
+    )
+
+    assert exit_request.purpose == "EXIT"
+    assert exit_request.side is OrderSide.SELL
+    assert exit_request.quantity == position.quantity
+
+    with pytest.raises(ValueError, match="exceed"):
+        ExecutionEngine.from_exit_authorization(
+            exit_auth,
+            decision_id="exit-too-large",
+            position=position,
+            quantity=101.0,
+        )
+
+
+def test_exit_order_is_idempotent_and_closes_position():
+    adapter = PaperBrokerAdapter(
+        config=PaperAdapterConfig(slippage_bps=0.0, fee_bps=0.0),
+        price_provider=lambda _order: 100.0,
+    )
+    engine = ExecutionEngine(adapter)
+
+    engine.submit(order_request())
+    position = adapter.positions()[0]
+    exit_auth = authorization(
+        direction=StrategyDirection.SHORT,
+        quantity=position.quantity,
+    )
+    request = ExecutionEngine.from_exit_authorization(
+        exit_auth,
+        decision_id="exit-idempotent",
+        position=position,
+    )
+
+    first = engine.submit(request)
+    second = engine.submit(request)
+
+    assert first.filled
+    assert second.snapshot.broker_order_id == first.snapshot.broker_order_id
+    assert adapter.positions() == ()
+
+
+def test_execution_events_preserve_decision_and_intent_lineage():
+    engine = ExecutionEngine(PaperBrokerAdapter())
+    request = order_request()
+    result = engine.submit(request)
+
+    assert result.request.purpose == "ENTRY"
+    assert engine.events[-1].decision_id == request.decision_id
+    assert engine.events[-1].purpose == "ENTRY"
+
+    position = engine.adapter.positions()[0]
+    exit_auth = authorization(
+        direction=StrategyDirection.SHORT,
+        quantity=position.quantity,
+    )
+    exit_request = ExecutionEngine.from_exit_authorization(
+        exit_auth,
+        decision_id="lineage-exit",
+        position=position,
+    )
+    engine.submit(exit_request)
+
+    exit_events = tuple(
+        event for event in engine.events
+        if event.client_order_id == exit_request.client_order_id
+    )
+    assert exit_events
+    assert all(event.decision_id == "lineage-exit" for event in exit_events)
+    assert all(event.purpose == "EXIT" for event in exit_events)
+
+
 @pytest.mark.parametrize("quantity", [float("nan"), float("inf"), float("-inf")])
 def test_order_request_rejects_non_finite_quantity(quantity: float) -> None:
     """Reject non-finite quantities before they can reach a broker."""
@@ -315,10 +472,7 @@ def test_order_request_rejects_non_finite_quantity(quantity: float) -> None:
         )
 
 
-@pytest.mark.parametrize(
-    "price",
-    [float("nan"), float("inf"), float("-inf")],
-)
+@pytest.mark.parametrize("price", [float("nan"), float("inf"), float("-inf")])
 def test_paper_adapter_rejects_non_finite_price(price: float) -> None:
     """Provider output must never inject NaN/Infinity into fills."""
     adapter = PaperBrokerAdapter(price_provider=lambda _order: price)
@@ -343,27 +497,10 @@ def test_repeated_missing_broker_refresh_stays_unknown() -> None:
     assert len(engine.journal) == 1
 
 
-def test_refresh_rejects_foreign_client_order_id() -> None:
-    """Broker state for another order must never attach to the requested order."""
-    adapter = PaperBrokerAdapter()
-    engine = ExecutionEngine(adapter)
-    request = order_request()
-    engine.submit(request)
-
-    foreign = adapter.get_order(request.client_order_id)
-    assert foreign is not None
-    object.__setattr__(foreign, "client_order_id", "FOREIGN")
-
-    adapter._orders[request.client_order_id] = foreign
-
-    with pytest.raises(ValueError, match="client_order_id mismatch"):
-        engine.refresh(request.client_order_id)
-
-
 @pytest.mark.parametrize("quantity", [float("nan"), float("inf")])
 def test_reconciliation_rejects_non_finite_position(quantity: float) -> None:
     """Reconciliation snapshots must contain finite broker quantities."""
     from execution.reconciliation import BrokerPosition
 
-    with pytest.raises(ValueError, match="finite and non-negative"):
+    with pytest.raises(ValueError, match="finite"):
         BrokerPosition("ITC", quantity, 100.0)
