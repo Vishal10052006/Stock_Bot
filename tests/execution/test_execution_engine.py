@@ -497,3 +497,89 @@ def test_repeated_missing_broker_refresh_stays_unknown() -> None:
     assert first.status is OrderStatus.UNKNOWN
     assert second.status is OrderStatus.UNKNOWN
     assert len(engine.journal) == 1
+
+
+def test_partial_exit_reduces_signed_position_without_reversing():
+    adapter = PaperBrokerAdapter(
+        config=PaperAdapterConfig(slippage_bps=0.0, fee_bps=0.0),
+        price_provider=lambda _order: 100.0,
+    )
+    engine = ExecutionEngine(adapter)
+
+    entry_auth = authorization(
+        direction=StrategyDirection.LONG,
+        quantity=100.0,
+    )
+    entry = engine.submit(
+        ExecutionEngine.from_authorization(
+            entry_auth,
+            decision_id="partial-exit-entry",
+        )
+    )
+    assert entry.filled
+
+    position = adapter.positions()[0]
+    exit_auth = authorization(
+        direction=StrategyDirection.SHORT,
+        quantity=40.0,
+    )
+    exit = engine.submit(
+        ExecutionEngine.from_exit_authorization(
+            exit_auth,
+            decision_id="partial-exit-long",
+            position=position,
+            quantity=40.0,
+        )
+    )
+
+    assert exit.filled
+    assert adapter.positions() == (
+        type(position)(
+            symbol="ITC",
+            quantity=60.0,
+            average_price=100.0,
+        ),
+    )
+
+
+def test_partial_short_exit_reduces_signed_position_without_reversing():
+    adapter = PaperBrokerAdapter(
+        config=PaperAdapterConfig(slippage_bps=0.0, fee_bps=0.0),
+        price_provider=lambda _order: 100.0,
+    )
+    engine = ExecutionEngine(adapter)
+
+    entry_auth = authorization(
+        direction=StrategyDirection.SHORT,
+        quantity=100.0,
+    )
+    entry = engine.submit(
+        ExecutionEngine.from_authorization(
+            entry_auth,
+            decision_id="partial-short-entry",
+        )
+    )
+    assert entry.filled
+
+    position = adapter.positions()[0]
+    exit_auth = authorization(
+        direction=StrategyDirection.LONG,
+        quantity=30.0,
+    )
+    exit = engine.submit(
+        ExecutionEngine.from_exit_authorization(
+            exit_auth,
+            decision_id="partial-short-exit",
+            position=position,
+            quantity=30.0,
+        )
+    )
+
+    assert exit.filled
+    assert adapter.positions() == (
+        type(position)(
+            symbol="ITC",
+            quantity=-70.0,
+            average_price=100.0,
+        ),
+    )
