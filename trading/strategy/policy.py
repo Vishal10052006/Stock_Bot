@@ -14,10 +14,16 @@ def probability_triplet(prediction: object) -> tuple[float, float, float] | None
         return None
 
     try:
-        values = tuple(
-            float(probabilities.iloc[0][column])
-            for column in ("LONG_SUCCESS", "SHORT_SUCCESS", "NO_EDGE")
-        )
+        if hasattr(probabilities, "iloc"):
+            values = tuple(
+                float(probabilities.iloc[0][column])
+                for column in ("LONG_SUCCESS", "SHORT_SUCCESS", "NO_EDGE")
+            )
+        else:
+            values = tuple(
+                float(probabilities[column])
+                for column in ("LONG_SUCCESS", "SHORT_SUCCESS", "NO_EDGE")
+            )
     except (AttributeError, IndexError, KeyError, TypeError, ValueError):
         return None
 
