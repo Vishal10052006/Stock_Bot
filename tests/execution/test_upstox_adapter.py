@@ -285,3 +285,147 @@ def test_positions_reject_malformed_numeric_values():
     }
     with pytest.raises(ValueError, match="quantity"):
         adapter(client).positions()
+
+
+def test_production_position_transport_normalizes_provider_response():
+    from execution.adapters.upstox_positions import fetch_upstox_positions
+
+    result = fetch_upstox_positions(
+        lambda: {
+            "status": "success",
+            "data": [
+                {
+                    "trading_symbol": "ITC",
+                    "quantity": 12,
+                    "average_price": 455.25,
+                },
+                {
+                    "trading_symbol": "TCS",
+                    "quantity": -3,
+                    "average_price": 3005.0,
+                },
+            ],
+        }
+    )
+
+    assert result["status"] == "success"
+    assert result["data"]["positions"][0]["trading_symbol"] == "ITC"
+    assert result["data"]["positions"][1]["quantity"] == -3
+
+
+@pytest.mark.parametrize(
+    "response",
+    [
+        None,
+        {"status": "success", "data": {}},
+        {"status": "success", "data": [{"trading_symbol": "ITC"}, "bad"]},
+    ],
+)
+def test_production_position_transport_rejects_malformed_response(response):
+    from execution.adapters.upstox_positions import (
+        UpstoxPositionTransportError,
+        fetch_upstox_positions,
+    )
+
+    with pytest.raises(UpstoxPositionTransportError):
+        fetch_upstox_positions(lambda response=response: response)
+
+
+def test_production_position_transport_wraps_provider_failure():
+    from execution.adapters.upstox_positions import (
+        UpstoxPositionTransportError,
+        fetch_upstox_positions,
+    )
+
+    def failing_request():
+        raise TimeoutError("provider timeout")
+
+    with pytest.raises(UpstoxPositionTransportError, match="request failed"):
+        fetch_upstox_positions(failing_request)
+
+
+def test_injected_position_provider_reaches_adapter_contract():
+    client = FakeUpstoxClient()
+    client.positions_response = {"data": {"positions": []}}
+
+    from execution.adapters.upstox_positions import fetch_upstox_positions
+
+    def provider():
+        return fetch_upstox_positions(
+            lambda: {
+                "status": "success",
+                "data": [
+                    {
+                        "trading_symbol": "ITC",
+                        "quantity": 7,
+                        "average_price": 452.5,
+                    }
+                ],
+            }
+        )
+
+    configured = UpstoxAdapterConfig(
+        api_base_url="https://api-hft.upstox.com",
+        enabled=True,
+        instrument_token_resolver=lambda symbol: f"NSE_EQ|{symbol}",
+        position_provider=provider,
+    )
+    positions = UpstoxBrokerAdapter(configured, client=client).positions()
+
+    assert positions == (PositionSnapshot("ITC", 7, 452.5),)
+    assert client.positions_response["data"]["positions"] == []
+
+
+def test_injected_position_provider_failure_propagates_without_fabricating_positions():
+    client = FakeUpstoxClient()
+
+    def failing_provider():
+        raise RuntimeError("position provider unavailable")
+
+    configured = UpstoxAdapterConfig(
+        api_base_url="https://api-hft.upstox.com",
+        enabled=True,
+        instrument_token_resolver=lambda symbol: f"NSE_EQ|{symbol}",
+        position_provider=failing_provider,
+    )
+    with pytest.raises(RuntimeError, match="provider unavailable"):
+        UpstoxBrokerAdapter(configured, client=client).positions()
+
+
+def test_production_position_client_uses_read_only_positions_endpoint(monkeypatch):
+    from execution.adapters.upstox_production_positions import (
+        PRODUCTION_POSITIONS_URL,
+        UpstoxProductionPositionClient,
+    )
+
+    seen = {}
+
+    class Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self):
+            return b'{"status":"success","data":[]}'
+
+    def fake_urlopen(request, timeout):
+        seen["url"] = request.full_url
+        seen["method"] = request.method
+        seen["auth"] = request.get_header("Authorization")
+        return Response()
+
+    monkeypatch.setattr(
+        "execution.adapters.upstox_production_positions.urlopen",
+        fake_urlopen,
+    )
+
+    result = UpstoxProductionPositionClient("real-token-for-test-only").get_positions()
+
+    assert seen == {
+        "url": PRODUCTION_POSITIONS_URL,
+        "method": "GET",
+        "auth": "Bearer real-token-for-test-only",
+    }
+    assert result == {"status": "success", "data": []}
