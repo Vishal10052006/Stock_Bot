@@ -16,6 +16,9 @@ class FakeOrderV3:
 
 
 class FakeOrder:
+    def __init__(self, api_client) -> None:
+        self.api_client = api_client
+
     def get_order_details(self, *args, **kwargs):  # pragma: no cover
         raise AssertionError("sandbox cancellation must not query order history")
 
