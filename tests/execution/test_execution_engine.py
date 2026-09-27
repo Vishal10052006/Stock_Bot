@@ -511,6 +511,20 @@ def test_paper_adapter_rejects_non_finite_price(price: float) -> None:
     assert "positive and finite" in result.error
 
 
+def test_unknown_refresh_preserves_persisted_latency():
+    adapter = PaperBrokerAdapter()
+    engine = ExecutionEngine(adapter)
+    request = order_request()
+    result = engine.submit(request)
+    assert result.latency_ms >= 0.0
+
+    adapter._orders.pop(request.client_order_id)
+    refreshed = engine.refresh(request.client_order_id)
+
+    assert refreshed.status is OrderStatus.UNKNOWN
+    assert refreshed.latency_ms == result.latency_ms
+
+
 def test_repeated_missing_broker_refresh_stays_unknown() -> None:
     """Repeated UNKNOWN refreshes are idempotent and do not create an invalid transition."""
     adapter = PaperBrokerAdapter()
