@@ -260,12 +260,29 @@ class UpstoxBrokerAdapter(BrokerAdapter):
         positions: list[PositionSnapshot] = []
         for raw in raw_positions:
             if not isinstance(raw, Mapping):
-                continue
+                raise ValueError("Upstox position entry must be an object")
             symbol = str(raw.get("trading_symbol") or raw.get("symbol") or "")
             if not symbol:
                 raise ValueError("Upstox position missing trading symbol")
-            quantity = float(raw.get("quantity", raw.get("net_quantity", 0)))
-            average = float(raw.get("average_price", raw.get("average_buy_price", 0)))
+
+            try:
+                quantity = float(raw.get("quantity", raw.get("net_quantity", 0)))
+            except (TypeError, ValueError) as exc:
+                raise ValueError("Upstox position quantity must be numeric") from exc
+            if not math.isfinite(quantity):
+                raise ValueError("Upstox position quantity must be finite")
+
+            try:
+                average = float(
+                    raw.get("average_price", raw.get("average_buy_price", 0))
+                )
+            except (TypeError, ValueError) as exc:
+                raise ValueError("Upstox position average price must be numeric") from exc
+            if not math.isfinite(average) or average < 0:
+                raise ValueError(
+                    "Upstox position average price must be non-negative and finite"
+                )
+
             positions.append(PositionSnapshot(symbol, quantity, average))
         return tuple(positions)
 
