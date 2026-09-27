@@ -455,3 +455,43 @@ def test_execution_events_preserve_decision_and_intent_lineage():
     assert exit_events
     assert all(event.decision_id == "lineage-exit" for event in exit_events)
     assert all(event.purpose == "EXIT" for event in exit_events)
+
+
+@pytest.mark.parametrize("quantity", [float("nan"), float("inf"), float("-inf")])
+def test_order_request_rejects_non_finite_quantity(quantity: float) -> None:
+    """Reject non-finite quantities before they can reach a broker."""
+    auth = authorization()
+    with pytest.raises(ValueError, match="positive and finite"):
+        OrderRequest(
+            client_order_id="SB-nonfinite",
+            decision_id="nonfinite",
+            symbol="ITC",
+            side=OrderSide.BUY,
+            quantity=quantity,
+            authorization=auth,
+        )
+
+
+@pytest.mark.parametrize("price", [float("nan"), float("inf"), float("-inf")])
+def test_paper_adapter_rejects_non_finite_price(price: float) -> None:
+    """Provider output must never inject NaN/Infinity into fills."""
+    adapter = PaperBrokerAdapter(price_provider=lambda _order: price)
+    engine = ExecutionEngine(adapter)
+    with pytest.raises(ValueError, match="positive and finite"):
+        engine.submit(order_request())
+
+
+def test_repeated_missing_broker_refresh_stays_unknown() -> None:
+    """Repeated UNKNOWN refreshes are idempotent and do not create an invalid transition."""
+    adapter = PaperBrokerAdapter()
+    engine = ExecutionEngine(adapter)
+    request = order_request()
+    engine.submit(request)
+    adapter._orders.pop(request.client_order_id)
+
+    first = engine.refresh(request.client_order_id)
+    second = engine.refresh(request.client_order_id)
+
+    assert first.status is OrderStatus.UNKNOWN
+    assert second.status is OrderStatus.UNKNOWN
+    assert len(engine.journal) == 1
