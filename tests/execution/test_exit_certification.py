@@ -3,7 +3,7 @@ from execution.exit_certification import run_exit_execution_certification
 
 def test_exit_execution_certification_matrix_passes():
     report = run_exit_execution_certification()
-    assert report.passed
+    assert report.passed, report.failed
     assert not report.failed
     assert {case.name for case in report.cases} == {
         "full_long_stop_exit",
