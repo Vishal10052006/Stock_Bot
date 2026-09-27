@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
+import math
 
 import pandas as pd
 
@@ -32,10 +33,17 @@ class PaperTradingConfig:
     initial_equity: float = 100_000.0
 
     def __post_init__(self) -> None:
-        if self.slippage_bps < 0 or self.fee_bps < 0:
-            raise ValueError("slippage_bps and fee_bps must be non-negative")
-        if self.initial_equity <= 0:
-            raise ValueError("initial_equity must be positive")
+        if (
+            not math.isfinite(float(self.slippage_bps))
+            or not math.isfinite(float(self.fee_bps))
+            or self.slippage_bps < 0
+            or self.fee_bps < 0
+        ):
+            raise ValueError(
+                "slippage_bps and fee_bps must be finite and non-negative"
+            )
+        if not math.isfinite(float(self.initial_equity)) or self.initial_equity <= 0:
+            raise ValueError("initial_equity must be positive and finite")
 
 
 @dataclass(frozen=True, slots=True)
@@ -56,10 +64,15 @@ class PaperOrder:
     def __post_init__(self) -> None:
         if pd.Timestamp(self.timestamp).tzinfo is None:
             raise ValueError("paper order timestamp must be timezone-aware")
-        if self.quantity <= 0:
-            raise ValueError("quantity must be positive")
-        if self.requested_price <= 0 or self.fill_price <= 0:
-            raise ValueError("prices must be positive")
+        if not math.isfinite(float(self.quantity)) or self.quantity <= 0:
+            raise ValueError("quantity must be positive and finite")
+        if (
+            not math.isfinite(float(self.requested_price))
+            or not math.isfinite(float(self.fill_price))
+            or self.requested_price <= 0
+            or self.fill_price <= 0
+        ):
+            raise ValueError("prices must be positive and finite")
 
 
 @dataclass(frozen=True, slots=True)
@@ -75,10 +88,14 @@ class PaperPosition:
     def __post_init__(self) -> None:
         if self.direction is StrategyDirection.NO_TRADE:
             raise ValueError("paper position direction cannot be NO_TRADE")
-        if self.quantity < 0:
-            raise ValueError("position quantity cannot be negative")
-        if self.quantity > 0 and self.average_price <= 0:
-            raise ValueError("average_price must be positive for open positions")
+        if not math.isfinite(float(self.quantity)) or self.quantity < 0:
+            raise ValueError("position quantity must be finite and non-negative")
+        if (
+            not math.isfinite(float(self.average_price))
+            or self.average_price < 0
+            or (self.quantity > 0 and self.average_price <= 0)
+        ):
+            raise ValueError("average_price must be finite and positive for open positions")
 
 
 class PaperTradingRuntime:
@@ -133,9 +150,9 @@ class PaperTradingRuntime:
                 )
 
             price = float(prices[symbol])
-            if price <= 0:
+            if not math.isfinite(price) or price <= 0:
                 raise ValueError(
-                    f"mark price for {symbol} must be positive"
+                    f"mark price for {symbol} must be positive and finite"
                 )
 
             if position.direction is StrategyDirection.LONG:
@@ -176,8 +193,13 @@ class PaperTradingRuntime:
         """Simulate a fill only when ExecutionAuthorization is approved."""
         if not isinstance(authorization, ExecutionAuthorization):
             raise TypeError("authorization must be an ExecutionAuthorization")
-        if price <= 0 or quantity <= 0:
-            raise ValueError("price and quantity must be positive")
+        if (
+            not math.isfinite(float(price))
+            or not math.isfinite(float(quantity))
+            or price <= 0
+            or quantity <= 0
+        ):
+            raise ValueError("price and quantity must be positive and finite")
 
         symbol = authorization.symbol.upper()
 
@@ -301,8 +323,8 @@ class PaperTradingRuntime:
         position = self._positions.get(symbol)
         if position is None:
             return 0.0
-        if price <= 0:
-            raise ValueError("mark price must be positive")
+        if not math.isfinite(float(price)) or price <= 0:
+            raise ValueError("mark price must be positive and finite")
         if position.direction is StrategyDirection.LONG:
             unrealized = (
                 price - position.average_price
