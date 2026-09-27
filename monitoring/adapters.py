@@ -1,91 +1,77 @@
+"""Adapters from existing STOCK_BOT domains into monitoring telemetry."""
+
 from __future__ import annotations
 
-"""Read-only adapters from existing subsystem telemetry into MonitoringPipeline.
-
-Adapters deliberately accept protocol-shaped objects instead of owning or
-mutating Market Bot, Analysis Bot, or data-pipeline state.
-"""
-
-from typing import Any
-
-from .features import FeatureMonitoringSnapshot
-from .health import ComponentHealth, HealthStatus
-from .system import SystemMonitoringSnapshot
+from typing import Mapping
 
 
-def market_health(metrics: Any) -> ComponentHealth:
-    """Convert Market Bot observability metrics to central health."""
-    status = (
-        HealthStatus.HEALTHY
-        if bool(metrics.success)
-        else HealthStatus.UNHEALTHY
-    )
-    return ComponentHealth(
-        component="market_bot",
-        status=status,
-        observed_at=str(metrics.timestamp),
-        latency_seconds=float(metrics.latency_seconds),
-        message="market context observed" if metrics.success else "market observation failed",
-        metadata={
-            "benchmark": str(metrics.benchmark),
-            "availability": str(metrics.availability),
-            "quality": metrics.quality,
-            "regime": metrics.regime,
-            "market_version": str(metrics.market_version),
-        },
-    )
+def prediction_payload(telemetry: object) -> Mapping[str, object]:
+    """Convert Phase-9 PredictionTelemetry into a monitoring payload."""
+    timestamp = telemetry.timestamp
+    return {
+        "timestamp": timestamp.isoformat(),
+        "symbol": telemetry.symbol,
+        "model_version": telemetry.model_version,
+        "feature_version": telemetry.feature_version,
+        "long_probability": float(telemetry.long_probability),
+        "short_probability": float(telemetry.short_probability),
+        "no_edge_probability": float(telemetry.no_edge_probability),
+        "predicted_class": telemetry.predicted_class,
+        "regime": telemetry.regime,
+    }
 
 
-def analysis_health(metrics: Any) -> ComponentHealth:
-    """Convert Analysis Bot observability metrics to central health."""
-    status = (
-        HealthStatus.HEALTHY
-        if bool(metrics.success) and float(metrics.completeness) >= 1.0
-        else HealthStatus.DEGRADED
-        if bool(metrics.success)
-        else HealthStatus.UNHEALTHY
-    )
-    return ComponentHealth(
-        component="analysis_bot",
-        status=status,
-        observed_at="analysis-observation",
-        latency_seconds=float(metrics.latency_seconds),
-        message="analysis context observed",
-        metadata={
-            "feature_count": int(metrics.feature_count),
-            "missing_or_invalid": int(metrics.missing_or_invalid),
-            "completeness": float(metrics.completeness),
-            "analysis_version": str(metrics.analysis_version),
-        },
-    )
+def decision_payload(decision: object) -> Mapping[str, object]:
+    """Convert a TradeDecisionRecord-compatible object."""
+    return {
+        "trade_id": decision.trade_id,
+        "timestamp": decision.timestamp.isoformat(),
+        "symbol": decision.symbol,
+        "direction": decision.direction,
+        "market_regime": decision.market_regime,
+        "model_version": decision.model_version,
+        "probability": decision.probability,
+        "strategy_version": decision.strategy_version,
+        "risk_version": decision.risk_version,
+        "execution_version": decision.execution_version,
+        "failure_reason": decision.failure_reason,
+    }
 
 
-def data_quality_snapshot(snapshot: Any) -> SystemMonitoringSnapshot:
-    """Map the existing Market data-quality snapshot without mutation."""
-    return SystemMonitoringSnapshot(
-        total_events=int(snapshot.events_received),
-        failed_events=int(snapshot.events_rejected),
-        stale_events=int(snapshot.stale_events),
-        duplicate_events=int(snapshot.duplicate_events),
-        invalid_events=int(snapshot.events_rejected),
-        missing_data_gaps=int(snapshot.missing_data_gaps),
-        latency_avg_ms=(
-            None
-            if snapshot.latency_avg_ms is None
-            else float(snapshot.latency_avg_ms)
-        ),
-        latency_p95_ms=(
-            None
-            if snapshot.latency_p95_ms is None
-            else float(snapshot.latency_p95_ms)
-        ),
-    )
+def outcome_payload(outcome: object) -> Mapping[str, object]:
+    """Convert a TradeJournalRecord-compatible object."""
+    return {
+        "journal_id": outcome.journal_id,
+        "trade_id": outcome.trade_id,
+        "symbol": outcome.symbol,
+        "direction": outcome.direction,
+        "entry_time": outcome.entry_time.isoformat(),
+        "exit_time": outcome.exit_time.isoformat(),
+        "gross_pnl": float(outcome.gross_pnl),
+        "fees": float(outcome.fees),
+        "slippage_cost": float(outcome.slippage_cost),
+        "net_pnl": float(outcome.net_pnl),
+        "holding_minutes": float(outcome.holding_minutes),
+        "mae": float(outcome.mae),
+        "mfe": float(outcome.mfe),
+    }
 
 
-def analysis_feature_snapshot(metrics: Any) -> FeatureMonitoringSnapshot:
-    """Map Analysis Bot feature-quality telemetry to feature monitoring."""
-    return FeatureMonitoringSnapshot(
-        feature_count=int(metrics.feature_count),
-        invalid_count=int(metrics.missing_or_invalid),
-        missing_count=int(metrics.missing_or_invalid),
-    )
+def safety_payload(decision: object) -> Mapping[str, object]:
+    """Convert an IndependentSafetyGate decision."""
+    block = getattr(decision.block, "value", decision.block)
+    return {
+        "allowed": bool(decision.allowed),
+        "block": str(block),
+        "reason": decision.reason,
+    }
+
+
+def reconciliation_payload(report: object) -> Mapping[str, object]:
+    """Convert a BrokerReconciler report."""
+    status = getattr(report.status, "value", report.status)
+    return {
+        "status": str(status),
+        "safe": bool(report.safe),
+        "mismatches": list(report.mismatches),
+    }

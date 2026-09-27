@@ -1,48 +1,89 @@
+"""Metric primitives for M-1 through M-8 monitoring.
+
+References:
+    STOCK_BOT Phase 23 monitoring requirements.
+    TRADING_SPECIFICATION.md.
+"""
+
 from __future__ import annotations
+
+from collections import defaultdict
 from dataclasses import dataclass
-from datetime import datetime, timezone
-import math
+from math import inf
+from typing import Iterable, Mapping
 
-@dataclass(frozen=True, slots=True)
-class MetricSample:
-    """One timestamped scalar metric."""
-    name: str
-    value: float
-    timestamp: str
-    labels: dict[str, str] | None = None
 
-    def __post_init__(self) -> None:
-        if not self.name.strip() or not self.timestamp.strip():
-            raise ValueError("name and timestamp must be non-empty")
-        value = float(self.value)
-        if not math.isfinite(value):
-            raise ValueError("value must be finite")
-        object.__setattr__(self, "value", value)
-        object.__setattr__(self, "labels", dict(self.labels or {}))
+@dataclass(slots=True)
+class Counter:
+    """Monotonic integer counter for operational events."""
 
-class MetricsCollector:
-    """Bounded in-memory collector for local monitoring."""
-    def __init__(self, max_samples: int = 50_000) -> None:
-        if max_samples <= 0:
-            raise ValueError("max_samples must be positive")
-        self.max_samples = int(max_samples)
-        self._samples: list[MetricSample] = []
+    value: int = 0
 
-    def record(self, name: str, value: float, *, labels: dict[str, str] | None = None, timestamp: str | None = None) -> MetricSample:
-        sample = MetricSample(name, value, timestamp or datetime.now(timezone.utc).isoformat(), labels)
-        self._samples.append(sample)
-        if len(self._samples) > self.max_samples:
-            del self._samples[:len(self._samples) - self.max_samples]
-        return sample
+    def inc(self, amount: int = 1) -> None:
+        if amount < 0:
+            raise ValueError("counter increment must be non-negative")
+        self.value += amount
 
-    def snapshot(self) -> tuple[MetricSample, ...]:
-        return tuple(self._samples)
 
-    def values(self, name: str) -> tuple[float, ...]:
-        return tuple(s.value for s in self._samples if s.name == name)
+@dataclass(slots=True)
+class MetricSeries:
+    """Small in-memory series for latency/slippage-style observations."""
 
-    def latest(self, name: str) -> MetricSample | None:
-        for sample in reversed(self._samples):
-            if sample.name == name:
-                return sample
-        return None
+    values: list[float]
+
+    def __init__(self) -> None:
+        self.values = []
+
+    def observe(self, value: float) -> None:
+        self.values.append(float(value))
+
+    @property
+    def count(self) -> int:
+        return len(self.values)
+
+    @property
+    def mean(self) -> float | None:
+        return None if not self.values else sum(self.values) / len(self.values)
+
+    @property
+    def minimum(self) -> float | None:
+        return None if not self.values else min(self.values)
+
+    @property
+    def maximum(self) -> float | None:
+        return None if not self.values else max(self.values)
+
+
+class MonitoringMetrics:
+    """Process-local counters and series used to build monitoring snapshots."""
+
+    def __init__(self) -> None:
+        self.counters: dict[str, Counter] = defaultdict(Counter)
+        self.series: dict[str, MetricSeries] = defaultdict(MetricSeries)
+
+    def increment(self, name: str, amount: int = 1) -> None:
+        self.counters[name].inc(amount)
+
+    def observe(self, name: str, value: float) -> None:
+        self.series[name].observe(value)
+
+    def counter_value(self, name: str) -> int:
+        return self.counters[name].value
+
+    def series_stats(self, name: str) -> Mapping[str, float | int | None]:
+        series = self.series[name]
+        return {
+            "count": series.count,
+            "mean": series.mean,
+            "min": series.minimum,
+            "max": series.maximum,
+        }
+
+    def snapshot(self) -> Mapping[str, object]:
+        return {
+            "counters": {name: metric.value for name, metric in self.counters.items()},
+            "series": {
+                name: dict(self.series_stats(name))
+                for name in self.series
+            },
+        }
