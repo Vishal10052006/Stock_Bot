@@ -203,3 +203,20 @@ def test_paper_run_derives_equity_latency_and_operational_observations() -> None
     assert snapshot.operational_event_count == 1
     assert snapshot.operational_error_count == 0
     assert snapshot.stale_event_count == 0
+
+
+def test_build_calibration_outcomes_uses_explicit_future_labels() -> None:
+    from experiments.paper_evidence import build_calibration_outcomes
+
+    class Strategy:
+        prediction_class = "LONG_SUCCESS"
+        prediction_probability = 0.80
+
+    class Step:
+        strategy = Strategy()
+
+    class Run:
+        steps = (Step(),)
+
+    assert build_calibration_outcomes(Run(), {0: "LONG_SUCCESS"}) == {0: 1.0}
+    assert build_calibration_outcomes(Run(), {0: "SHORT_SUCCESS"}) == {0: 0.0}
