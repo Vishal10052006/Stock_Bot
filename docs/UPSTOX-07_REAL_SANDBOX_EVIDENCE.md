@@ -30,3 +30,8 @@ The Upstox sandbox announcement describes comprehensive order lifecycle testing 
 ## Required follow-up
 
 Use a sandbox-supported status/cancellation mechanism only after verifying the current provider/SDK capability. Do not weaken the production reconciliation contract to accommodate a sandbox limitation.
+
+
+## Implementation checkpoint
+
+The sandbox transport now uses the sandbox-enabled V3 cancel acknowledgment directly and does not require the SDK sandbox-disabled `/v2/order/history` endpoint. The empirical lifecycle test verifies Place Order V3 followed by Cancel Order V3.
