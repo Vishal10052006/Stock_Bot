@@ -34,6 +34,7 @@ class UpstoxAdapterConfig:
     slice: bool = False
     market_protection: int = -1
     instrument_token_resolver: Callable[[str], str] | None = None
+    position_provider: Callable[[], Mapping[str, Any]] | None = None
 
     def __post_init__(self) -> None:
         if not self.api_base_url.strip():
@@ -251,7 +252,10 @@ class UpstoxBrokerAdapter(BrokerAdapter):
 
     def positions(self) -> tuple[PositionSnapshot, ...]:
         self._require_enabled()
-        response = self.client.get_positions()
+        if self.config.position_provider is not None:
+            response = self.config.position_provider()
+        else:
+            response = self.client.get_positions()
         data = self._data(response)
         raw_positions = data.get("positions", ())
         if not isinstance(raw_positions, (list, tuple)):
