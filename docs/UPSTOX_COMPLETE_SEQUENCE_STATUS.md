@@ -11,6 +11,14 @@
 | UPSTOX-05 | Reconciliation | COMPLETE — software boundary |
 | UPSTOX-06 | Operational certification | COMPLETE — software boundary |
 
+## UPSTOX-08 readiness hardening
+
+The provider adapter now validates Upstox position payload entries at the broker boundary. Non-object entries, malformed numeric fields, non-finite quantities/prices, and negative average prices are rejected before they can enter the canonical reconciliation contract.
+
+Automated coverage is in `tests/execution/test_upstox_adapter.py`.
+
+This hardening does not claim real sandbox position capability and does not weaken the BLOCKED-on-provider-unavailability rule.
+
 ## Remaining external evidence
 
 ### 1. Real sandbox order transaction
