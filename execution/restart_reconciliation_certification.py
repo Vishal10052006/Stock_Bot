@@ -119,8 +119,8 @@ def run_restart_reconciliation_certification(
                     broker_order_id="PAPER-MALFORMED",
                     client_order_id=client_order_id,
                     status=OrderStatus.FILLED,
-                    requested_quantity=999.0,
-                    filled_quantity=999.0,
+                    requested_quantity=100.0,
+                    filled_quantity=50.0,
                     average_fill_price=100.0,
                 )
         adapter = MalformedAdapter(
@@ -134,7 +134,7 @@ def run_restart_reconciliation_certification(
         try:
             restarted.rehydrate((result.request.client_order_id,))
         except ValueError as exc:
-            assert "quantity mismatch" in str(exc)
+            assert "FILLED quantity mismatch" in str(exc)
         else:
             raise AssertionError("malformed broker quantity was accepted")
 
