@@ -54,7 +54,7 @@ The provider-readiness gate therefore remains blocked while any capability requi
 
 The real sandbox test has now passed for the provider-supported transaction boundary: `SUBMIT → BROKER ORDER ID → CANCEL V3 ACK`. This is not equivalent to terminal-state/history certification.
 
-The current Upstox sandbox documentation states that the sandbox currently supports Place, Modify, and Cancel order APIs; the provider also documents Order History and Get Trades for API users, but the official SDK sandbox runtime currently rejects the history endpoint. Therefore the project records the observed sandbox runtime behavior rather than assuming the broader API documentation implies sandbox availability. citeturn0search4turn0search2
+The current Upstox sandbox documentation states that the sandbox currently supports Place, Modify, and Cancel order APIs; the provider also documents Order History and Get Trades for API users, but the official SDK sandbox runtime currently rejects the history endpoint. Therefore the project records the observed sandbox runtime behavior rather than assuming the broader API documentation implies sandbox availability.
 
 ## Next evidence collection
 
