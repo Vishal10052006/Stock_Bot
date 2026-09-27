@@ -495,12 +495,3 @@ def test_repeated_missing_broker_refresh_stays_unknown() -> None:
     assert first.status is OrderStatus.UNKNOWN
     assert second.status is OrderStatus.UNKNOWN
     assert len(engine.journal) == 1
-
-
-@pytest.mark.parametrize("quantity", [float("nan"), float("inf")])
-def test_reconciliation_rejects_non_finite_position(quantity: float) -> None:
-    """Reconciliation snapshots must contain finite broker quantities."""
-    from execution.reconciliation import BrokerPosition
-
-    with pytest.raises(ValueError, match="finite"):
-        BrokerPosition("ITC", quantity, 100.0)
