@@ -6,6 +6,9 @@ from execution.adapters.upstox_sdk import UpstoxSDKSandboxClient
 
 
 class FakeOrderV3:
+    def __init__(self, api_client) -> None:
+        self.api_client = api_client
+
     def cancel_order(self, order_id: str):
         return SimpleNamespace(
             to_dict=lambda: {"status": "success", "data": {"order_id": order_id}}
