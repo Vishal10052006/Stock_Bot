@@ -10,6 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass, fields, is_dataclass
 from enum import Enum
 import hashlib
+from typing import Mapping
 import json
 
 import pandas as pd
@@ -105,6 +106,7 @@ class PaperDecisionLoop:
         *,
         price_column: str = "close",
         quantity: float = 1.0,
+        predictions: Mapping[tuple[object, str], object] | None = None,
     ) -> PaperDecisionRun:
         """Process decision-time rows strictly in timestamp order.
 
@@ -169,7 +171,10 @@ class PaperDecisionLoop:
                 self.runtime.position(symbol) is not None
             )
 
-            strategy_input = self._strategy_input_from_row(row)
+            strategy_input = self._strategy_input_from_row(
+                row,
+                prediction=self._prediction_for_row(row, predictions),
+            )
             strategy, _trace = self.strategy_engine.decide(strategy_input)
 
             monitoring_decisions += 1
@@ -325,6 +330,7 @@ class PaperDecisionLoop:
         evidence_version: str,
         dataset_version: str,
         code_version: str,
+        predictions: Mapping[tuple[object, str], object] | None = None,
     ) -> tuple[PaperDecisionRun, PaperEvidenceRecord]:
         """Run paper decisions and persist evidence under the run's stable identity.
 
@@ -332,7 +338,12 @@ class PaperDecisionLoop:
         boundary; this method does not synthesize latency, calibration,
         equity, false-signal, or operational observations.
         """
-        run = self.run(rows, price_column=price_column, quantity=quantity)
+        run = self.run(
+            rows,
+            price_column=price_column,
+            quantity=quantity,
+            predictions=predictions,
+        )
         record = persist_paper_decision_run(
             run,
             journal=journal,
@@ -352,7 +363,35 @@ class PaperDecisionLoop:
 
 
     @staticmethod
-    def _strategy_input_from_row(row: pd.Series) -> StrategyInput:
+    def _prediction_for_row(
+        row: pd.Series,
+        predictions: Mapping[tuple[object, str], object] | None,
+    ) -> object | None:
+        """Resolve one prediction by exact decision timestamp and symbol.
+
+        Missing predictions remain None; the loop never fabricates probabilities.
+        """
+        if not predictions:
+            return None
+        timestamp = pd.Timestamp(row["timestamp"])
+        symbol = str(row["symbol"]).strip().upper()
+        direct = predictions.get((timestamp, symbol))
+        if direct is not None:
+            return direct
+        for (candidate_timestamp, candidate_symbol), prediction in predictions.items():
+            if (
+                pd.Timestamp(candidate_timestamp) == timestamp
+                and str(candidate_symbol).strip().upper() == symbol
+            ):
+                return prediction
+        return None
+
+    @staticmethod
+    def _strategy_input_from_row(
+        row: pd.Series,
+        *,
+        prediction: object | None = None,
+    ) -> StrategyInput:
         """Build the centralized StrategyInput from one causal row."""
         required = {
             "timestamp",
@@ -387,6 +426,7 @@ class PaperDecisionLoop:
             timestamp=pd.Timestamp(row["timestamp"]),
             symbol=str(row["symbol"]),
             decision_features=features,
+            prediction=prediction,
             regime=str(row["regime"]),
             regime_probability=float(row["regime_probability"]),
         )
