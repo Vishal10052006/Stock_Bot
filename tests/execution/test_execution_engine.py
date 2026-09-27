@@ -299,6 +299,32 @@ def test_lifecycle_events_are_recorded_in_order():
     assert result.snapshot.status is OrderStatus.FILLED
 
 
+def test_execution_persists_observed_latency_in_snapshot_and_metrics():
+    adapter = PaperBrokerAdapter()
+    engine = ExecutionEngine(adapter)
+    result = engine.submit(order_request())
+
+    assert result.latency_ms >= 0.0
+    snapshot = engine.get_order(order_request().client_order_id)
+    assert snapshot is not None
+    assert snapshot.latency_ms == result.latency_ms
+    assert engine.metrics().average_latency_ms == result.latency_ms
+
+
+@pytest.mark.parametrize("latency", [float("nan"), float("inf"), -1.0])
+def test_order_snapshot_rejects_invalid_latency(latency: float):
+    with pytest.raises(ValueError, match="latency_ms"):
+        OrderSnapshot(
+            broker_order_id="PAPER-1",
+            client_order_id="SB-latency",
+            status=OrderStatus.FILLED,
+            requested_quantity=1.0,
+            filled_quantity=1.0,
+            average_fill_price=100.0,
+            latency_ms=latency,
+        )
+
+
 def test_execution_metrics_include_fills_and_fees():
     adapter = PaperBrokerAdapter(
         config=PaperAdapterConfig(
