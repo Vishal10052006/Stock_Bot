@@ -116,7 +116,11 @@ class UpstoxSDKSandboxClient:
         return {"status": result.get("status", "success"), "data": latest}
 
     def cancel_order(self, order_id: str) -> dict[str, Any]:
-        """Cancel through the sandbox-enabled V3 API and return its acknowledgement."""
+        """Cancel through the sandbox-enabled V3 API and return its acknowledgement.
+
+        Sandbox order history is not exposed by the official SDK sandbox whitelist,
+        so cancellation must not perform a follow-up history lookup here.
+        """
         try:
             response = self._order_v3.cancel_order(order_id)
         except Exception as exc:
