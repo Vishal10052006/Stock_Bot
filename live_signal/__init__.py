@@ -4,7 +4,7 @@ This package composes existing market/analysis/prediction/strategy/risk
 boundaries into an immutable, auditable signal. It never places broker orders.
 """
 
-from .engine import LiveSignalEngine
+from .engine import LiveSignalEngine, SignalFreshnessPolicy
 from .models import (
     LiveSignal,
     LiveSignalInput,
@@ -19,5 +19,6 @@ __all__ = [
     "LiveSignalEngine",
     "LiveSignalInput",
     "LiveSignalStatus",
+    "SignalFreshnessPolicy",
     "SignalNoTradeReason",
 ]
