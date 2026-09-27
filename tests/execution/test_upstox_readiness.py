@@ -3,8 +3,14 @@ from execution.upstox_readiness import (
     UpstoxEvidenceState,
     build_position_reconciliation_evidence,
     build_upstox_readiness_attestation,
+    build_upstox_readiness_from_provider_report,
 )
 from execution.engine import PositionSnapshot
+from execution.provider_evidence import (
+    ProviderEvidenceObservation,
+    ProviderEvidenceState,
+    build_provider_evidence_report,
+)
 
 
 def test_empty_readiness_attestation_fails_closed():
@@ -63,6 +69,55 @@ def test_attestation_fingerprint_is_deterministic():
     first = build_upstox_readiness_attestation(capabilities)
     second = build_upstox_readiness_attestation(capabilities)
     assert first.evidence_fingerprint == second.evidence_fingerprint
+
+
+def test_provider_report_converts_to_readiness_attestation():
+    provider_report = build_provider_evidence_report(
+        "upstox",
+        (
+            ProviderEvidenceObservation(
+                "process_restart",
+                "sandbox",
+                "restart and rehydration",
+                ProviderEvidenceState.VERIFIED,
+                "provider observation recorded",
+            ),
+            ProviderEvidenceObservation(
+                "position_reconciliation",
+                "production",
+                "read-only positions observation",
+                ProviderEvidenceState.UNVERIFIED,
+                "intentional real-provider evidence has not been recorded",
+            ),
+        ),
+    )
+    report = build_upstox_readiness_from_provider_report(provider_report)
+    assert report.blocked
+    assert not report.verified
+    assert [item.capability for item in report.capabilities] == [
+        "process_restart",
+        "position_reconciliation",
+    ]
+
+
+def test_non_upstox_provider_report_is_rejected():
+    provider_report = build_provider_evidence_report(
+        "other-provider",
+        (
+            ProviderEvidenceObservation(
+                "authentication",
+                "sandbox",
+                "authentication",
+                ProviderEvidenceState.VERIFIED,
+                "observed",
+            ),
+        ),
+    )
+    try:
+        build_upstox_readiness_from_provider_report(provider_report)
+    except ValueError:
+        return
+    raise AssertionError("non-Upstox evidence must fail closed")
 
 
 def test_position_reconciliation_evidence_is_non_authorizing():
