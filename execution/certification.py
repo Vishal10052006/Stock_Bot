@@ -8,7 +8,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import Callable
+import hashlib
+import json
+from typing import Callable, Iterable
+
+from execution.engine import PositionSnapshot
+from execution.production import reconcile_execution_positions
 
 from execution.engine import ExecutionEngine, ExecutionResult, OrderRequest, OrderStatus
 
@@ -81,6 +86,64 @@ def validate_failure_matrix(
         passed.append(scenario)
 
     return FailureMatrixReport(tuple(scenarios), tuple(passed), tuple(failures))
+
+
+@dataclass(frozen=True, slots=True)
+class PositionEvidenceReport:
+    """Deterministic evidence record for a provider position snapshot."""
+
+    provider: str
+    observed: bool
+    status: str
+    position_count: int
+    fingerprint: str
+    details: tuple[str, ...] = ()
+
+    @property
+    def safe(self) -> bool:
+        return self.status == "MATCH"
+
+
+def build_position_evidence(
+    provider: str,
+    local: Iterable[PositionSnapshot] | None,
+    broker: Iterable[PositionSnapshot] | None,
+) -> PositionEvidenceReport:
+    """Turn observed provider positions into a non-authorizing evidence record.
+
+    This function never treats missing provider data as a match and never
+    authorizes execution. It only records the canonical reconciliation result.
+    """
+    if not provider.strip():
+        raise ValueError("provider must not be empty")
+    if broker is None:
+        report = reconcile_execution_positions(local, None)
+        observed = False
+        count = 0
+    else:
+        broker_tuple = tuple(broker)
+        report = reconcile_execution_positions(local, broker_tuple)
+        observed = True
+        count = len(broker_tuple)
+
+    payload = {
+        "provider": provider.strip(),
+        "observed": observed,
+        "status": report.status.value,
+        "mismatches": report.mismatches,
+        "position_count": count,
+    }
+    fingerprint = hashlib.sha256(
+        json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+    return PositionEvidenceReport(
+        provider=provider.strip(),
+        observed=observed,
+        status=report.status.value,
+        position_count=count,
+        fingerprint=fingerprint,
+        details=report.mismatches,
+    )
 
 
 @dataclass(frozen=True, slots=True)
