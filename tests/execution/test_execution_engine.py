@@ -17,6 +17,7 @@ from execution.engine import (
     OrderStateMachine,
     OrderStatus,
     OrderType,
+    OrderSnapshot,
 )
 from execution.adapters.paper import PaperAdapterConfig, PaperBrokerAdapter
 from execution.trading_execution import (
