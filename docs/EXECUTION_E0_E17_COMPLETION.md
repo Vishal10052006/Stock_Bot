@@ -31,7 +31,7 @@ Execution remains downstream of Risk and independent Safety. Execution never cre
 | E1 | Canonical Execution Contracts | COMPLETE |
 | E2 | ApprovedOrder Boundary | COMPLETE |
 | E3 | Pre-Execution Validator | COMPLETE |
-| E4 | Order State Machine | COMPLETE — see audit note |
+| E4 | Order State Machine | COMPLETE — explicit `ACKNOWLEDGED` state added and transition-tested |
 | E5 | Broker Abstraction | COMPLETE |
 | E6 | Paper Broker | COMPLETE |
 | E7 | Fill Management | COMPLETE |
@@ -42,7 +42,7 @@ Execution remains downstream of Risk and independent Safety. Execution never cre
 | E12 | Reconciliation | COMPLETE |
 | E13 | Stop/Target/Time Exit Execution | COMPLETE |
 | E14 | Execution Journal & Audit | COMPLETE |
-| E15 | Execution Monitoring | COMPLETE — see observability note |
+| E15 | Execution Monitoring | COMPLETE — submission latency persisted and aggregated from observed values |
 | E16 | Backtest Integration | COMPLETE |
 | E17 | Upstox Adapter + Safety Gates | COMPLETE (software boundary) |
 
@@ -72,17 +72,17 @@ The earlier 1615-passed/4-failed checkpoint is historical and is no longer the c
 
 ## Audit notes
 
-### E4 — lifecycle terminology
+### E4 — lifecycle terminology hardening
 
-The roadmap describes an explicit `ACKNOWLEDGED` state. The implementation contains `SUBMITTING` and `SUBMITTED`, but no separate `ACKNOWLEDGED` enum value.
+The execution state model now includes a first-class `ACKNOWLEDGED` state. The state machine permits `SUBMITTED → ACKNOWLEDGED` and then progression to `OPEN`, `PARTIALLY_FILLED`, `FILLED`, broker rejection, or `UNKNOWN`.
 
-This is recorded as a state-model discrepancy rather than silently treating the states as equivalent. Any future change must be deliberate and transition-tested.
+The paper adapter may still return a terminal or partial state directly after submission because execution does not fabricate an acknowledgement event that was not observed. The new state is available for adapters that expose an explicit acknowledgement boundary, and its transitions are covered by tests.
 
-### E15 — latency observability
+### E15 — latency observability hardening
 
-Execution monitoring exposes latency-related metrics, but `OrderSnapshot` does not persist execution latency. The engine therefore reports zero average latency when latency has not been persisted externally.
+`OrderSnapshot` now persists the measured submission `latency_ms` when the execution engine receives a broker response. Aggregate monitoring derives `average_latency_ms` from persisted observations rather than defaulting to zero when observations exist.
 
-No missing observation is inferred or fabricated.
+Latency validation rejects non-finite and negative values. Unknown-refresh/rehydration paths preserve the persisted latency value so recovery does not erase execution-quality evidence.
 
 ### Reconciliation
 
