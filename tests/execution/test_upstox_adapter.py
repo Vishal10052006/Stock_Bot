@@ -429,3 +429,225 @@ def test_production_position_client_uses_read_only_positions_endpoint(monkeypatc
         "auth": "Bearer real-token-for-test-only",
     }
     assert result == {"status": "success", "data": []}
+
+
+from __future__ import annotations
+
+import pytest
+
+from execution.adapters.upstox import UpstoxAdapterConfig, UpstoxBrokerAdapter
+from execution.adapters.upstox_instruments import (
+    InstrumentIdentity,
+    InstrumentResolutionError,
+    UpstoxInstrumentResolver,
+)
+from execution.adapters.upstox_instrument_search import UpstoxInstrumentSearchClient
+from execution.engine import OrderRequest, OrderSide, OrderStatus, OrderType
+
+
+class ResolverClient:
+    def __init__(self):
+        self.placed = []
+
+    def place_order(self, payload):
+        self.placed.append(payload)
+        return {
+            "status": "success",
+            "data": {
+                "order_id": "UP-RESOLVER-1",
+                "tag": payload["tag"],
+                "quantity": payload["quantity"],
+                "status": "complete",
+                "filled_quantity": payload["quantity"],
+                "average_price": 100.0,
+            },
+        }
+
+    def find_order_by_tag(self, tag):
+        return None
+
+    def cancel_order(self, order_id):
+        raise AssertionError("cancel not used")
+
+    def get_positions(self):
+        return {"data": {"positions": []}}
+
+
+class StaticResolver:
+    def __init__(self):
+        self.symbols = []
+
+    def resolve_key(self, symbol):
+        self.symbols.append(symbol)
+        return "NSE_EQ|INE123"
+
+
+class SearchResolverClient:
+    def __init__(self):
+        self.calls = 0
+
+    def search_instruments(self, query, *, exchange, segment, limit):
+        self.calls += 1
+        return [
+            {
+                "instrument_key": "NSE_EQ|INE123",
+                "trading_symbol": query,
+                "exchange": exchange,
+                "segment": segment,
+            }
+        ]
+
+
+def order() -> OrderRequest:
+    return OrderRequest(
+        client_order_id="SB-RESOLVER-1",
+        decision_id="decision-1",
+        symbol="ITC",
+        side=OrderSide.BUY,
+        quantity=10,
+        order_type=OrderType.MARKET,
+    )
+
+
+def test_adapter_can_resolve_instrument_from_symbol_automatically():
+    client = ResolverClient()
+    resolver = StaticResolver()
+    adapter = UpstoxBrokerAdapter(
+        UpstoxAdapterConfig(
+            api_base_url="https://api-hft.upstox.com",
+            enabled=True,
+            instrument_resolver=resolver,
+        ),
+        client=client,
+    )
+
+    result = adapter.submit(order())
+
+    assert result.status is OrderStatus.FILLED
+    assert resolver.symbols == ["ITC"]
+    assert client.placed[0]["instrument_token"] == "NSE_EQ|INE123"
+
+
+def test_adapter_rejects_both_manual_and_automatic_resolvers():
+    with pytest.raises(ValueError, match="either instrument_token_resolver"):
+        UpstoxAdapterConfig(
+            api_base_url="https://api-hft.upstox.com",
+            instrument_token_resolver=lambda symbol: "NSE_EQ|INE123",
+            instrument_resolver=StaticResolver(),
+        )
+
+
+def test_resolver_returns_exact_instrument_and_caches():
+    client = SearchResolverClient()
+    resolver = UpstoxInstrumentResolver(client)
+
+    first = resolver.resolve("itc")
+    second = resolver.resolve("ITC")
+
+    assert isinstance(first, InstrumentIdentity)
+    assert first.instrument_key == "NSE_EQ|INE123"
+    assert first.trading_symbol == "ITC"
+    assert second == first
+    assert client.calls == 1
+
+
+def test_resolver_rejects_no_exact_match():
+    class Client:
+        def search_instruments(self, query, *, exchange, segment, limit):
+            return [
+                {
+                    "instrument_key": "NSE_EQ|INE123",
+                    "trading_symbol": "ITCBEES",
+                    "exchange": exchange,
+                    "segment": segment,
+                }
+            ]
+
+    with pytest.raises(InstrumentResolutionError, match="no exact"):
+        UpstoxInstrumentResolver(Client()).resolve("ITC")
+
+
+def test_resolver_rejects_ambiguous_exact_matches():
+    class Client:
+        def search_instruments(self, query, *, exchange, segment, limit):
+            return [
+                {
+                    "instrument_key": "NSE_EQ|INE123",
+                    "trading_symbol": "ITC",
+                    "exchange": "NSE",
+                    "segment": "EQ",
+                },
+                {
+                    "instrument_key": "NSE_EQ|INE456",
+                    "trading_symbol": "ITC",
+                    "exchange": "NSE",
+                    "segment": "EQ",
+                },
+            ]
+
+    with pytest.raises(InstrumentResolutionError, match="ambiguous"):
+        UpstoxInstrumentResolver(Client()).resolve("ITC")
+
+
+def test_resolver_rejects_wrong_exchange():
+    class Client:
+        def search_instruments(self, query, *, exchange, segment, limit):
+            return [
+                {
+                    "instrument_key": "NSE_EQ|INE123",
+                    "trading_symbol": "ITC",
+                    "exchange": "BSE",
+                    "segment": "EQ",
+                }
+            ]
+
+    with pytest.raises(InstrumentResolutionError, match="exchange"):
+        UpstoxInstrumentResolver(Client()).resolve("ITC")
+
+
+def test_upstox_search_client_builds_read_only_request(monkeypatch):
+    import json
+
+    import execution.adapters.upstox_instrument_search as search_module
+
+    seen = {}
+
+    class Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self):
+            return json.dumps(
+                {
+                    "status": "success",
+                    "data": [
+                        {
+                            "instrument_key": "NSE_EQ|INE123",
+                            "trading_symbol": "ITC",
+                            "exchange": "NSE",
+                            "segment": "EQ",
+                        }
+                    ],
+                }
+            ).encode("utf-8")
+
+    def fake_urlopen(request, timeout):
+        seen["url"] = request.full_url
+        seen["method"] = request.method
+        seen["authorization"] = request.get_header("Authorization")
+        return Response()
+
+    monkeypatch.setattr(search_module, "urlopen", fake_urlopen)
+
+    client = UpstoxInstrumentSearchClient("test-token")
+    records = client.search_instruments("ITC")
+
+    assert records[0]["instrument_key"] == "NSE_EQ|INE123"
+    assert "query=ITC" in seen["url"]
+    assert "exchanges=NSE" in seen["url"]
+    assert "segments=EQ" in seen["url"]
+    assert seen["method"] == "GET"
+    assert seen["authorization"] == "Bearer test-token"
