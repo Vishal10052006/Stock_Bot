@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
+import math
 from typing import Callable
 
 import pandas as pd
@@ -32,10 +33,20 @@ class PaperAdapterConfig:
     partial_fill_ratio: float = 1.0
 
     def __post_init__(self) -> None:
-        if self.slippage_bps < 0 or self.fee_bps < 0:
-            raise ValueError("slippage_bps and fee_bps must be non-negative")
-        if not 0.0 < self.partial_fill_ratio <= 1.0:
-            raise ValueError("partial_fill_ratio must be in (0, 1]")
+        if (
+            not math.isfinite(float(self.slippage_bps))
+            or not math.isfinite(float(self.fee_bps))
+            or self.slippage_bps < 0
+            or self.fee_bps < 0
+        ):
+            raise ValueError(
+                "slippage_bps and fee_bps must be finite and non-negative"
+            )
+        if (
+            not math.isfinite(float(self.partial_fill_ratio))
+            or not 0.0 < self.partial_fill_ratio <= 1.0
+        ):
+            raise ValueError("partial_fill_ratio must be finite and in (0, 1]")
 
 
 class PaperBrokerAdapter:
@@ -70,8 +81,8 @@ class PaperBrokerAdapter:
                 else 100.0
             )
         )
-        if price <= 0:
-            raise ValueError("paper execution price must be positive")
+        if not math.isfinite(price) or price <= 0:
+            raise ValueError("paper execution price must be positive and finite")
 
         ratio = self.config.partial_fill_ratio
         filled_quantity = order.quantity * ratio
