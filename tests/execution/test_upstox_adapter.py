@@ -430,3 +430,85 @@ def test_production_position_client_uses_read_only_positions_endpoint(monkeypatc
     }
     assert result == {"status": "success", "data": []}
 
+
+
+def test_adapter_resolves_from_local_instrument_master(tmp_path):
+    import gzip
+    import json
+
+    path = tmp_path / "NSE.json.gz"
+    with gzip.open(path, "wt", encoding="utf-8") as handle:
+        json.dump(
+            [
+                {
+                    "segment": "NSE_EQ",
+                    "exchange": "NSE",
+                    "instrument_type": "EQ",
+                    "instrument_key": "NSE_EQ|INE154A01025",
+                    "trading_symbol": "ITC",
+                },
+                {
+                    "segment": "NSE_EQ",
+                    "exchange": "NSE",
+                    "instrument_type": "EQ",
+                    "instrument_key": "NSE_EQ|INE467B01029",
+                    "trading_symbol": "TCS",
+                },
+            ],
+            handle,
+        )
+
+    client = FakeUpstoxClient()
+    configured = UpstoxAdapterConfig(
+        api_base_url="https://api-hft.upstox.com",
+        enabled=True,
+        instrument_master_path=str(path),
+    )
+    adapter_instance = UpstoxBrokerAdapter(configured, client=client)
+    result = adapter_instance.submit(order())
+
+    assert result.status is OrderStatus.FILLED
+    assert client.placed[0]["instrument_token"] == "NSE_EQ|INE154A01025"
+
+
+def test_adapter_fails_closed_when_local_master_cannot_resolve_symbol(tmp_path):
+    import gzip
+    import json
+
+    path = tmp_path / "NSE.json.gz"
+    with gzip.open(path, "wt", encoding="utf-8") as handle:
+        json.dump(
+            [
+                {
+                    "segment": "NSE_EQ",
+                    "exchange": "NSE",
+                    "instrument_type": "EQ",
+                    "instrument_key": "NSE_EQ|INE154A01025",
+                    "trading_symbol": "ITC",
+                }
+            ],
+            handle,
+        )
+
+    class TcsOrderClient(FakeUpstoxClient):
+        pass
+
+    tcs_request = OrderRequest(
+        client_order_id="SB-TEST-TCS-123456789",
+        decision_id="decision-tcs",
+        symbol="TCS",
+        side=OrderSide.BUY,
+        quantity=1,
+        order_type=OrderType.MARKET,
+    )
+    client = TcsOrderClient()
+    configured = UpstoxAdapterConfig(
+        api_base_url="https://api-hft.upstox.com",
+        enabled=True,
+        instrument_master_path=str(path),
+    )
+
+    with pytest.raises(Exception, match="no NSE_EQ instrument"):
+        UpstoxBrokerAdapter(configured, client=client).submit(tcs_request)
+
+    assert client.placed == []
