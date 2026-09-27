@@ -41,4 +41,6 @@ def test_sandbox_cancel_uses_v3_acknowledgement_without_history():
     client = UpstoxSDKSandboxClient("sandbox-token", sdk_module=FakeSdk)
     result = client.cancel_order("SB-1")
 
-    assert result == {"status": "success", "data": {"order_id": "SB-1"}}
+    assert result["status"] == "success"
+    assert result["data"]["order_id"] == "SB-1"
+    assert result["data"]["status"] == "cancel pending"
