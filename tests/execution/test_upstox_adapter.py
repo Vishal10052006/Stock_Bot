@@ -386,3 +386,42 @@ def test_injected_position_provider_failure_propagates_without_fabricating_posit
     )
     with pytest.raises(RuntimeError, match="provider unavailable"):
         UpstoxBrokerAdapter(configured, client=client).positions()
+
+
+def test_production_position_client_uses_read_only_positions_endpoint(monkeypatch):
+    from execution.adapters.upstox_production_positions import (
+        PRODUCTION_POSITIONS_URL,
+        UpstoxProductionPositionClient,
+    )
+
+    seen = {}
+
+    class Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self):
+            return b'{"status":"success","data":[]}'
+
+    def fake_urlopen(request, timeout):
+        seen["url"] = request.full_url
+        seen["method"] = request.method
+        seen["auth"] = request.get_header("Authorization")
+        return Response()
+
+    monkeypatch.setattr(
+        "execution.adapters.upstox_production_positions.urlopen",
+        fake_urlopen,
+    )
+
+    result = UpstoxProductionPositionClient("real-token-for-test-only").get_positions()
+
+    assert seen == {
+        "url": PRODUCTION_POSITIONS_URL,
+        "method": "GET",
+        "auth": "Bearer real-token-for-test-only",
+    }
+    assert result == {"status": "success", "data": []}
