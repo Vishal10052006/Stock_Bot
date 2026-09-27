@@ -166,3 +166,40 @@ def test_paper_run_adapter_preserves_explicit_operational_counts() -> None:
     assert snapshot.operational_error_count == 1
     assert snapshot.stale_event_count == 1
     assert validate_paper_evidence(snapshot).valid
+
+
+def test_paper_run_derives_equity_latency_and_operational_observations() -> None:
+    decision_time = pd.Timestamp("2026-09-23 09:15:00", tz="UTC")
+    fill_time = pd.Timestamp("2026-09-23 09:15:00", tz="UTC")
+    strategy = SimpleNamespace(
+        direction=StrategyDirection.LONG,
+        regime="TREND_UP",
+        timestamp=decision_time,
+        prediction_probability=None,
+    )
+    order = SimpleNamespace(
+        status=PaperOrderStatus.FILLED,
+        timestamp=fill_time,
+    )
+    run = SimpleNamespace(
+        steps=(
+            SimpleNamespace(
+                strategy=strategy,
+                order=order,
+                equity=100_000.0,
+            ),
+        ),
+    )
+
+    snapshot = collect_paper_decision_run(
+        run,
+        evidence_version="PAPER-EVIDENCE-v1",
+        dataset_version="paper-2026-09",
+        code_version="abc123",
+    )
+
+    assert snapshot.drawdown_observation_count == 1
+    assert snapshot.latency_observation_count == 1
+    assert snapshot.operational_event_count == 1
+    assert snapshot.operational_error_count == 0
+    assert snapshot.stale_event_count == 0
