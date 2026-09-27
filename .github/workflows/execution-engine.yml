@@ -11,17 +11,21 @@ on:
       - "backtesting/**"
       - "monitoring/**"
       - "docs/EXECUTION_ENGINE.md"
+      - "docs/EXECUTION_CERTIFICATION_EVIDENCE.md"
       - "requirements-execution.txt"
       - ".github/workflows/execution-engine.yml"
   push:
     branches:
       - main
+      - feat/execution-certification-cert01-cert12
     paths:
       - "execution/**"
       - "tests/execution/**"
       - "paper/**"
       - "backtesting/**"
       - "monitoring/**"
+      - "docs/EXECUTION_ENGINE.md"
+      - "docs/EXECUTION_CERTIFICATION_EVIDENCE.md"
       - "requirements-execution.txt"
       - ".github/workflows/execution-engine.yml"
 
@@ -38,6 +42,8 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install numpy pandas pytest scipy scikit-learn requests pydantic fastapi sqlalchemy alembic python-dotenv yfinance ta joblib pyarrow
           python -m pip install -r requirements-execution.txt
+      - name: Certification matrix validation
+        run: python -m pytest -q tests/execution/test_certification_matrix.py
       - name: Execution production validation
         run: python -m pytest -q tests/execution
       - name: Full repository regression
