@@ -97,8 +97,8 @@ def run_exit_execution_certification() -> ExitExecutionReport:
         position = adapter.positions()[0]
         exit_auth = _authorization(StrategyDirection.LONG, 30.0, decision_id="paper04-short-partial-exit", reason="approved partial exit")
         result = engine.submit(ExecutionEngine.from_exit_authorization(exit_auth, decision_id="paper04-short-partial-exit", position=position, quantity=30.0))
-        assert result.filled
-        assert adapter.positions() == (PositionSnapshot("ITC", -70.0, 100.0),)
+        assert result.filled, result.snapshot
+        assert adapter.positions() == (PositionSnapshot("ITC", -70.0, 100.0),), adapter.positions()
 
     def exit_cannot_exceed_position():
         adapter = PaperBrokerAdapter()
@@ -108,7 +108,7 @@ def run_exit_execution_certification() -> ExitExecutionReport:
         position = adapter.positions()[0]
         exit_auth = _authorization(StrategyDirection.SHORT, 51.0, decision_id="paper04-oversize-exit", reason="invalid oversize exit")
         try:
-            ExecutionEngine.from_exit_authorization(exit_auth, decision_id="paper04-oversize-exit", position=position)
+            ExecutionEngine.from_exit_authorization(exit_auth, decision_id="paper04-oversize-exit", position=position, quantity=51.0)
         except ValueError as exc:
             assert "exceed" in str(exc)
         else:
