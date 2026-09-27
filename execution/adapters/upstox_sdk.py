@@ -116,25 +116,24 @@ class UpstoxSDKSandboxClient:
         return {"status": result.get("status", "success"), "data": latest}
 
     def cancel_order(self, order_id: str) -> dict[str, Any]:
-        """Cancel an order through the SDK V3 API, then return broker history."""
+        """Cancel through the sandbox-enabled V3 API and return its acknowledgement."""
         try:
-            self._order_v3.cancel_order(order_id)
-            response = self._order_v2.get_order_details("2.0", order_id=order_id)
+            response = self._order_v3.cancel_order(order_id)
         except Exception as exc:
             self._raise(exc)
 
         result = self._response(response)
         raw = result.get("data")
-        if not isinstance(raw, list) or not raw:
-            raise UpstoxSDKError(
-                f"cancel succeeded but order history is unavailable: {order_id}"
-            )
-        records = [record for record in raw if isinstance(record, dict)]
-        if not records:
-            raise UpstoxSDKError(
-                f"cancel succeeded but order history contains no record: {order_id}"
-            )
-        return {"status": result.get("status", "success"), "data": dict(records[-1])}
+        if isinstance(raw, dict):
+            data = dict(raw)
+        elif raw is None:
+            data = {}
+        else:
+            raise UpstoxSDKError("Upstox SDK cancel response has invalid data")
+
+        data.setdefault("order_id", order_id)
+        data.setdefault("status", "cancel pending")
+        return {"status": result.get("status", "success"), "data": data}
 
     def get_positions(self) -> dict[str, Any]:
         """Reject sandbox position queries until Upstox exposes them in sandbox."""

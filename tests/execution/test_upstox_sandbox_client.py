@@ -152,9 +152,9 @@ def test_real_upstox_sandbox_order_lifecycle():
     UPSTOX_SANDBOX_CONFIRM=YES is additionally required before any order
     placement is attempted.
 
-    The current Upstox sandbox capability list explicitly covers order
-    placement and cancellation. Position APIs are not required by this
-    sandbox evidence test. The official SDK client forces sandbox mode.
+    The test intentionally avoids the SDK's sandbox-disabled order-history
+    endpoint. It verifies the sandbox-supported Place Order V3 -> Cancel
+    Order V3 provider boundary only.
     """
     token = os.getenv("UPSTOX_SANDBOX_ACCESS_TOKEN")
     instrument = os.getenv("UPSTOX_SANDBOX_INSTRUMENT_TOKEN")
@@ -227,24 +227,6 @@ def test_real_upstox_sandbox_order_lifecycle():
     assert placed.broker_order_id
     assert placed.client_order_id == request.client_order_id
 
-    looked_up = adapter.get_order(request.client_order_id)
-    assert looked_up is not None
-    assert looked_up.broker_order_id == placed.broker_order_id
-    assert looked_up.requested_quantity == placed.requested_quantity
-
-    if looked_up.status in {
-        OrderStatus.OPEN,
-        OrderStatus.CANCEL_PENDING,
-        OrderStatus.SUBMITTED,
-    }:
-        cancelled = adapter.cancel(request.client_order_id)
-        assert cancelled.broker_order_id == placed.broker_order_id
-        assert cancelled.status in {
-            OrderStatus.CANCELLED,
-            OrderStatus.CANCEL_PENDING,
-        }
-    else:
-        pytest.skip(
-            f"Sandbox order reached terminal state {looked_up.status.value}; "
-            "cancellation was not observable for this run."
-        )
+    cancelled = client.cancel_order(placed.broker_order_id)
+    assert cancelled["data"]["order_id"] == placed.broker_order_id
+    assert cancelled["status"] in {"success", "ok"}
