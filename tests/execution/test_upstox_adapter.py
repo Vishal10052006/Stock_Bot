@@ -107,6 +107,50 @@ def test_submit_maps_execution_request_to_upstox_payload():
     assert result.average_fill_price == 100.25
 
 
+def test_fractional_quantity_is_rejected_without_truncation():
+    fractional = OrderRequest(
+        client_order_id="SB-TEST-FRACTIONAL",
+        decision_id="decision-1",
+        symbol="ITC",
+        side=OrderSide.BUY,
+        quantity=10.5,
+        order_type=OrderType.MARKET,
+    )
+    with pytest.raises(ValueError, match="refusing to truncate"):
+        adapter(FakeUpstoxClient()).submit(fractional)
+
+
+def test_inconsistent_fill_quantity_is_rejected():
+    client = FakeUpstoxClient()
+    client.orders["bad-fill"] = {
+        "data": {
+            "order_id": "UP-BF",
+            "tag": "bad-fill",
+            "quantity": 100,
+            "filled_quantity": 40,
+            "status": "partially filled",
+            "fills": [{"trade_id": "T1", "quantity": 30, "price": 101.0}],
+        }
+    }
+    with pytest.raises(ValueError, match="fill quantity"):
+        adapter(client).get_order("bad-fill")
+
+
+def test_filled_status_requires_full_quantity():
+    client = FakeUpstoxClient()
+    client.orders["bad-filled"] = {
+        "data": {
+            "order_id": "UP-BF2",
+            "tag": "bad-filled",
+            "quantity": 100,
+            "filled_quantity": 40,
+            "status": "complete",
+        }
+    }
+    with pytest.raises(ValueError, match="FILLED status"):
+        adapter(client).get_order("bad-filled")
+
+
 def test_partial_fill_and_rejection_mapping():
     client = FakeUpstoxClient()
     client.orders["partial"] = {
