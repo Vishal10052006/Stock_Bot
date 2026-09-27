@@ -348,17 +348,21 @@ def test_injected_position_provider_reaches_adapter_contract():
     client = FakeUpstoxClient()
     client.positions_response = {"data": {"positions": []}}
 
+    from execution.adapters.upstox_positions import fetch_upstox_positions
+
     def provider():
-        return {
-            "status": "success",
-            "data": [
-                {
-                    "trading_symbol": "ITC",
-                    "quantity": 7,
-                    "average_price": 452.5,
-                }
-            ],
-        }
+        return fetch_upstox_positions(
+            lambda: {
+                "status": "success",
+                "data": [
+                    {
+                        "trading_symbol": "ITC",
+                        "quantity": 7,
+                        "average_price": 452.5,
+                    }
+                ],
+            }
+        )
 
     configured = UpstoxAdapterConfig(
         api_base_url="https://api-hft.upstox.com",
