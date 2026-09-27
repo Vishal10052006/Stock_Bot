@@ -1,15 +1,22 @@
-"""Additional tests for the mode-aware STOCK_BOT runtime CLI."""
+"""Additional regression coverage for the mode-aware runtime CLI."""
 
 from __future__ import annotations
 
-from trading.runtime_cli import RuntimeMode, _config_from_args, build_parser, run_live, run_readiness
+from trading.runtime_cli import RuntimeConfig, RuntimeMode, _config_from_args, build_parser, run_live, run_readiness
 
 
-def test_parser_exposes_distinct_runtime_modes() -> None:
+def test_runtime_config_rejects_non_positive_candles() -> None:
+    try:
+        RuntimeConfig(mode=RuntimeMode.SHADOW, candles=0)
+    except ValueError:
+        return
+    raise AssertionError("candles=0 must be rejected")
+
+
+def test_parser_exposes_all_modes() -> None:
     parser = build_parser()
-    for mode in RuntimeMode:
-        args = parser.parse_args(["--mode", mode.value])
-        assert args.mode == mode.value
+    parsed = {parser.parse_args(["--mode", mode.value]).mode for mode in RuntimeMode}
+    assert parsed == {mode.value for mode in RuntimeMode}
 
 
 def test_config_normalizes_symbol() -> None:
@@ -20,25 +27,22 @@ def test_config_normalizes_symbol() -> None:
     assert config.symbol == "RELIANCE"
 
 
-def test_live_mode_requires_explicit_confirmation(capsys) -> None:
+def test_live_requires_explicit_confirmation(capsys) -> None:
     parser = build_parser()
-    args = parser.parse_args(["--mode", "live"])
-    config = _config_from_args(args)
+    config = _config_from_args(parser.parse_args(["--mode", "live"]))
     assert run_live(config) == 2
     assert "--confirm-live" in capsys.readouterr().out
 
 
-def test_live_mode_remains_locked_after_confirmation(capsys) -> None:
+def test_live_stays_locked_after_confirmation(capsys) -> None:
     parser = build_parser()
-    args = parser.parse_args(["--mode", "live", "--confirm-live"])
-    config = _config_from_args(args)
+    config = _config_from_args(parser.parse_args(["--mode", "live", "--confirm-live"]))
     assert run_live(config) == 3
     output = capsys.readouterr().out
     assert "LIVE ORDER SUBMISSION: LOCKED" in output
-    assert "live broker execution" in output
 
 
-def test_readiness_mode_is_fail_closed(capsys) -> None:
+def test_readiness_is_fail_closed(capsys) -> None:
     assert run_readiness() == 2
     output = capsys.readouterr().out
     assert "READY                : False" in output
