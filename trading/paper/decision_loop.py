@@ -2,8 +2,8 @@
 
 Connects the existing Strategy -> Risk -> ExecutionAuthorization ->
 PaperTradingRuntime boundaries for a chronological sequence of decision-time
-rows. Prediction remains an upstream model output because the current
-Phase 8 baseline strategy contract does not consume prediction probabilities.
+rows. Prediction is an optional upstream model output. When supplied, it is passed
+to StrategyInput without changing Risk or Execution authority.
 """
 from __future__ import annotations
 
@@ -112,7 +112,8 @@ class PaperDecisionLoop:
 
         Rows are validated before execution. Every row produces exactly one
         strategy/risk/authorization step; only AUTHORIZED decisions create
-        paper orders.
+        paper orders. Optional prediction artifacts are matched by exact
+        timestamp/symbol and are never synthesized.
         """
         if not isinstance(rows, pd.DataFrame):
             raise TypeError("rows must be a pandas DataFrame")
