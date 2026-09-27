@@ -13,8 +13,8 @@ A readiness attestation is observational evidence only. It does not authorize li
 | Authentication | Error classification + sandbox transport | Sandbox authentication was empirically observed in UPSTOX-07 | VERIFIED (sandbox only) |
 | Place Order V3 | Adapter mapping/tests | Real sandbox Place Order V3 reached provider | VERIFIED (sandbox) |
 | Broker order ID | Canonical order mapping/tests | Real sandbox returned provider order identity | VERIFIED (sandbox) |
-| Cancellation | Adapter mapping/tests | Real sandbox Cancel Order V3 acknowledgement observed | VERIFIED (sandbox) |
-| Order history / final broker state | UNKNOWN/reconciliation semantics | Current installed SDK sandbox path does not provide the required evidence | UNVERIFIED |
+| Cancellation | Adapter mapping/tests | Real sandbox Cancel Order V3 acknowledgement observed on 2026-09-27 | VERIFIED (sandbox) |
+| Order history / final broker state | UNKNOWN/reconciliation semantics | Official SDK sandbox rejects the `/v2/order/history` call; current sandbox capability page lists order APIs, not history | BLOCKED (sandbox capability) |
 | Partial fills | Paper/adapter failure coverage | No real-provider partial-fill evidence recorded | UNVERIFIED |
 | Broker rejection | Provider error classification/tests | Invalid-instrument provider rejection was observed in sandbox | PARTIAL |
 | Position reconciliation | Production read-only positions client + deterministic evidence runner | No real position snapshot has been collected in this repository record | UNVERIFIED |
@@ -35,7 +35,7 @@ A readiness attestation is observational evidence only. It does not authorize li
 
 The current Upstox documentation identifies the production Get Positions endpoint and the sandbox-enabled order APIs. The project therefore maintains a separate read-only production position transport seam while keeping live execution locked.
 
-The repository's empirical UPSTOX-07 record verifies sandbox authentication, Place Order V3 reachability, invalid-instrument rejection, and Cancel Order V3 acknowledgement. It does not certify full order-history reconciliation or sandbox position reconciliation.
+The repository's empirical evidence now verifies sandbox authentication, Place Order V3 reachability, broker order identity, invalid-instrument rejection, and Cancel Order V3 acknowledgement. On 2026-09-27 the real sandbox lifecycle test passed after removing the unsupported post-cancel history lookup. The official SDK sandbox still rejects `/v2/order/history`, so full order-history reconciliation is not certified. Sandbox position reconciliation is likewise not claimed.
 
 ## Gate semantics
 
@@ -49,6 +49,12 @@ The provider-readiness gate therefore remains blocked while any capability requi
 - Risk remains the sizing and authorization authority.
 - UNKNOWN provider state requires broker-state reconciliation before any retry.
 - No readiness report creates, modifies, cancels, or authorizes an order.
+
+## Current evidence boundary
+
+The real sandbox test has now passed for the provider-supported transaction boundary: `SUBMIT → BROKER ORDER ID → CANCEL V3 ACK`. This is not equivalent to terminal-state/history certification.
+
+The current Upstox sandbox documentation states that the sandbox currently supports Place, Modify, and Cancel order APIs; the provider also documents Order History and Get Trades for API users, but the official SDK sandbox runtime currently rejects the history endpoint. Therefore the project records the observed sandbox runtime behavior rather than assuming the broader API documentation implies sandbox availability. citeturn0search4turn0search2
 
 ## Next evidence collection
 
