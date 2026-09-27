@@ -41,6 +41,9 @@ class PaperDecisionStep:
     risk: RiskDecision
     authorization: ExecutionAuthorization
     order: PaperOrder | None
+    # Account equity observed immediately before this decision.
+    # Persisting it makes drawdown evidence causal rather than sidecar-invented.
+    equity: float | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -299,6 +302,7 @@ class PaperDecisionLoop:
                     risk=risk,
                     authorization=authorization,
                     order=order,
+                    equity=float(equity),
                 )
             )
 
