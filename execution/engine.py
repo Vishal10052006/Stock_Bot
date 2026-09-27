@@ -653,6 +653,7 @@ class ExecutionEngine:
                 filled_quantity=prior.filled_quantity,
                 average_fill_price=prior.average_fill_price,
                 reason="broker returned no order state",
+                latency_ms=prior.latency_ms,
                 fills=prior.fills,
             )
             self._transition(client_order_id, OrderStatus.UNKNOWN, "broker returned no order state")
@@ -731,6 +732,7 @@ class ExecutionEngine:
                     filled_quantity=prior.filled_quantity,
                     average_fill_price=prior.average_fill_price,
                     reason="broker returned no order state during rehydration",
+                    latency_ms=prior.latency_ms,
                     fills=prior.fills,
                 )
             self._validate_snapshot_contract(snapshot)
