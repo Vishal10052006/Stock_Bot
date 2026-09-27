@@ -103,14 +103,14 @@ def _load_predictions(path: str | Path | None) -> dict[tuple[object, str], objec
             payload = record["payload"]
             provenance = PredictionProvenance(
                 model_version=str(record["model_version"]),
-                model_family=str(payload.get("model_family", "classification")),
+                model_family=str(record.get("model_family", "classification")),
                 dataset_version=str(record["dataset_version"]),
                 feature_version=str(record["feature_version"]),
-                target_version=str(payload.get("target_version", "phase9-label-v1")),
-                code_version=str(payload.get("code_version", "unknown")),
+                target_version=str(record.get("target_version", "phase9-label-v1")),
+                code_version=str(record.get("code_version", "unknown")),
                 calibration_version=(
-                    str(payload["calibration_version"])
-                    if payload.get("calibration_version") is not None
+                    str(record["calibration_version"])
+                    if record.get("calibration_version") is not None
                     else None
                 ),
             )
