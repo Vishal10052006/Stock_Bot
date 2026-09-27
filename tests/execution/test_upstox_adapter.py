@@ -342,3 +342,47 @@ def test_production_position_transport_wraps_provider_failure():
 
     with pytest.raises(UpstoxPositionTransportError, match="request failed"):
         fetch_upstox_positions(failing_request)
+
+
+def test_injected_position_provider_reaches_adapter_contract():
+    client = FakeUpstoxClient()
+    client.positions_response = {"data": {"positions": []}}
+
+    def provider():
+        return {
+            "status": "success",
+            "data": [
+                {
+                    "trading_symbol": "ITC",
+                    "quantity": 7,
+                    "average_price": 452.5,
+                }
+            ],
+        }
+
+    configured = UpstoxAdapterConfig(
+        api_base_url="https://api-hft.upstox.com",
+        enabled=True,
+        instrument_token_resolver=lambda symbol: f"NSE_EQ|{symbol}",
+        position_provider=provider,
+    )
+    positions = UpstoxBrokerAdapter(configured, client=client).positions()
+
+    assert positions == (PositionSnapshot("ITC", 7, 452.5),)
+    assert client.positions_response["data"]["positions"] == []
+
+
+def test_injected_position_provider_failure_propagates_without_fabricating_positions():
+    client = FakeUpstoxClient()
+
+    def failing_provider():
+        raise RuntimeError("position provider unavailable")
+
+    configured = UpstoxAdapterConfig(
+        api_base_url="https://api-hft.upstox.com",
+        enabled=True,
+        instrument_token_resolver=lambda symbol: f"NSE_EQ|{symbol}",
+        position_provider=failing_provider,
+    )
+    with pytest.raises(RuntimeError, match="provider unavailable"):
+        UpstoxBrokerAdapter(configured, client=client).positions()
