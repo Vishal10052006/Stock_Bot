@@ -23,6 +23,7 @@ from typing import Any
 import pandas as pd
 
 from experiments.paper_journal import PaperEvidenceJournal
+from ml.prediction.contracts import ClassificationPrediction, PredictionProvenance
 from experiments.paper_quality import assess_paper_evidence
 from trading.paper.decision_loop import PaperDecisionLoop
 
@@ -81,6 +82,62 @@ def _load_sidecar(path: str | Path | None) -> dict[str, Any]:
     return payload
 
 
+
+
+def _load_predictions(path: str | Path | None) -> dict[tuple[object, str], object]:
+    """Load versioned prediction telemetry without inventing missing predictions."""
+    if path is None:
+        return {}
+
+    predictions: dict[tuple[object, str], object] = {}
+    for line_number, line in enumerate(
+        Path(path).read_text(encoding="utf-8").splitlines(),
+        start=1,
+    ):
+        if not line.strip():
+            continue
+        try:
+            record = json.loads(line)
+            timestamp = pd.Timestamp(record["timestamp"])
+            symbol = str(record["symbol"]).strip().upper()
+            payload = record["payload"]
+            provenance = PredictionProvenance(
+                model_version=str(record["model_version"]),
+                model_family=str(payload.get("model_family", "classification")),
+                dataset_version=str(record["dataset_version"]),
+                feature_version=str(record["feature_version"]),
+                target_version=str(payload.get("target_version", "phase9-label-v1")),
+                code_version=str(payload.get("code_version", "unknown")),
+                calibration_version=(
+                    str(payload["calibration_version"])
+                    if payload.get("calibration_version") is not None
+                    else None
+                ),
+            )
+            prediction = ClassificationPrediction(
+                timestamp=timestamp,
+                symbol=symbol,
+                probabilities={
+                    "LONG_SUCCESS": float(payload["p_long"]),
+                    "SHORT_SUCCESS": float(payload["p_short"]),
+                    "NO_EDGE": float(payload["p_no_edge"]),
+                },
+                provenance=provenance,
+            )
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ValueError(
+                f"invalid prediction record at line {line_number}: {exc}"
+            ) from exc
+
+        key = (timestamp, symbol)
+        if key in predictions:
+            raise ValueError(
+                f"duplicate prediction for {timestamp.isoformat()} {symbol}"
+            )
+        predictions[key] = prediction
+
+    return predictions
+
 def _indexed_map(payload: dict[str, Any], name: str) -> dict[int, object]:
     value = payload.get(name, {})
     if value is None:
@@ -108,12 +165,18 @@ def main() -> None:
     parser.add_argument("--journal", required=True)
     parser.add_argument("--output", required=True)
     parser.add_argument("--observations-json", default=None)
+    parser.add_argument(
+        "--predictions-jsonl",
+        default=None,
+        help="Optional PredictionStore JSONL artifact keyed by timestamp/symbol.",
+    )
     parser.add_argument("--price-column", default="close")
     parser.add_argument("--quantity", type=float, default=1.0)
     args = parser.parse_args()
 
     rows = _load_rows(args.input)
     sidecar = _load_sidecar(args.observations_json)
+    predictions = _load_predictions(args.predictions_jsonl)
 
     operational_events = int(sidecar.get("operational_events", 0))
     operational_errors = int(sidecar.get("operational_errors", 0))
@@ -143,6 +206,7 @@ def main() -> None:
         evidence_version=args.evidence_version,
         dataset_version=args.dataset_version,
         code_version=args.code_version,
+        predictions=predictions,
     )
 
     quality = assess_paper_evidence(journal.records())
@@ -164,6 +228,7 @@ def main() -> None:
             "run_id": run.run_id,
             "steps": len(run.steps),
             "orders": len(run.orders),
+            "prediction_observations": len(predictions),
         },
         "record": {
             "run_id": record.run_id,
