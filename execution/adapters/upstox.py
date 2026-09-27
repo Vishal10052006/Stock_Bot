@@ -1,17 +1,19 @@
-"""Upstox broker adapter with automatic symbol resolution.
+"""Upstox broker adapter boundary with automatic instrument resolution.
 
 The execution contract remains broker-neutral: OrderRequest carries a symbol.
-When an instrument resolver is supplied, the adapter resolves the symbol at
-submission time instead of requiring a manually maintained instrument token.
+A configured instrument resolver is preferred. The local Upstox instrument
+master can be supplied by path for deterministic symbol resolution without
+per-order provider search calls.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 import math
-from typing import Any, Callable, Mapping
+from typing import Any, Callable, Mapping, Protocol
 
 from execution.adapters.base import BrokerAdapter
+from execution.adapters.upstox_instrument_master import LocalUpstoxInstrumentResolver
 from execution.adapters.upstox_instruments import UpstoxInstrumentResolver
 from execution.engine import (
     Fill,
@@ -20,6 +22,11 @@ from execution.engine import (
     OrderStatus,
     PositionSnapshot,
 )
+
+
+class InstrumentResolver(Protocol):
+    def resolve_key(self, symbol: str) -> str:
+        ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -35,7 +42,8 @@ class UpstoxAdapterConfig:
     market_protection: int = -1
     instrument_token_resolver: Callable[[str], str] | None = None
     position_provider: Callable[[], Mapping[str, Any]] | None = None
-    instrument_resolver: UpstoxInstrumentResolver | None = None
+    instrument_resolver: InstrumentResolver | None = None
+    instrument_master_path: str | None = None
 
     def __post_init__(self) -> None:
         if not self.api_base_url.strip():
@@ -52,6 +60,8 @@ class UpstoxAdapterConfig:
             raise ValueError(
                 "configure either instrument_token_resolver or instrument_resolver, not both"
             )
+        if self.instrument_master_path is not None and not self.instrument_master_path.strip():
+            raise ValueError("instrument_master_path must not be blank")
 
 
 class UpstoxBrokerAdapter(BrokerAdapter):
@@ -60,6 +70,16 @@ class UpstoxBrokerAdapter(BrokerAdapter):
     def __init__(self, config: UpstoxAdapterConfig, client: Any | None = None) -> None:
         self.config = config
         self.client = client
+        self._instrument_resolver = self._build_instrument_resolver()
+
+    def _build_instrument_resolver(self) -> InstrumentResolver | None:
+        if self.config.instrument_resolver is not None:
+            return self.config.instrument_resolver
+        if self.config.instrument_master_path is not None:
+            return LocalUpstoxInstrumentResolver.from_file(
+                self.config.instrument_master_path
+            )
+        return None
 
     def _require_enabled(self) -> None:
         if not self.config.enabled:
@@ -195,14 +215,17 @@ class UpstoxBrokerAdapter(BrokerAdapter):
         )
 
     def _resolve_instrument(self, symbol: str) -> str:
-        if self.config.instrument_resolver is not None:
-            return self.config.instrument_resolver.resolve_key(symbol)
+        if self._instrument_resolver is not None:
+            return str(self._instrument_resolver.resolve_key(symbol)).strip()
+
+        # Compatibility path for older controlled tests/configurations.
         resolver = self.config.instrument_token_resolver
         if resolver is not None:
             return str(resolver(symbol)).strip()
+
         raise ValueError(
-            "Upstox instrument_resolver is required for orders; "
-            "manual token resolution is not available"
+            "Upstox instrument resolver is required for orders; "
+            "configure instrument_master_path or instrument_resolver"
         )
 
     def _payload(self, order: OrderRequest) -> dict[str, Any]:
