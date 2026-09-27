@@ -518,6 +518,7 @@ class ExecutionEngine:
             raise ValueError("broker response client_order_id mismatch")
         if snapshot.requested_quantity != order.quantity:
             raise ValueError("broker response quantity mismatch")
+        self._validate_snapshot_contract(snapshot)
 
         self._transition(
             order.client_order_id,
@@ -564,6 +565,28 @@ class ExecutionEngine:
                 reason=reason,
             )
         )
+
+    @staticmethod
+    def _validate_snapshot_contract(snapshot: OrderSnapshot) -> None:
+        """Reject internally inconsistent broker lifecycle snapshots."""
+        if snapshot.status is OrderStatus.FILLED:
+            if abs(snapshot.filled_quantity - snapshot.requested_quantity) > 1e-12:
+                raise ValueError("broker snapshot FILLED quantity mismatch")
+        elif snapshot.status is OrderStatus.PARTIALLY_FILLED:
+            if not 0.0 < snapshot.filled_quantity < snapshot.requested_quantity:
+                raise ValueError("broker snapshot PARTIALLY_FILLED quantity mismatch")
+        elif snapshot.status in {
+            OrderStatus.SUBMITTED,
+            OrderStatus.OPEN,
+            OrderStatus.CANCEL_PENDING,
+            OrderStatus.CANCELLED,
+            OrderStatus.EXPIRED,
+            OrderStatus.REJECTED_BROKER,
+            OrderStatus.FAILED,
+            OrderStatus.UNKNOWN,
+        }:
+            if snapshot.filled_quantity < 0.0 or snapshot.filled_quantity > snapshot.requested_quantity:
+                raise ValueError("broker snapshot filled quantity out of bounds")
 
     def refresh(self, client_order_id: str) -> OrderSnapshot:
         """Fetch authoritative broker state and merge it into the local journal."""
@@ -617,6 +640,7 @@ class ExecutionEngine:
             raise ValueError("broker recovery client_order_id mismatch")
         if snapshot.requested_quantity != prior.requested_quantity:
             raise ValueError("broker recovery quantity mismatch")
+        self._validate_snapshot_contract(snapshot)
 
         self._transition(
             client_order_id,
@@ -661,6 +685,7 @@ class ExecutionEngine:
                     reason="broker returned no order state during rehydration",
                     fills=prior.fills,
                 )
+            self._validate_snapshot_contract(snapshot)
             self._orders[client_order_id] = snapshot
             self._fills[client_order_id] = tuple(snapshot.fills)
             self._states[client_order_id] = snapshot.status
