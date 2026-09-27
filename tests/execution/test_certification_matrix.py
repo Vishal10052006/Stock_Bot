@@ -79,3 +79,13 @@ def test_unknown_certification_id_is_rejected():
         assert "CERT-99" in str(exc)
     else:
         raise AssertionError("unknown certification ID was accepted")
+
+
+
+def test_production_gate_contains_all_certification_gate_fields():
+    from execution.production import ProductionReadinessGate
+
+    gate_fields = set(ProductionReadinessGate.FIELDS)
+    expected = {item.gate_field for item in CERTIFICATION_ITEMS}
+    assert expected <= gate_fields
+    assert "live_lock_validated" in gate_fields
