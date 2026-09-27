@@ -17,6 +17,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 import hashlib
 import json
+import math
 import time
 from typing import Protocol
 
@@ -84,9 +85,13 @@ class OrderRequest:
             raise ValueError("client_order_id must not be empty")
         if not self.symbol.strip():
             raise ValueError("symbol must not be empty")
-        if self.quantity <= 0:
-            raise ValueError("quantity must be positive")
-        if self.order_type is OrderType.LIMIT and (self.limit_price is None or self.limit_price <= 0):
+        if not math.isfinite(float(self.quantity)) or self.quantity <= 0:
+            raise ValueError("quantity must be positive and finite")
+        if self.order_type is OrderType.LIMIT and (
+            self.limit_price is None
+            or not math.isfinite(float(self.limit_price))
+            or self.limit_price <= 0
+        ):
             raise ValueError("LIMIT orders require a positive limit_price")
         if self.order_type is OrderType.MARKET and self.limit_price is not None:
             raise ValueError("MARKET orders must not define limit_price")
@@ -113,10 +118,15 @@ class Fill:
             raise ValueError("fill timestamp must be timezone-aware")
         if not self.fill_id.strip() or not self.client_order_id.strip():
             raise ValueError("fill identifiers must not be empty")
-        if self.quantity <= 0 or self.price <= 0:
-            raise ValueError("fill quantity and price must be positive")
-        if self.fee < 0:
-            raise ValueError("fill fee must be non-negative")
+        if (
+            not math.isfinite(float(self.quantity))
+            or self.quantity <= 0
+            or not math.isfinite(float(self.price))
+            or self.price <= 0
+        ):
+            raise ValueError("fill quantity and price must be positive and finite")
+        if not math.isfinite(float(self.fee)) or self.fee < 0:
+            raise ValueError("fill fee must be non-negative and finite")
         object.__setattr__(self, "timestamp", ts)
 
 
@@ -140,12 +150,19 @@ class OrderSnapshot:
             raise ValueError("updated_at must be timezone-aware")
         if not self.broker_order_id.strip() or not self.client_order_id.strip():
             raise ValueError("order identifiers must not be empty")
-        if self.requested_quantity <= 0:
-            raise ValueError("requested_quantity must be positive")
-        if self.filled_quantity < 0 or self.filled_quantity > self.requested_quantity + 1e-12:
-            raise ValueError("filled_quantity must be within requested quantity")
-        if self.average_fill_price is not None and self.average_fill_price <= 0:
-            raise ValueError("average_fill_price must be positive")
+        if not math.isfinite(float(self.requested_quantity)) or self.requested_quantity <= 0:
+            raise ValueError("requested_quantity must be positive and finite")
+        if (
+            not math.isfinite(float(self.filled_quantity))
+            or self.filled_quantity < 0
+            or self.filled_quantity > self.requested_quantity + 1e-12
+        ):
+            raise ValueError("filled_quantity must be within requested quantity and finite")
+        if self.average_fill_price is not None and (
+            not math.isfinite(float(self.average_fill_price))
+            or self.average_fill_price <= 0
+        ):
+            raise ValueError("average_fill_price must be positive and finite")
         object.__setattr__(self, "updated_at", ts)
         object.__setattr__(self, "fills", tuple(self.fills))
 
@@ -161,8 +178,10 @@ class PositionSnapshot:
     def __post_init__(self) -> None:
         if not self.symbol.strip():
             raise ValueError("symbol must not be empty")
-        if self.average_price < 0:
-            raise ValueError("average_price must be non-negative")
+        if not math.isfinite(float(self.quantity)):
+            raise ValueError("quantity must be finite")
+        if not math.isfinite(float(self.average_price)) or self.average_price < 0:
+            raise ValueError("average_price must be non-negative and finite")
         # Signed quantity: positive=long, negative=short. This is required
         # because NSE research/paper trading supports both directions.
         object.__setattr__(self, "symbol", self.symbol.strip().upper())
@@ -439,8 +458,8 @@ class ExecutionEngine:
             raise ValueError("execution symbol does not match authorization")
         if order.side != self.side_for_direction(order.authorization.direction):
             raise ValueError("execution side does not match authorization")
-        if order.quantity <= 0:
-            raise ValueError("execution quantity must be positive")
+        if not math.isfinite(float(order.quantity)) or order.quantity <= 0:
+            raise ValueError("execution quantity must be positive and finite")
 
     def submit(self, order: OrderRequest) -> ExecutionResult:
         """Validate, submit once, record broker acknowledgement, and return result.
