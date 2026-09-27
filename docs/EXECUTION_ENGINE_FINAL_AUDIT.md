@@ -99,12 +99,16 @@ UPSTOX-08 through UPSTOX-18 now provide the software/readiness evidence framewor
 
 Current provider-readiness gaps remain explicitly tracked:
 
-- sandbox order-history behavior;
-- sandbox partial-fill behavior;
-- provider rate-limit behavior;
-- timeout/network recovery;
-- process-restart recovery;
-- production read-only position reconciliation.
+- sandbox order-history behavior — **BLOCKED by the currently exposed official SDK sandbox surface**;
+- sandbox partial-fill behavior — **UNVERIFIED**;
+- provider rate-limit behavior — **UNVERIFIED as real-provider evidence**;
+- timeout/network recovery — **UNVERIFIED as real-provider evidence**;
+- process-restart recovery — **UNVERIFIED as real-provider evidence**;
+- production read-only position reconciliation — **UNVERIFIED until a real production position snapshot is intentionally collected**.
+
+The real sandbox test executed on 2026-09-27 passed for `SUBMIT → BROKER ORDER ID → CANCEL V3 ACK`. The sandbox test deliberately does not call `/v2/order/history` because the official SDK sandbox rejects that endpoint. The Upstox sandbox documentation currently lists Place/Modify/Cancel order APIs as sandbox-enabled; therefore the project records the observed provider boundary rather than claiming unsupported sandbox capabilities.
+
+The software implementation for partial-fill classification, rate-limit classification/backoff, timeout/recovery semantics, restart rehydration, and read-only production position reconciliation is already present and covered by deterministic tests. Those software controls do not substitute for real provider evidence.
 
 Unverified provider capabilities keep readiness blocked.
 
@@ -166,9 +170,9 @@ Do not activate live execution yet.
 
 The next phase is **Provider Evidence / Readiness Validation**:
 
-1. collect real Upstox sandbox order-history evidence when credentials and a valid sandbox instrument are intentionally supplied;
-2. collect real provider evidence for partial fills, rate limiting, timeout recovery, and process restart where the sandbox supports them;
-3. verify whether supported Upstox environments expose the required position-reconciliation capability;
+1. retain the observed sandbox boundary: Place Order V3 + broker order identity + Cancel Order V3 acknowledgement are verified; history lookup remains provider-surface blocked;
+2. collect real provider evidence for partial fills, rate limiting, timeout recovery, and process restart only where the provider environment actually exposes and supports those observations;
+3. collect one intentionally controlled, read-only production position snapshot and run it through the canonical reconciliation evidence path;
 4. record evidence through the existing provider-evidence contracts and consolidate it into the readiness attestation;
 5. keep readiness fail-closed while any required capability remains UNVERIFIED, BLOCKED, or FAILED;
 6. keep the independent live lock enabled regardless of readiness-attestation state.
