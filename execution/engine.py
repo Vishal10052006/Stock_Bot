@@ -342,8 +342,10 @@ class ExecutionEngine:
 
     VERSION = "EXEC-v1.0"
 
-    def __init__(self, adapter: BrokerAdapter) -> None:
+    def __init__(self, adapter: BrokerAdapter, *, audit_store: object | None = None) -> None:
         self.adapter = adapter
+        # Optional durable audit sink; trading remains functional without it.
+        self.audit_store = audit_store
         self._orders: dict[str, OrderSnapshot] = {}
         self._requests: dict[str, OrderRequest] = {}
         self._fills: dict[str, tuple[Fill, ...]] = {}
@@ -527,6 +529,23 @@ class ExecutionEngine:
         )
         self._orders[order.client_order_id] = snapshot
         self._fills[order.client_order_id] = tuple(snapshot.fills)
+        if self.audit_store is not None:
+            self.audit_store.append_order(order, snapshot)
+            for fill in snapshot.fills:
+                self.audit_store.append_fill(
+                    fill,
+                    decision_id=order.decision_id,
+                    purpose=order.purpose,
+                )
+            for position in self.adapter.positions():
+                if position.symbol == order.symbol:
+                    self.audit_store.append_position(
+                        position,
+                        client_order_id=order.client_order_id,
+                        decision_id=order.decision_id,
+                        purpose=order.purpose,
+                        timestamp=snapshot.updated_at,
+                    )
         return ExecutionResult(
             request=order,
             snapshot=snapshot,
@@ -554,17 +573,18 @@ class ExecutionEngine:
         if current is not None:
             OrderStateMachine.transition(current, target)
         self._states[client_order_id] = target
-        self._events.append(
-            ExecutionEvent(
-                client_order_id=client_order_id,
-                decision_id=self._requests.get(client_order_id).decision_id if client_order_id in self._requests else "",
-                purpose=self._requests.get(client_order_id).purpose if client_order_id in self._requests else "ENTRY",
-                from_status=current,
-                to_status=target,
-                timestamp=pd.Timestamp.now(tz="Asia/Kolkata"),
-                reason=reason,
-            )
+        event = ExecutionEvent(
+            client_order_id=client_order_id,
+            decision_id=self._requests.get(client_order_id).decision_id if client_order_id in self._requests else "",
+            purpose=self._requests.get(client_order_id).purpose if client_order_id in self._requests else "ENTRY",
+            from_status=current,
+            to_status=target,
+            timestamp=pd.Timestamp.now(tz="Asia/Kolkata"),
+            reason=reason,
         )
+        self._events.append(event)
+        if self.audit_store is not None:
+            self.audit_store.append_event(event)
 
     @staticmethod
     def _validate_snapshot_contract(snapshot: OrderSnapshot) -> None:
@@ -812,6 +832,7 @@ __all__ = [
     "BrokerAdapter",
     "ExecutionEngine",
     "ExecutionEvent",
+    "ExecutionAuditStore",
     "ExecutionMetrics",
     "ExecutionReadiness",
     "ExecutionResult",
@@ -825,3 +846,7 @@ __all__ = [
     "PositionSnapshot",
     "TimeInForce",
 ]
+
+
+# Imported after engine definitions because execution.audit serializes engine contracts.
+from execution.audit import ExecutionAuditStore  # noqa: E402
