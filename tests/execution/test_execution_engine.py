@@ -477,8 +477,10 @@ def test_paper_adapter_rejects_non_finite_price(price: float) -> None:
     """Provider output must never inject NaN/Infinity into fills."""
     adapter = PaperBrokerAdapter(price_provider=lambda _order: price)
     engine = ExecutionEngine(adapter)
-    with pytest.raises(ValueError, match="positive and finite"):
-        engine.submit(order_request())
+    result = engine.submit(order_request())
+    assert result.snapshot.status is OrderStatus.UNKNOWN
+    assert result.error is not None
+    assert "positive and finite" in result.error
 
 
 def test_repeated_missing_broker_refresh_stays_unknown() -> None:
