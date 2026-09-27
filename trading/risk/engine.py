@@ -205,20 +205,49 @@ class RiskInput:
 
         object.__setattr__(self, "timestamp", timestamp)
         object.__setattr__(self, "symbol", self.symbol.strip().upper())
-        object.__setattr__(
-            self,
-            "symbol_exposure",
-            {str(k).strip().upper(): float(v) for k, v in self.symbol_exposure.items()},
-        )
-        object.__setattr__(
-            self,
-            "sector_exposure",
-            {str(k).strip(): float(v) for k, v in self.sector_exposure.items()},
-        )
+        symbol_exposure = {
+            str(k).strip().upper(): float(v)
+            for k, v in self.symbol_exposure.items()
+        }
+        sector_exposure = {
+            str(k).strip(): float(v)
+            for k, v in self.sector_exposure.items()
+        }
+        pairwise_correlation = {
+            str(k).strip().upper(): float(v)
+            for k, v in self.pairwise_correlation.items()
+        }
+
+        # Portfolio context is security-critical: NaN/Infinity must never
+        # influence concentration or correlation decisions.
+        if any(
+            not math.isfinite(value) or value < 0
+            for value in symbol_exposure.values()
+        ):
+            raise ValueError(
+                "symbol_exposure values must be finite and non-negative"
+            )
+        if any(
+            not math.isfinite(value) or value < 0
+            for value in sector_exposure.values()
+        ):
+            raise ValueError(
+                "sector_exposure values must be finite and non-negative"
+            )
+        if any(
+            not math.isfinite(value) or not -1.0 <= value <= 1.0
+            for value in pairwise_correlation.values()
+        ):
+            raise ValueError(
+                "pairwise_correlation values must be finite and in [-1, 1]"
+            )
+
+        object.__setattr__(self, "symbol_exposure", symbol_exposure)
+        object.__setattr__(self, "sector_exposure", sector_exposure)
         object.__setattr__(
             self,
             "pairwise_correlation",
-            {str(k).strip().upper(): float(v) for k, v in self.pairwise_correlation.items()},
+            pairwise_correlation,
         )
 
 
