@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from typing import Iterable
 
 from execution.adapters.upstox import UpstoxAdapterConfig, UpstoxBrokerAdapter
+from execution.adapters.upstox_positions import fetch_upstox_positions
 from execution.adapters.upstox_production_positions import (
     UpstoxProductionPositionClient,
 )
@@ -47,7 +48,7 @@ def run_upstox_position_evidence(
         UpstoxAdapterConfig(
             api_base_url="https://api.upstox.com",
             enabled=True,
-            position_provider=client.get_positions,
+            position_provider=lambda: fetch_upstox_positions(client.get_positions),
         ),
         client=client,
     )
