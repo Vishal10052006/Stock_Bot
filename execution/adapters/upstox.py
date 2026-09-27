@@ -1,9 +1,8 @@
-"""Upstox broker adapter boundary.
+"""Upstox broker adapter with automatic symbol resolution.
 
-The adapter contains only provider request/response mapping. Credentials and
-HTTP client construction remain outside the execution domain. The adapter is
-disabled by default and therefore remains fail-closed until provider-specific
-validation is complete.
+The execution contract remains broker-neutral: OrderRequest carries a symbol.
+When an instrument resolver is supplied, the adapter resolves the symbol at
+submission time instead of requiring a manually maintained instrument token.
 """
 
 from __future__ import annotations
@@ -13,6 +12,7 @@ import math
 from typing import Any, Callable, Mapping
 
 from execution.adapters.base import BrokerAdapter
+from execution.adapters.upstox_instruments import UpstoxInstrumentResolver
 from execution.engine import (
     Fill,
     OrderRequest,
@@ -35,6 +35,7 @@ class UpstoxAdapterConfig:
     market_protection: int = -1
     instrument_token_resolver: Callable[[str], str] | None = None
     position_provider: Callable[[], Mapping[str, Any]] | None = None
+    instrument_resolver: UpstoxInstrumentResolver | None = None
 
     def __post_init__(self) -> None:
         if not self.api_base_url.strip():
@@ -47,6 +48,10 @@ class UpstoxAdapterConfig:
             raise ValueError("validity must be DAY or IOC")
         if not -1 <= self.market_protection <= 25:
             raise ValueError("market_protection must be between -1 and 25")
+        if self.instrument_token_resolver is not None and self.instrument_resolver is not None:
+            raise ValueError(
+                "configure either instrument_token_resolver or instrument_resolver, not both"
+            )
 
 
 class UpstoxBrokerAdapter(BrokerAdapter):
@@ -189,13 +194,21 @@ class UpstoxBrokerAdapter(BrokerAdapter):
             fills=fills,
         )
 
-    def _payload(self, order: OrderRequest) -> dict[str, Any]:
+    def _resolve_instrument(self, symbol: str) -> str:
+        if self.config.instrument_resolver is not None:
+            return self.config.instrument_resolver.resolve_key(symbol)
         resolver = self.config.instrument_token_resolver
-        if resolver is None:
-            raise ValueError("instrument_token_resolver is required for Upstox orders")
-        instrument_token = str(resolver(order.symbol)).strip()
+        if resolver is not None:
+            return str(resolver(symbol)).strip()
+        raise ValueError(
+            "Upstox instrument_resolver is required for orders; "
+            "manual token resolution is not available"
+        )
+
+    def _payload(self, order: OrderRequest) -> dict[str, Any]:
+        instrument_token = self._resolve_instrument(order.symbol)
         if not instrument_token:
-            raise ValueError("instrument token resolver returned an empty token")
+            raise ValueError("Upstox instrument resolver returned an empty instrument key")
 
         quantity = float(order.quantity)
         if not math.isfinite(quantity) or quantity <= 0:
