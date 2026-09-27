@@ -1,11 +1,9 @@
-import asyncio
-from core.ceo import CEO
+"""STOCK_BOT application entry point."""
 
-async def main():
-    ceo = CEO()
+from __future__ import annotations
 
-    for i in range(3):
-        print(f"\nRUN {i+1}")
-        await ceo.act("analyze stock: RELIANCE")
+from trading.runtime_cli import main as runtime_main
 
-asyncio.run(main())
+
+if __name__ == "__main__":
+    raise SystemExit(runtime_main())
