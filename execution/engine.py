@@ -50,6 +50,7 @@ class OrderStatus(str, Enum):
     REJECTED_LOCAL = "REJECTED_LOCAL"
     SUBMITTING = "SUBMITTING"
     SUBMITTED = "SUBMITTED"
+    ACKNOWLEDGED = "ACKNOWLEDGED"
     OPEN = "OPEN"
     PARTIALLY_FILLED = "PARTIALLY_FILLED"
     FILLED = "FILLED"
@@ -288,6 +289,14 @@ class OrderStateMachine:
             OrderStatus.UNKNOWN,
         },
         OrderStatus.SUBMITTED: {
+            OrderStatus.ACKNOWLEDGED,
+            OrderStatus.OPEN,
+            OrderStatus.PARTIALLY_FILLED,
+            OrderStatus.FILLED,
+            OrderStatus.REJECTED_BROKER,
+            OrderStatus.UNKNOWN,
+        },
+        OrderStatus.ACKNOWLEDGED: {
             OrderStatus.OPEN,
             OrderStatus.PARTIALLY_FILLED,
             OrderStatus.FILLED,
@@ -320,6 +329,7 @@ class OrderStateMachine:
         OrderStatus.FAILED: {OrderStatus.UNKNOWN},
         OrderStatus.UNKNOWN: {
             OrderStatus.SUBMITTED,
+            OrderStatus.ACKNOWLEDGED,
             OrderStatus.OPEN,
             OrderStatus.PARTIALLY_FILLED,
             OrderStatus.FILLED,
