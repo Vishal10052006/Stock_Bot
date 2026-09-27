@@ -9,6 +9,7 @@ validation is complete.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
 from typing import Any, Callable, Mapping
 
 from execution.adapters.base import BrokerAdapter
@@ -145,25 +146,41 @@ class UpstoxBrokerAdapter(BrokerAdapter):
         if not tag:
             raise ValueError("Upstox response missing order tag")
 
-        requested = float(data.get("quantity", data.get("requested_quantity", 0)))
-        filled = float(data.get("filled_quantity", data.get("filled_qty", 0)))
-        if requested <= 0:
-            raise ValueError("Upstox response missing positive quantity")
+        try:
+            requested = float(data.get("quantity", data.get("requested_quantity", 0)))
+            filled = float(data.get("filled_quantity", data.get("filled_qty", 0)))
+        except (TypeError, ValueError) as exc:
+            raise ValueError("Upstox order quantity fields must be numeric") from exc
+        if not math.isfinite(requested) or requested <= 0:
+            raise ValueError("Upstox response missing positive finite quantity")
+        if not math.isfinite(filled) or filled < 0 or filled > requested:
+            raise ValueError("Upstox response has invalid filled quantity")
 
+        status = self._status(data.get("status"))
         fills = self._fill_tuple(data, tag)
+        fill_sum = sum(fill.quantity for fill in fills)
+        if fills and abs(fill_sum - filled) > 1e-9:
+            raise ValueError("Upstox fill quantity does not match filled quantity")
+        if status is OrderStatus.FILLED and abs(filled - requested) > 1e-9:
+            raise ValueError("Upstox FILLED status has incomplete quantity")
+        if status is OrderStatus.PARTIALLY_FILLED and not 0 < filled < requested:
+            raise ValueError("Upstox PARTIALLY_FILLED status has invalid quantity")
+
         average = data.get("average_price", data.get("average_fill_price"))
         if average is None and fills:
-            total_qty = sum(fill.quantity for fill in fills)
-            average = (
-                sum(fill.quantity * fill.price for fill in fills) / total_qty
-                if total_qty
-                else None
-            )
+            average = sum(fill.quantity * fill.price for fill in fills) / fill_sum
+        if average is not None:
+            try:
+                average = float(average)
+            except (TypeError, ValueError) as exc:
+                raise ValueError("Upstox average price must be numeric") from exc
+            if not math.isfinite(average) or average <= 0:
+                raise ValueError("Upstox average price must be positive and finite")
 
         return OrderSnapshot(
             broker_order_id=broker_order_id,
             client_order_id=tag,
-            status=self._status(data.get("status")),
+            status=status,
             requested_quantity=requested,
             filled_quantity=filled,
             average_fill_price=float(average) if average is not None else None,
@@ -175,12 +192,21 @@ class UpstoxBrokerAdapter(BrokerAdapter):
         resolver = self.config.instrument_token_resolver
         if resolver is None:
             raise ValueError("instrument_token_resolver is required for Upstox orders")
-        instrument_token = resolver(order.symbol)
-        if not instrument_token.strip():
+        instrument_token = str(resolver(order.symbol)).strip()
+        if not instrument_token:
             raise ValueError("instrument token resolver returned an empty token")
 
+        quantity = float(order.quantity)
+        if not math.isfinite(quantity) or quantity <= 0:
+            raise ValueError("Upstox quantity must be positive and finite")
+        if not quantity.is_integer():
+            raise ValueError(
+                "Upstox equity quantity must be an integer; refusing to truncate "
+                "Risk-approved quantity"
+            )
+
         return {
-            "quantity": int(order.quantity),
+            "quantity": int(quantity),
             "product": self.config.product,
             "validity": self.config.validity,
             "price": float(order.limit_price or 0.0),
