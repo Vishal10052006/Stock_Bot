@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import hashlib
+import math
 import json
 from enum import Enum
 
@@ -23,9 +24,10 @@ class BrokerPosition:
     def __post_init__(self) -> None:
         if not self.symbol.strip():
             raise ValueError("symbol must not be empty")
-        # Signed quantity: positive=LONG, negative=SHORT.
-        if self.average_price < 0:
-            raise ValueError("average_price must not be negative")
+        if not math.isfinite(float(self.quantity)) or self.quantity < 0:
+            raise ValueError("quantity must be finite and non-negative")
+        if not math.isfinite(float(self.average_price)) or self.average_price < 0:
+            raise ValueError("average_price must be finite and non-negative")
 
 
 @dataclass(frozen=True, slots=True)
@@ -51,12 +53,7 @@ class BrokerReconciler:
         self,
         local: tuple[BrokerPosition, ...] | None,
         broker: tuple[BrokerPosition, ...] | None,
-        *,
-        quantity_tolerance: float = 1e-12,
-        price_tolerance: float = 1e-12,
     ) -> ReconciliationReport:
-        if quantity_tolerance < 0 or price_tolerance < 0:
-            raise ValueError("reconciliation tolerances must be non-negative")
         if local is None or broker is None:
             return ReconciliationReport(
                 status=ReconciliationStatus.BLOCKED,
@@ -71,10 +68,7 @@ class BrokerReconciler:
         for symbol in symbols:
             left = local_map.get(symbol, (0.0, 0.0))
             right = broker_map.get(symbol, (0.0, 0.0))
-            if (
-                abs(left[0] - right[0]) > quantity_tolerance
-                or abs(left[1] - right[1]) > price_tolerance
-            ):
+            if left != right:
                 mismatches.append(
                     f"{symbol}: local={left} broker={right}"
                 )
