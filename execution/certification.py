@@ -12,10 +12,14 @@ import hashlib
 import json
 from typing import Callable, Iterable
 
-from execution.engine import PositionSnapshot
+from execution.engine import (
+    ExecutionEngine,
+    ExecutionResult,
+    OrderRequest,
+    OrderStatus,
+    PositionSnapshot,
+)
 from execution.production import reconcile_execution_positions
-
-from execution.engine import ExecutionEngine, ExecutionResult, OrderRequest, OrderStatus
 
 
 class FailureScenario(str, Enum):
