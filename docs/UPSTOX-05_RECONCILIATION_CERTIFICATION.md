@@ -26,6 +26,10 @@ Automated certification: tests/execution/test_upstox_reconciliation.py
 
 Upstox's public documentation exposes a production Get Positions API, while the current sandbox API list is focused on order placement, modification and cancellation. Therefore this repository does not claim sandbox position reconciliation evidence without an observed supported sandbox position endpoint.
 
+## UPSTOX-08 readiness hardening
+
+The Upstox adapter position mapper now rejects malformed provider position entries and non-finite/invalid numeric values before constructing `PositionSnapshot` objects. This preserves the reconciliation contract's fail-closed behavior while keeping provider-specific validation at the adapter boundary.
+
 ## Status
 
 **Software certification: COMPLETE.**

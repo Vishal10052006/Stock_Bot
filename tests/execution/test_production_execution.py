@@ -20,7 +20,9 @@ from execution.production import (
 )
 from execution.certification import (
     OperationalRunbook,
+    PositionEvidenceReport,
     RetryBackoffPolicy,
+    build_position_evidence,
     validate_replay_idempotency,
 )
 from tests.execution.test_execution_engine import authorization, order_request
@@ -186,3 +188,46 @@ def test_production_readiness_passes_only_when_all_gates_are_true():
     gates = {field: True for field in ProductionReadinessGate.FIELDS}
     report = ProductionReadinessGate().evaluate(gates)
     assert report.ready
+
+
+def test_position_evidence_is_deterministic_and_non_authorizing():
+    local = (PositionSnapshot("ITC", 10.0, 450.0),)
+    broker = (PositionSnapshot("ITC", 10.0, 450.0),)
+
+    first = build_position_evidence("upstox", local, broker)
+    second = build_position_evidence("upstox", local, broker)
+
+    assert isinstance(first, PositionEvidenceReport)
+    assert first.observed
+    assert first.status == "MATCH"
+    assert first.safe
+    assert first.position_count == 1
+    assert first.fingerprint == second.fingerprint
+
+
+def test_position_evidence_blocks_missing_provider_snapshot():
+    local = (PositionSnapshot("ITC", 10.0, 450.0),)
+
+    report = build_position_evidence("upstox", local, None)
+
+    assert not report.observed
+    assert report.status == "BLOCKED"
+    assert not report.safe
+    assert report.position_count == 0
+
+
+def test_position_evidence_preserves_mismatch_details():
+    local = (PositionSnapshot("ITC", 10.0, 450.0),)
+    broker = (PositionSnapshot("ITC", 9.0, 450.0),)
+
+    report = build_position_evidence("upstox", local, broker)
+
+    assert report.status == "MISMATCH"
+    assert not report.safe
+    assert report.details
+    assert "ITC" in report.details[0]
+
+
+def test_position_evidence_rejects_empty_provider_name():
+    with pytest.raises(ValueError, match="provider"):
+        build_position_evidence(" ", (), ())

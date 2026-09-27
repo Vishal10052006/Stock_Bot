@@ -216,3 +216,72 @@ def test_positions_map_to_signed_snapshots():
         PositionSnapshot("ITC", 25, 456.5),
         PositionSnapshot("TCS", -5, 3010.0),
     )
+
+
+# UPSTOX-08 hardening coverage
+
+def test_positions_reject_non_mapping_entries():
+    client = FakeUpstoxClient()
+    client.positions_response = {"data": {"positions": ["invalid"]}}
+    with pytest.raises(ValueError, match="position entry"):
+        adapter(client).positions()
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "pattern"),
+    [
+        ("quantity", float("nan"), "quantity"),
+        ("quantity", float("inf"), "quantity"),
+        ("average_price", float("nan"), "average price"),
+        ("average_price", float("inf"), "average price"),
+    ],
+)
+def test_positions_reject_non_finite_numeric_fields(field, value, pattern):
+    client = FakeUpstoxClient()
+    client.positions_response = {
+        "data": {
+            "positions": [
+                {
+                    "trading_symbol": "ITC",
+                    "quantity": 5 if field != "quantity" else value,
+                    "average_price": 450.0 if field != "average_price" else value,
+                }
+            ]
+        }
+    }
+    with pytest.raises(ValueError, match=pattern):
+        adapter(client).positions()
+
+
+def test_positions_reject_negative_average_price():
+    client = FakeUpstoxClient()
+    client.positions_response = {
+        "data": {
+            "positions": [
+                {
+                    "trading_symbol": "ITC",
+                    "quantity": 5,
+                    "average_price": -1.0,
+                }
+            ]
+        }
+    }
+    with pytest.raises(ValueError, match="average price"):
+        adapter(client).positions()
+
+
+def test_positions_reject_malformed_numeric_values():
+    client = FakeUpstoxClient()
+    client.positions_response = {
+        "data": {
+            "positions": [
+                {
+                    "trading_symbol": "ITC",
+                    "quantity": "not-a-number",
+                    "average_price": 450.0,
+                }
+            ]
+        }
+    }
+    with pytest.raises(ValueError, match="quantity"):
+        adapter(client).positions()
