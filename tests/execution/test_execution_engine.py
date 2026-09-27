@@ -17,6 +17,7 @@ from execution.engine import (
     OrderStateMachine,
     OrderStatus,
     OrderType,
+    OrderSnapshot,
 )
 from execution.adapters.paper import PaperAdapterConfig, PaperBrokerAdapter
 from execution.trading_execution import (
@@ -221,7 +222,8 @@ def test_position_reconciliation_detects_match_and_mismatch():
         (OrderStatus.CREATED, OrderStatus.VALIDATED),
         (OrderStatus.VALIDATED, OrderStatus.SUBMITTING),
         (OrderStatus.SUBMITTING, OrderStatus.SUBMITTED),
-        (OrderStatus.SUBMITTED, OrderStatus.PARTIALLY_FILLED),
+        (OrderStatus.SUBMITTED, OrderStatus.ACKNOWLEDGED),
+        (OrderStatus.ACKNOWLEDGED, OrderStatus.PARTIALLY_FILLED),
         (OrderStatus.PARTIALLY_FILLED, OrderStatus.FILLED),
         (OrderStatus.OPEN, OrderStatus.CANCEL_PENDING),
         (OrderStatus.CANCEL_PENDING, OrderStatus.CANCELLED),
@@ -296,6 +298,32 @@ def test_lifecycle_events_are_recorded_in_order():
         OrderStatus.FILLED,
     ]
     assert result.snapshot.status is OrderStatus.FILLED
+
+
+def test_execution_persists_observed_latency_in_snapshot_and_metrics():
+    adapter = PaperBrokerAdapter()
+    engine = ExecutionEngine(adapter)
+    result = engine.submit(order_request())
+
+    assert result.latency_ms >= 0.0
+    snapshot = engine.get_order(order_request().client_order_id)
+    assert snapshot is not None
+    assert snapshot.latency_ms == result.latency_ms
+    assert engine.metrics().average_latency_ms == result.latency_ms
+
+
+@pytest.mark.parametrize("latency", [float("nan"), float("inf"), -1.0])
+def test_order_snapshot_rejects_invalid_latency(latency: float):
+    with pytest.raises(ValueError, match="latency_ms"):
+        OrderSnapshot(
+            broker_order_id="PAPER-1",
+            client_order_id="SB-latency",
+            status=OrderStatus.FILLED,
+            requested_quantity=1.0,
+            filled_quantity=1.0,
+            average_fill_price=100.0,
+            latency_ms=latency,
+        )
 
 
 def test_execution_metrics_include_fills_and_fees():
@@ -481,6 +509,20 @@ def test_paper_adapter_rejects_non_finite_price(price: float) -> None:
     assert result.snapshot.status is OrderStatus.UNKNOWN
     assert result.error is not None
     assert "positive and finite" in result.error
+
+
+def test_unknown_refresh_preserves_persisted_latency():
+    adapter = PaperBrokerAdapter()
+    engine = ExecutionEngine(adapter)
+    request = order_request()
+    result = engine.submit(request)
+    assert result.latency_ms >= 0.0
+
+    adapter._orders.pop(request.client_order_id)
+    refreshed = engine.refresh(request.client_order_id)
+
+    assert refreshed.status is OrderStatus.UNKNOWN
+    assert refreshed.latency_ms == result.latency_ms
 
 
 def test_repeated_missing_broker_refresh_stays_unknown() -> None:

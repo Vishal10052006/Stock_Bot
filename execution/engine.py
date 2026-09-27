@@ -50,6 +50,7 @@ class OrderStatus(str, Enum):
     REJECTED_LOCAL = "REJECTED_LOCAL"
     SUBMITTING = "SUBMITTING"
     SUBMITTED = "SUBMITTED"
+    ACKNOWLEDGED = "ACKNOWLEDGED"
     OPEN = "OPEN"
     PARTIALLY_FILLED = "PARTIALLY_FILLED"
     FILLED = "FILLED"
@@ -141,6 +142,7 @@ class OrderSnapshot:
     filled_quantity: float = 0.0
     average_fill_price: float | None = None
     reason: str = ""
+    latency_ms: float | None = None
     updated_at: pd.Timestamp = field(default_factory=lambda: pd.Timestamp.now(tz="Asia/Kolkata"))
     fills: tuple[Fill, ...] = ()
 
@@ -163,6 +165,10 @@ class OrderSnapshot:
             or self.average_fill_price <= 0
         ):
             raise ValueError("average_fill_price must be positive and finite")
+        if self.latency_ms is not None and (
+            not math.isfinite(float(self.latency_ms)) or self.latency_ms < 0
+        ):
+            raise ValueError("latency_ms must be non-negative and finite")
         object.__setattr__(self, "updated_at", ts)
         object.__setattr__(self, "fills", tuple(self.fills))
 
@@ -288,6 +294,14 @@ class OrderStateMachine:
             OrderStatus.UNKNOWN,
         },
         OrderStatus.SUBMITTED: {
+            OrderStatus.ACKNOWLEDGED,
+            OrderStatus.OPEN,
+            OrderStatus.PARTIALLY_FILLED,
+            OrderStatus.FILLED,
+            OrderStatus.REJECTED_BROKER,
+            OrderStatus.UNKNOWN,
+        },
+        OrderStatus.ACKNOWLEDGED: {
             OrderStatus.OPEN,
             OrderStatus.PARTIALLY_FILLED,
             OrderStatus.FILLED,
@@ -320,6 +334,7 @@ class OrderStateMachine:
         OrderStatus.FAILED: {OrderStatus.UNKNOWN},
         OrderStatus.UNKNOWN: {
             OrderStatus.SUBMITTED,
+            OrderStatus.ACKNOWLEDGED,
             OrderStatus.OPEN,
             OrderStatus.PARTIALLY_FILLED,
             OrderStatus.FILLED,
@@ -521,6 +536,19 @@ class ExecutionEngine:
         if snapshot.requested_quantity != order.quantity:
             raise ValueError("broker response quantity mismatch")
         self._validate_snapshot_contract(snapshot)
+        if snapshot.latency_ms is None:
+            snapshot = OrderSnapshot(
+                broker_order_id=snapshot.broker_order_id,
+                client_order_id=snapshot.client_order_id,
+                status=snapshot.status,
+                requested_quantity=snapshot.requested_quantity,
+                filled_quantity=snapshot.filled_quantity,
+                average_fill_price=snapshot.average_fill_price,
+                reason=snapshot.reason,
+                latency_ms=latency_ms,
+                updated_at=snapshot.updated_at,
+                fills=snapshot.fills,
+            )
 
         self._transition(
             order.client_order_id,
@@ -625,6 +653,7 @@ class ExecutionEngine:
                 filled_quantity=prior.filled_quantity,
                 average_fill_price=prior.average_fill_price,
                 reason="broker returned no order state",
+                latency_ms=prior.latency_ms,
                 fills=prior.fills,
             )
             self._transition(client_order_id, OrderStatus.UNKNOWN, "broker returned no order state")
@@ -703,6 +732,7 @@ class ExecutionEngine:
                     filled_quantity=prior.filled_quantity,
                     average_fill_price=prior.average_fill_price,
                     reason="broker returned no order state during rehydration",
+                    latency_ms=prior.latency_ms,
                     fills=prior.fills,
                 )
             self._validate_snapshot_contract(snapshot)
@@ -790,9 +820,8 @@ class ExecutionEngine:
         requested = sum(s.requested_quantity for s in snapshots)
         filled_qty = sum(s.filled_quantity for s in snapshots)
         fees = sum(fill.fee for fills in self._fills.values() for fill in fills)
-        # Latency is not persisted in OrderSnapshot, so this metric is zero
-        # until callers persist ExecutionResult latency externally.
-        average_latency = 0.0
+        latency_samples = [float(s.latency_ms) for s in snapshots if s.latency_ms is not None]
+        average_latency = (sum(latency_samples) / len(latency_samples)) if latency_samples else 0.0
         return ExecutionMetrics(
             orders=orders,
             accepted_orders=accepted,
