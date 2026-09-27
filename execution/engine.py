@@ -16,6 +16,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import Enum
 import hashlib
+import math
 import json
 import time
 from typing import Protocol
@@ -72,7 +73,6 @@ class OrderRequest:
     order_type: OrderType = OrderType.MARKET
     limit_price: float | None = None
     time_in_force: TimeInForce = TimeInForce.DAY
-    purpose: str = "ENTRY"
     created_at: pd.Timestamp = field(default_factory=lambda: pd.Timestamp.now(tz="Asia/Kolkata"))
     authorization: ExecutionAuthorization | None = None
 
@@ -84,14 +84,16 @@ class OrderRequest:
             raise ValueError("client_order_id must not be empty")
         if not self.symbol.strip():
             raise ValueError("symbol must not be empty")
-        if self.quantity <= 0:
-            raise ValueError("quantity must be positive")
-        if self.order_type is OrderType.LIMIT and (self.limit_price is None or self.limit_price <= 0):
+        if not math.isfinite(float(self.quantity)) or self.quantity <= 0:
+            raise ValueError("quantity must be positive and finite")
+        if self.order_type is OrderType.LIMIT and (
+            self.limit_price is None
+            or not math.isfinite(float(self.limit_price))
+            or self.limit_price <= 0
+        ):
             raise ValueError("LIMIT orders require a positive limit_price")
         if self.order_type is OrderType.MARKET and self.limit_price is not None:
             raise ValueError("MARKET orders must not define limit_price")
-        if self.purpose not in {"ENTRY", "EXIT"}:
-            raise ValueError("purpose must be ENTRY or EXIT")
         object.__setattr__(self, "created_at", ts)
         object.__setattr__(self, "symbol", self.symbol.strip().upper())
 
@@ -113,10 +115,15 @@ class Fill:
             raise ValueError("fill timestamp must be timezone-aware")
         if not self.fill_id.strip() or not self.client_order_id.strip():
             raise ValueError("fill identifiers must not be empty")
-        if self.quantity <= 0 or self.price <= 0:
-            raise ValueError("fill quantity and price must be positive")
-        if self.fee < 0:
-            raise ValueError("fill fee must be non-negative")
+        if (
+            not math.isfinite(float(self.quantity))
+            or self.quantity <= 0
+            or not math.isfinite(float(self.price))
+            or self.price <= 0
+        ):
+            raise ValueError("fill quantity and price must be positive and finite")
+        if not math.isfinite(float(self.fee)) or self.fee < 0:
+            raise ValueError("fill fee must be non-negative and finite")
         object.__setattr__(self, "timestamp", ts)
 
 
@@ -140,12 +147,22 @@ class OrderSnapshot:
             raise ValueError("updated_at must be timezone-aware")
         if not self.broker_order_id.strip() or not self.client_order_id.strip():
             raise ValueError("order identifiers must not be empty")
-        if self.requested_quantity <= 0:
-            raise ValueError("requested_quantity must be positive")
-        if self.filled_quantity < 0 or self.filled_quantity > self.requested_quantity + 1e-12:
-            raise ValueError("filled_quantity must be within requested quantity")
-        if self.average_fill_price is not None and self.average_fill_price <= 0:
-            raise ValueError("average_fill_price must be positive")
+        if (
+            not math.isfinite(float(self.requested_quantity))
+            or self.requested_quantity <= 0
+        ):
+            raise ValueError("requested_quantity must be positive and finite")
+        if (
+            not math.isfinite(float(self.filled_quantity))
+            or self.filled_quantity < 0
+            or self.filled_quantity > self.requested_quantity + 1e-12
+        ):
+            raise ValueError("filled_quantity must be within requested quantity and finite")
+        if self.average_fill_price is not None and (
+            not math.isfinite(float(self.average_fill_price))
+            or self.average_fill_price <= 0
+        ):
+            raise ValueError("average_fill_price must be positive and finite")
         object.__setattr__(self, "updated_at", ts)
         object.__setattr__(self, "fills", tuple(self.fills))
 
@@ -161,8 +178,10 @@ class PositionSnapshot:
     def __post_init__(self) -> None:
         if not self.symbol.strip():
             raise ValueError("symbol must not be empty")
-        if self.average_price < 0:
-            raise ValueError("average_price must be non-negative")
+        if not math.isfinite(float(self.quantity)):
+            raise ValueError("quantity must be finite")
+        if not math.isfinite(float(self.average_price)) or self.average_price < 0:
+            raise ValueError("average_price must be non-negative and finite")
         # Signed quantity: positive=long, negative=short. This is required
         # because NSE research/paper trading supports both directions.
         object.__setattr__(self, "symbol", self.symbol.strip().upper())
@@ -189,7 +208,6 @@ class ExecutionResult:
             "decision_id": self.request.decision_id,
             "symbol": self.request.symbol,
             "quantity": self.request.quantity,
-            "purpose": self.request.purpose,
             "status": self.snapshot.status.value,
             "filled_quantity": self.snapshot.filled_quantity,
             "average_fill_price": self.snapshot.average_fill_price,
@@ -208,8 +226,6 @@ class ExecutionEvent:
     to_status: OrderStatus
     timestamp: pd.Timestamp
     reason: str = ""
-    decision_id: str = ""
-    purpose: str = "ENTRY"
 
     def __post_init__(self) -> None:
         ts = pd.Timestamp(self.timestamp)
@@ -291,14 +307,6 @@ class OrderStateMachine:
             OrderStatus.UNKNOWN,
         },
         OrderStatus.CANCEL_PENDING: {OrderStatus.CANCELLED, OrderStatus.FILLED, OrderStatus.UNKNOWN},
-        # Losing broker visibility requires an explicit UNKNOWN state even
-        # after a terminal broker response. Never treat this as permission
-        # to resubmit; UNKNOWN is resolved only from broker truth.
-        OrderStatus.FILLED: {OrderStatus.UNKNOWN},
-        OrderStatus.CANCELLED: {OrderStatus.UNKNOWN},
-        OrderStatus.EXPIRED: {OrderStatus.UNKNOWN},
-        OrderStatus.REJECTED_BROKER: {OrderStatus.UNKNOWN},
-        OrderStatus.FAILED: {OrderStatus.UNKNOWN},
         OrderStatus.UNKNOWN: {
             OrderStatus.SUBMITTED,
             OrderStatus.OPEN,
@@ -326,10 +334,10 @@ class ExecutionEngine:
     def __init__(self, adapter: BrokerAdapter) -> None:
         self.adapter = adapter
         self._orders: dict[str, OrderSnapshot] = {}
-        self._requests: dict[str, OrderRequest] = {}
         self._fills: dict[str, tuple[Fill, ...]] = {}
         self._states: dict[str, OrderStatus] = {}
         self._events: list[ExecutionEvent] = []
+        self._latencies_ms: dict[str, float] = {}
 
     @staticmethod
     def side_for_direction(direction: StrategyDirection) -> OrderSide:
@@ -347,7 +355,6 @@ class ExecutionEngine:
         decision_id: str,
         order_type: OrderType = OrderType.MARKET,
         limit_price: float | None = None,
-        purpose: str = "ENTRY",
         created_at: pd.Timestamp | None = None,
     ) -> OrderRequest:
         """Convert an approved authorization into an immutable order request."""
@@ -362,9 +369,7 @@ class ExecutionEngine:
 
         timestamp = pd.Timestamp(created_at or authorization.timestamp)
         # The client order id is deterministic for one decision + risk version.
-        if purpose not in {"ENTRY", "EXIT"}:
-            raise ValueError("purpose must be ENTRY or EXIT")
-        raw = f"{decision_id}|{authorization.symbol}|{authorization.direction.value}|{authorization.risk_version}|{purpose}"
+        raw = f"{decision_id}|{authorization.symbol}|{authorization.direction.value}|{authorization.risk_version}"
         client_order_id = "SB-" + hashlib.sha256(raw.encode("utf-8")).hexdigest()[:24]
 
         return OrderRequest(
@@ -375,54 +380,8 @@ class ExecutionEngine:
             quantity=float(authorization.approved_quantity),
             order_type=order_type,
             limit_price=limit_price,
-            purpose=purpose,
             created_at=timestamp,
             authorization=authorization,
-        )
-
-    @classmethod
-    def from_exit_authorization(
-        cls,
-        authorization: ExecutionAuthorization,
-        *,
-        decision_id: str,
-        position: PositionSnapshot,
-        quantity: float | None = None,
-        order_type: OrderType = OrderType.MARKET,
-        limit_price: float | None = None,
-        created_at: pd.Timestamp | None = None,
-    ) -> OrderRequest:
-        """Create an exit order without allowing execution to increase exposure.
-
-        The Risk Engine still owns the authorized quantity. Execution only
-        constrains that quantity to the currently observed position and flips
-        the side so the order closes existing exposure.
-        """
-        if not isinstance(position, PositionSnapshot):
-            raise TypeError("position must be a PositionSnapshot")
-        if position.quantity == 0:
-            raise ValueError("cannot create an exit order for a flat position")
-        requested = abs(position.quantity) if quantity is None else float(quantity)
-        if requested <= 0:
-            raise ValueError("exit quantity must be positive")
-        if requested > abs(position.quantity):
-            raise ValueError("exit quantity cannot exceed current position")
-        if authorization.symbol.strip().upper() != position.symbol:
-            raise ValueError("exit authorization symbol does not match position")
-        expected_direction = (
-            StrategyDirection.SHORT if position.quantity > 0 else StrategyDirection.LONG
-        )
-        if authorization.direction is not expected_direction:
-            raise ValueError("exit authorization direction must oppose the position")
-        if authorization.approved_quantity != requested:
-            raise ValueError("exit quantity must exactly equal risk-approved quantity")
-        return cls.from_authorization(
-            authorization,
-            decision_id=decision_id,
-            order_type=order_type,
-            limit_price=limit_price,
-            purpose="EXIT",
-            created_at=created_at,
         )
 
     def validate(self, order: OrderRequest) -> None:
@@ -439,8 +398,8 @@ class ExecutionEngine:
             raise ValueError("execution symbol does not match authorization")
         if order.side != self.side_for_direction(order.authorization.direction):
             raise ValueError("execution side does not match authorization")
-        if order.quantity <= 0:
-            raise ValueError("execution quantity must be positive")
+        if not math.isfinite(float(order.quantity)) or order.quantity <= 0:
+            raise ValueError("execution quantity must be positive and finite")
 
     def submit(self, order: OrderRequest) -> ExecutionResult:
         """Validate, submit once, record broker acknowledgement, and return result.
@@ -449,7 +408,6 @@ class ExecutionEngine:
         get_order before any retry is permitted.
         """
         self.validate(order)
-        self._requests.setdefault(order.client_order_id, order)
 
         existing = self._orders.get(order.client_order_id)
         if existing is not None:
@@ -462,7 +420,7 @@ class ExecutionEngine:
                     OrderStatus.REJECTED_BROKER,
                     OrderStatus.FAILED,
                 },
-                latency_ms=0.0,
+                latency_ms=self._latencies_ms.get(order.client_order_id, 0.0),
             )
 
         self._transition(order.client_order_id, OrderStatus.VALIDATED, "local validation passed")
@@ -486,6 +444,7 @@ class ExecutionEngine:
                 f"broker submission exception: {exc}",
             )
             self._orders[order.client_order_id] = snapshot
+            self._latencies_ms[order.client_order_id] = latency_ms
             return ExecutionResult(
                 request=order,
                 snapshot=snapshot,
@@ -507,6 +466,7 @@ class ExecutionEngine:
         )
         self._orders[order.client_order_id] = snapshot
         self._fills[order.client_order_id] = tuple(snapshot.fills)
+        self._latencies_ms[order.client_order_id] = latency_ms
         return ExecutionResult(
             request=order,
             snapshot=snapshot,
@@ -532,8 +492,6 @@ class ExecutionEngine:
         self._events.append(
             ExecutionEvent(
                 client_order_id=client_order_id,
-                decision_id=self._requests.get(client_order_id).decision_id if client_order_id in self._requests else "",
-                purpose=self._requests.get(client_order_id).purpose if client_order_id in self._requests else "ENTRY",
                 from_status=current,
                 to_status=target,
                 timestamp=pd.Timestamp.now(tz="Asia/Kolkata"),
@@ -560,9 +518,24 @@ class ExecutionEngine:
                 reason="broker returned no order state",
                 fills=prior.fills,
             )
-            self._transition(client_order_id, OrderStatus.UNKNOWN, "broker returned no order state")
+            if self._states.get(client_order_id) is not OrderStatus.UNKNOWN:
+                self._transition(
+                    client_order_id,
+                    OrderStatus.UNKNOWN,
+                    "broker returned no order state",
+                )
             self._orders[client_order_id] = unknown
             return unknown
+
+        if snapshot.client_order_id != client_order_id:
+            raise ValueError("broker refresh client_order_id mismatch")
+
+        prior_snapshot = self._orders.get(client_order_id)
+        if (
+            prior_snapshot is not None
+            and prior_snapshot.broker_order_id != snapshot.broker_order_id
+        ):
+            raise ValueError("broker refresh broker_order_id mismatch")
 
         current = self._states.get(client_order_id)
         if current is None:
@@ -572,76 +545,6 @@ class ExecutionEngine:
         self._orders[client_order_id] = snapshot
         self._fills[client_order_id] = tuple(snapshot.fills)
         return snapshot
-
-    def recover_unknown(self, client_order_id: str) -> OrderSnapshot:
-        """Resolve UNKNOWN using broker truth; never blindly resubmit.
-
-        A missing broker record remains UNKNOWN and fail-closed. This method
-        intentionally performs no broker submission.
-        """
-        prior = self._orders.get(client_order_id)
-        if prior is None:
-            raise KeyError(f"unknown local order: {client_order_id}")
-        if prior.status is not OrderStatus.UNKNOWN:
-            return prior
-
-        snapshot = self.adapter.get_order(client_order_id)
-        if snapshot is None:
-            return prior
-
-        if snapshot.client_order_id != client_order_id:
-            raise ValueError("broker recovery client_order_id mismatch")
-        if snapshot.requested_quantity != prior.requested_quantity:
-            raise ValueError("broker recovery quantity mismatch")
-
-        self._transition(
-            client_order_id,
-            snapshot.status,
-            snapshot.reason or "unknown order resolved from broker state",
-        )
-        self._orders[client_order_id] = snapshot
-        self._fills[client_order_id] = tuple(snapshot.fills)
-        return snapshot
-
-    def unknown_orders(self) -> tuple[OrderSnapshot, ...]:
-        """Return orders requiring broker-state recovery."""
-        return tuple(
-            snapshot
-            for snapshot in self._orders.values()
-            if snapshot.status is OrderStatus.UNKNOWN
-        )
-
-    def rehydrate(self, client_order_ids: tuple[str, ...]) -> dict[str, OrderSnapshot]:
-        """Rebuild execution state after process restart from broker truth.
-
-        The caller supplies client IDs recovered from the durable execution
-        journal. The broker remains authoritative; missing broker state is
-        represented as UNKNOWN and never recreated by blind submission.
-        """
-        recovered: dict[str, OrderSnapshot] = {}
-        for client_order_id in client_order_ids:
-            if not client_order_id.strip():
-                raise ValueError("client_order_id must not be empty")
-            snapshot = self.adapter.get_order(client_order_id)
-            if snapshot is None:
-                prior = self._orders.get(client_order_id)
-                if prior is None:
-                    continue
-                snapshot = OrderSnapshot(
-                    broker_order_id=prior.broker_order_id,
-                    client_order_id=client_order_id,
-                    status=OrderStatus.UNKNOWN,
-                    requested_quantity=prior.requested_quantity,
-                    filled_quantity=prior.filled_quantity,
-                    average_fill_price=prior.average_fill_price,
-                    reason="broker returned no order state during rehydration",
-                    fills=prior.fills,
-                )
-            self._orders[client_order_id] = snapshot
-            self._fills[client_order_id] = tuple(snapshot.fills)
-            self._states[client_order_id] = snapshot.status
-            recovered[client_order_id] = snapshot
-        return recovered
 
     def reconcile_order(self, client_order_id: str) -> bool:
         """Return True only when local and broker order state agree."""
@@ -721,9 +624,16 @@ class ExecutionEngine:
         requested = sum(s.requested_quantity for s in snapshots)
         filled_qty = sum(s.filled_quantity for s in snapshots)
         fees = sum(fill.fee for fills in self._fills.values() for fill in fills)
-        # Latency is not persisted in OrderSnapshot, so this metric is zero
-        # until callers persist ExecutionResult latency externally.
-        average_latency = 0.0
+        latencies = tuple(
+            self._latencies_ms[client_order_id]
+            for client_order_id in self._orders
+            if client_order_id in self._latencies_ms
+        )
+        average_latency = (
+            sum(latencies) / len(latencies)
+            if latencies
+            else 0.0
+        )
         return ExecutionMetrics(
             orders=orders,
             accepted_orders=accepted,
