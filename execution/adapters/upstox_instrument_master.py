@@ -13,6 +13,11 @@ import json
 from pathlib import Path
 from typing import Any, Mapping
 
+from execution.adapters.upstox_instruments import (
+    InstrumentIdentity,
+    InstrumentResolutionError,
+)
+
 
 class InstrumentMasterError(RuntimeError):
     """Raised when an instrument-master file cannot be safely loaded."""
@@ -52,7 +57,7 @@ def _load_json(path: Path) -> Any:
 
 
 def load_nse_equity_master(path: str | Path) -> tuple[MasterInstrument, ...]:
-    """Load and validate NSE equity instruments from a Upstox JSON/BOD file."""
+    """Load and validate NSE equity instruments from an Upstox JSON/BOD file."""
     source = Path(path)
     if not source.exists():
         raise FileNotFoundError(f"instrument master not found: {source}")
@@ -121,15 +126,26 @@ class LocalUpstoxInstrumentResolver:
     def from_file(cls, path: str | Path) -> "LocalUpstoxInstrumentResolver":
         return cls(load_nse_equity_master(path))
 
-    def resolve(self, symbol: str) -> MasterInstrument:
+    def resolve(self, symbol: str) -> InstrumentIdentity:
         normalized = _symbol(symbol)
         if not normalized:
-            raise ValueError("symbol must not be empty")
+            raise InstrumentResolutionError("symbol must not be empty")
 
         try:
-            return self._by_symbol[normalized]
+            item = self._by_symbol[normalized]
         except KeyError as exc:
-            raise KeyError(f"no NSE_EQ instrument found for {normalized}") from exc
+            raise InstrumentResolutionError(
+                f"no NSE_EQ instrument found for {normalized}"
+            ) from exc
+
+        return InstrumentIdentity(
+            symbol=item.symbol,
+            instrument_key=item.instrument_key,
+            exchange=item.exchange,
+            segment=item.segment,
+            trading_symbol=item.trading_symbol,
+            exchange_token=item.exchange_token,
+        )
 
     def resolve_key(self, symbol: str) -> str:
         return self.resolve(symbol).instrument_key
