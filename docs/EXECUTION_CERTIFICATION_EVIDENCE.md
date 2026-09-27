@@ -16,25 +16,37 @@ This document records evidence that has actually been observed for CERT-01 throu
 | CERT-08 | PARTIAL | Paper-soak validation exists in the software/test framework; a long-duration operational soak has not been claimed here. |
 | CERT-09 | PASS | Backtest/execution cost-assumption parity is explicitly tested. |
 | CERT-10 | PASS | Operational preflight, incident, shutdown, and UNKNOWN-order handling are documented and tested. |
-| CERT-11 | UNVERIFIED | The repository contains an execution-engine GitHub Actions workflow, but a successful remote workflow run for the certification branch has not yet been recorded in this document. |
+| CERT-11 | PASS | GitHub Actions Execution Engine Production Validation run #123 completed successfully for commit 96c60a78952edd2b5cd19524c53a999aa80204e8. The job completed the certification-matrix validation, execution test suite, and full-repository regression steps successfully. |
 | CERT-12 | PARTIAL | A real Upstox sandbox Place Order V3 -> Cancel Order V3 integration test has passed. This does not certify unsupported sandbox behavior or production broker readiness. |
 
-## CERT-11 — CI evidence boundary
+## CERT-11 — CI evidence
 
-The execution workflow is:
+Workflow:
 
 .github/workflows/execution-engine.yml
 
-It runs:
+Observed GitHub Actions run:
 
-1. pytest -q tests/execution
-2. pytest -q
+- Workflow: Execution Engine Production Validation
+- Run number: 123
+- Run ID: 36329958184
+- Commit: 96c60a78952edd2b5cd19524c53a999aa80204e8
+- Job: execution-validation
+- Conclusion: success
 
-A local full-suite result observed during certification work was:
+Completed validation steps:
 
-1740 passed, 2 deselected, 7 warnings
+1. Certification matrix validation
+2. Execution production validation
+3. Full repository regression
 
-Local execution is not substituted for GitHub Actions evidence. CERT-11 remains UNVERIFIED until a remote workflow run is observed and recorded.
+The remote workflow completed successfully. This is the required remote CI evidence for CERT-11.
+
+Local validation performed during the same certification work also completed successfully:
+
+- Certification matrix: 8 passed
+- Execution suite: 226 passed, 2 deselected
+- Full repository: 1740 passed, 2 deselected, 7 warnings
 
 ## CERT-12 — provider evidence boundary
 
