@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import os
+from typing import Mapping
 
 import pandas as pd
 
@@ -98,8 +99,15 @@ class TradingResearchRuntime:
         *,
         price_column: str = "close",
         quantity: float = 1.0,
+        predictions: Mapping[tuple[object, str], object] | None = None,
     ) -> PaperDecisionRun:
-        return self.paper_loop.run(rows, price_column=price_column, quantity=quantity)
+        """Run paper decisions with optional versioned prediction artifacts."""
+        return self.paper_loop.run(
+            rows,
+            price_column=price_column,
+            quantity=quantity,
+            predictions=predictions,
+        )
 
     def report(self) -> dict:
         return self.monitoring.dashboard()
