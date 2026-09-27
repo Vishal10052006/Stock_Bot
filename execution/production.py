@@ -283,6 +283,7 @@ class ProductionReadinessGate:
     FIELDS = (
         "broker_contract_validated",
         "failure_matrix_validated",
+        "idempotency_validated",
         "restart_recovery_validated",
         "reconciliation_validated",
         "kill_switch_validated",
