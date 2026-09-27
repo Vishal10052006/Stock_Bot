@@ -6,6 +6,7 @@ from typing import Iterable
 
 from execution.engine import PositionSnapshot
 from execution.certification import PositionEvidenceReport, build_position_evidence
+from execution.provider_evidence import ProviderEvidenceReport
 
 
 class UpstoxEvidenceState(str, Enum):
@@ -68,6 +69,23 @@ def build_upstox_readiness_attestation(
     return UpstoxReadinessAttestation(items, fingerprint)
 
 
+def build_upstox_readiness_from_provider_report(
+    report: ProviderEvidenceReport,
+) -> UpstoxReadinessAttestation:
+    if report.provider.strip().lower() != "upstox":
+        raise ValueError("provider report must be for upstox")
+
+    return build_upstox_readiness_attestation(
+        UpstoxCapabilityEvidence(
+            capability=observation.capability,
+            state=UpstoxEvidenceState(observation.state.value),
+            environment=observation.environment,
+            detail=observation.detail,
+        )
+        for observation in report.observations
+    )
+
+
 def build_position_reconciliation_evidence(
     local: Iterable[PositionSnapshot] | None,
     broker: Iterable[PositionSnapshot] | None,
@@ -80,5 +98,6 @@ __all__ = [
     "UpstoxCapabilityEvidence",
     "UpstoxReadinessAttestation",
     "build_upstox_readiness_attestation",
+    "build_upstox_readiness_from_provider_report",
     "build_position_reconciliation_evidence",
 ]
