@@ -211,6 +211,12 @@ class PaperEvidenceCollector:
         if false_signal is not None:
             self._false_signal_count += int(bool(false_signal))
 
+        if realized_equity is None:
+            # PaperDecisionLoop records equity at each causal decision point.
+            # Prefer that observation over a sidecar so drawdown evidence is
+            # derived from the actual paper-account state.
+            realized_equity = getattr(step, "equity", None)
+
         if realized_equity is not None:
             equity = float(realized_equity)
             if not math.isfinite(equity) or equity <= 0:
@@ -324,13 +330,27 @@ def collect_paper_decision_run(
     )
 
     for index, step in enumerate(steps):
+        fill_timestamp = fill_timestamps.get(index)
+        if fill_timestamp is None:
+            order = getattr(step, "order", None)
+            if order is not None and getattr(getattr(order, "status", None), "value", None) == "FILLED":
+                # The paper runtime records the simulated fill timestamp on the
+                # order itself. This is a paper-simulation latency observation,
+                # not a claim about broker/exchange network latency.
+                fill_timestamp = getattr(order, "timestamp", None)
+
         collector.record_step(
             step,
-            fill_timestamp=fill_timestamps.get(index),
+            fill_timestamp=fill_timestamp,
             false_signal=false_signals.get(index),
             realized_equity=equity_observations.get(index),
             calibration_outcome=calibration_outcomes.get(index),
         )
+
+    if operational_events == 0:
+        # Every processed paper step is a real operational observation of the
+        # paper loop. Do not invent errors/stale events; only count processing.
+        operational_events = len(steps)
 
     collector.record_operational_summary(
         events=operational_events,
