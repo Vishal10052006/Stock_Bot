@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from execution.adapters.upstox import PositionSnapshot
+from execution.engine import PositionSnapshot
 from execution.adapters.upstox_position_evidence import run_upstox_position_evidence
 
 
