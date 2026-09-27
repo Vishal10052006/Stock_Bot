@@ -38,5 +38,22 @@ def test_missing_gate_blocks_certification():
 def test_live_unlock_is_never_part_of_certification():
     certification = complete_certification()
     object.__setattr__(certification, "live_execution_locked", False)
-    with pytest.raises(ValueError, match="unlock live execution"):
+
+    with pytest.raises(ValueError, match="incomplete"):
+        certification.assert_safe()
+
+
+def test_live_unlock_guard_rejects_when_other_gates_are_satisfied():
+    certification = UpstoxOperationalCertification(
+        adapter_contract=True,
+        sandbox_authentication=True,
+        sandbox_order_lifecycle=True,
+        provider_error_handling=True,
+        reconciliation_boundary=True,
+        ci_validated=True,
+        live_execution_locked=False,
+    )
+
+    assert not certification.software_complete
+    with pytest.raises(ValueError, match="incomplete"):
         certification.assert_safe()
