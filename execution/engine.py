@@ -545,6 +545,11 @@ class ExecutionEngine:
     ) -> None:
         """Apply and journal one strictly validated lifecycle transition."""
         current = self._states.get(client_order_id)
+        if current is target:
+            # Repeated broker refreshes may report the same UNKNOWN state.
+            # Treat the observation as idempotent rather than creating an
+            # invalid UNKNOWN -> UNKNOWN transition or duplicate lifecycle event.
+            return
         if current is not None:
             OrderStateMachine.transition(current, target)
         self._states[client_order_id] = target
