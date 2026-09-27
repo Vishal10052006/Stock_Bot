@@ -291,6 +291,8 @@ class ProductionReadinessGate:
         "backtest_execution_parity_validated",
         "operational_runbook_validated",
         "ci_validated",
+        "live_lock_validated",
+        "provider_evidence_validated",
     )
 
     def evaluate(self, gates: dict[str, bool]) -> ProductionReadiness:
