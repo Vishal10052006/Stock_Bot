@@ -6,9 +6,11 @@ This audit covers the STOCK_BOT execution roadmap E0–E17 plus PAPER-01 through
 
 ## Current main
 
-- HEAD: `e492c8b8192a6bda3c187cf0d9304c574e7ef43c`
-- PAPER-09 Execution Engine Production Validation: run `36305566645`, #73 — PASS
-- PAPER-09 Market Bot Tests: run `36305570911`, #977 — PASS
+- E0–E17 completion record confirms the execution state model and monitoring hardening are implemented.
+- PAPER-09 Execution Engine Production Validation: PASS.
+- PAPER-09 Market Bot Tests: PASS.
+- UPSTOX-18 is merged and provider evidence can now be converted into the canonical Upstox readiness attestation.
+- Live broker execution remains LOCKED.
 
 ## Final status
 
@@ -56,7 +58,7 @@ Execution remains downstream of Risk and independent Safety. It does not create 
 | E1 | Canonical execution contracts | PASS |
 | E2 | Risk-approved order boundary | PASS |
 | E3 | Pre-execution validation | PASS |
-| E4 | Order state machine | PASS with terminology note |
+| E4 | Order state machine | PASS — explicit `ACKNOWLEDGED` state implemented and transition-tested |
 | E5 | Broker abstraction | PASS |
 | E6 | Deterministic paper broker | PASS |
 | E7 | Fill management | PASS |
@@ -67,23 +69,21 @@ Execution remains downstream of Risk and independent Safety. It does not create 
 | E12 | Reconciliation | PASS |
 | E13 | Exit execution | PASS |
 | E14 | Journal/audit | PASS |
-| E15 | Monitoring | PASS with observability boundary |
+| E15 | Monitoring | PASS — submission latency persisted and aggregated from observed values |
 | E16 | Backtest integration/parity | PASS |
 | E17 | Upstox adapter + safety gates | PASS as software boundary |
 
 ## Important audit findings
 
-### 1. ACKNOWLEDGED state terminology
+### 1. ACKNOWLEDGED state — resolved
 
-The roadmap describes a lifecycle containing an explicit `ACKNOWLEDGED` state. The implementation has `SUBMITTING`, `SUBMITTED`, `OPEN`, `PARTIALLY_FILLED`, and `FILLED`, but no separate `ACKNOWLEDGED` enum value.
+The execution state model now contains a first-class `ACKNOWLEDGED` enum value. The state machine permits `SUBMITTED → ACKNOWLEDGED` and subsequent progression to `OPEN`, `PARTIALLY_FILLED`, `FILLED`, broker rejection, or `UNKNOWN`.
 
-This is recorded as a terminology/state-model discrepancy, not silently treated as equivalent. Any future state-model change must be deliberate and covered by transition tests.
+Adapters are not required to fabricate an acknowledgement event when the provider returns a terminal or partial state directly. This preserves observed provider behavior while supporting providers that expose an explicit acknowledgement boundary.
 
-### 2. Monitoring observability boundary
+### 2. Monitoring latency observability — resolved
 
-Execution monitoring exposes order, fill, partial-fill, rejection, UNKNOWN, requested/filled quantity and latency-related metrics. The execution journal does not persist latency directly in `OrderSnapshot`; the engine therefore reports zero average latency when that value has not been persisted externally.
-
-No missing metric is inferred or fabricated.
+`OrderSnapshot.latency_ms` persists measured submission latency when the execution engine receives a broker response. Aggregate execution metrics derive average latency from persisted observations. Validation rejects non-finite and negative latency values, and refresh/rehydration preserves the recorded value.
 
 ### 3. Paper-soak reconciliation boundary
 
@@ -91,9 +91,22 @@ The paper-soak runner validates the structural position snapshot contract. Stron
 
 Provider-level reconciliation remains dependent on broker capabilities.
 
-### 4. Upstox boundary
+### 4. Upstox provider boundary
 
-E17 does not constitute live-broker certification. The Upstox adapter is disabled by default, uses an injected client, and remains behind independent safety gates. The current provider/sandbox capability surface does not establish full live position-reconciliation readiness.
+E17 does not constitute live-broker certification. The Upstox adapter remains disabled by default and protected by independent safety gates.
+
+UPSTOX-08 through UPSTOX-18 now provide the software/readiness evidence framework, including controlled evidence capture and consolidation into the canonical Upstox readiness attestation. These software observations do not substitute for real provider-observed evidence.
+
+Current provider-readiness gaps remain explicitly tracked:
+
+- sandbox order-history behavior;
+- sandbox partial-fill behavior;
+- provider rate-limit behavior;
+- timeout/network recovery;
+- process-restart recovery;
+- production read-only position reconciliation.
+
+Unverified provider capabilities keep readiness blocked.
 
 ## Safety audit
 
@@ -141,7 +154,7 @@ No blind duplicate submission is performed.
 
 ## Certification conclusion
 
-The execution engine is **production-ready for the certified software/paper boundary**, subject to the explicit audit findings above.
+The execution engine is **production-ready for the certified software/paper boundary**.
 
 It is **not certified for live real-money execution**.
 
@@ -151,13 +164,14 @@ Live activation requires a separate provider-readiness process including externa
 
 Do not activate live execution yet.
 
-The next phase should be **Execution Hardening / Provider Readiness**, beginning with:
+The next phase is **Provider Evidence / Readiness Validation**:
 
-1. decide whether `ACKNOWLEDGED` deserves a first-class state;
-2. close any remaining observability gaps that are required operationally;
-3. validate provider-side reconciliation behavior with supported sandbox capabilities;
-4. perform real Upstox sandbox evidence collection only when credentials/provider access are intentionally supplied;
-5. keep the live lock enabled until all provider-readiness evidence and governance gates are independently satisfied.
+1. collect real Upstox sandbox order-history evidence when credentials and a valid sandbox instrument are intentionally supplied;
+2. collect real provider evidence for partial fills, rate limiting, timeout recovery, and process restart where the sandbox supports them;
+3. verify whether supported Upstox environments expose the required position-reconciliation capability;
+4. record evidence through the existing provider-evidence contracts and consolidate it into the readiness attestation;
+5. keep readiness fail-closed while any required capability remains UNVERIFIED, BLOCKED, or FAILED;
+6. keep the independent live lock enabled regardless of readiness-attestation state.
 
 ## Final safety statement
 
