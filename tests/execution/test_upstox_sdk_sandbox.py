@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import os
+import uuid
+
 import pytest
 
 from execution.adapters.upstox_sdk import UpstoxSDKError, UpstoxSDKSandboxClient
@@ -132,3 +135,31 @@ def test_sdk_errors_are_normalized():
     client = UpstoxSDKSandboxClient("sandbox-token", sdk_module=BrokenSDK)
     with pytest.raises(UpstoxSDKError, match="provider unavailable"):
         client.place_order({"quantity": 1})
+
+
+@pytest.mark.integration
+def test_real_upstox_sandbox_authentication_without_order_placement():
+    """Validate a real sandbox token through an authenticated read-only request.
+
+    Required environment:
+      UPSTOX_SANDBOX_ACCESS_TOKEN
+      UPSTOX_SANDBOX_AUTH_CONFIRM=YES
+
+    This test deliberately does not place, modify, or cancel an order.
+    """
+    token = os.getenv("UPSTOX_SANDBOX_ACCESS_TOKEN")
+    if not token:
+        pytest.skip("Set UPSTOX_SANDBOX_ACCESS_TOKEN for real sandbox auth validation.")
+    if os.getenv("UPSTOX_SANDBOX_AUTH_CONFIRM") != "YES":
+        pytest.skip("Set UPSTOX_SANDBOX_AUTH_CONFIRM=YES to opt into provider authentication.")
+
+    placeholder = {"YOUR_REAL_SANDBOX_TOKEN", "sandbox-token"}
+    if token.strip() in placeholder:
+        pytest.fail("Real sandbox authentication was enabled with a placeholder token.")
+
+    client = UpstoxSDKSandboxClient(token)
+    # A random tag makes this a read-only lookup and avoids relying on an
+    # existing order. A successful authenticated response is sufficient to
+    # distinguish transport/authentication success from an invalid token.
+    result = client.find_order_by_tag(f"SB-AUTH-{uuid.uuid4().hex}")
+    assert result is None or isinstance(result, dict)
