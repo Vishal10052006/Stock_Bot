@@ -35,8 +35,22 @@ class RuntimeTelemetryResult:
 class MonitoringRuntime:
     """Single runtime entry point for producer telemetry -> monitoring."""
 
-    def __init__(self, pipeline: MonitoringPipeline | None = None) -> None:
-        self.pipeline = pipeline or MonitoringPipeline()
+    def __init__(
+        self,
+        pipeline: MonitoringPipeline | MonitoringEngine | None = None,
+    ) -> None:
+        # Backward-compatible constructor: older callers passed the central
+        # MonitoringEngine directly; wrap it in the runtime pipeline.
+        if isinstance(pipeline, MonitoringEngine):
+            self.pipeline = MonitoringPipeline(engine=pipeline)
+        elif pipeline is None:
+            self.pipeline = MonitoringPipeline()
+        elif isinstance(pipeline, MonitoringPipeline):
+            self.pipeline = pipeline
+        else:
+            raise TypeError(
+                "pipeline must be a MonitoringPipeline or MonitoringEngine"
+            )
 
     @property
     def engine(self) -> MonitoringEngine:
