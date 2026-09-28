@@ -283,6 +283,7 @@ class ProductionReadinessGate:
     FIELDS = (
         "broker_contract_validated",
         "failure_matrix_validated",
+        "idempotency_validated",
         "restart_recovery_validated",
         "reconciliation_validated",
         "kill_switch_validated",
@@ -291,6 +292,8 @@ class ProductionReadinessGate:
         "backtest_execution_parity_validated",
         "operational_runbook_validated",
         "ci_validated",
+        "live_lock_validated",
+        "provider_evidence_validated",
     )
 
     def evaluate(self, gates: dict[str, bool]) -> ProductionReadiness:

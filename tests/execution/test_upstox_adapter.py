@@ -429,3 +429,4 @@ def test_production_position_client_uses_read_only_positions_endpoint(monkeypatc
         "auth": "Bearer real-token-for-test-only",
     }
     assert result == {"status": "success", "data": []}
+
