@@ -11,6 +11,7 @@ from ml.models.logistic import LogisticOutcomeModel
 from ml.preprocessing.pipeline import FeaturePreprocessor
 from ml.preprocessing.models import NUMERIC_FEATURES, BOOLEAN_FEATURES
 from monitoring.runtime import MonitoringRuntime
+from market.features.validation import EXPECTED_COLUMNS, BOOLEAN_FEATURES as FEATURE_BOOLEAN_COLUMNS
 
 
 def _training_frame(rows: int = 12) -> tuple[pd.DataFrame, pd.Series]:
@@ -125,9 +126,26 @@ def test_analysis_integration_emits_monitoring_telemetry() -> None:
     from intelligence.analysis.integration import build_analysis_context
 
     X_train, _ = _training_frame()
-    features = X_train.copy()
-    features.insert(0, "symbol", "RELIANCE")
-    features.insert(0, "timestamp", pd.date_range("2026-09-20", periods=len(features), tz="UTC"))
+    rows = len(X_train)
+    feature_values: dict[str, object] = {}
+    for index, column in enumerate(EXPECTED_COLUMNS):
+        if column == "timestamp":
+            feature_values[column] = pd.date_range(
+                "2026-09-20",
+                periods=rows,
+                tz="UTC",
+            )
+        elif column == "symbol":
+            feature_values[column] = ["RELIANCE"] * rows
+        elif column in FEATURE_BOOLEAN_COLUMNS:
+            feature_values[column] = [
+                bool((index + row) % 2) for row in range(rows)
+            ]
+        else:
+            feature_values[column] = [
+                float(index + row + 1) / 100.0 for row in range(rows)
+            ]
+    features = pd.DataFrame(feature_values, columns=EXPECTED_COLUMNS)
     runtime = MonitoringRuntime()
     context = build_analysis_context(
         features,
