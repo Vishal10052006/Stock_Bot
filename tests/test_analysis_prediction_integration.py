@@ -1,4 +1,7 @@
-"""Tests for AB-25 AnalysisContext -> Phase 9 prediction integration."""
+"""Tests for AB-25 AnalysisContext -> Phase 9 prediction integration.
+
+Conflict-resolution note: the integration fixture follows the frozen FeatureDataset schema.
+"""
 from __future__ import annotations
 
 import numpy as np
