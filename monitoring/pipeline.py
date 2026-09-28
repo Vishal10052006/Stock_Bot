@@ -9,6 +9,8 @@ from .models import ModelMonitoringSnapshot, evaluate_model_monitoring
 from .risk import RiskMonitoringSnapshot, evaluate_risk_monitoring
 from .execution import ExecutionMonitoringSnapshot, evaluate_execution_monitoring
 from .strategy import StrategyMonitoringSnapshot, evaluate_strategy_monitoring
+from .performance import PerformanceMonitoringSnapshot, evaluate_performance_monitoring
+from .regime import RegimeMonitoringSnapshot, evaluate_regime_monitoring
 from .system import SystemMonitoringSnapshot, evaluate_system_monitoring
 from .features import FeatureMonitoringSnapshot, evaluate_feature_monitoring
 from .orchestrator import AlertOrchestrator
@@ -115,6 +117,20 @@ class MonitoringPipeline:
                 self.engine.record_metric(f"execution.{name}", float(value))
         for code in alerts:
             self._alert(code, "execution", code, AlertSeverity.WARNING)
+
+    def evaluate_performance(self, snapshot: PerformanceMonitoringSnapshot) -> None:
+        metrics = evaluate_performance_monitoring(snapshot)
+        for name, value in metrics.items():
+            if isinstance(value, (int, float)) and value is not None:
+                self.engine.record_metric(f"performance.{name}", float(value))
+
+    def evaluate_regime(self, snapshot: RegimeMonitoringSnapshot) -> None:
+        metrics, alerts = evaluate_regime_monitoring(snapshot)
+        for name, value in metrics.items():
+            if isinstance(value, (int, float)):
+                self.engine.record_metric(f"regime.{name}", float(value))
+        for code in alerts:
+            self._alert(code, "regime", code, AlertSeverity.WARNING)
 
     def evaluate_strategy(self, snapshot: StrategyMonitoringSnapshot) -> None:
         metrics = evaluate_strategy_monitoring(snapshot)
