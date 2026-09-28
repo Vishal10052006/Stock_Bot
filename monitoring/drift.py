@@ -35,7 +35,9 @@ def calculate_psi(reference: list[float], current: list[float], *, bins: int = 1
         raise ValueError("invalid PSI parameters")
     low, high = min(ref), max(ref)
     if high == low:
-        return 0.0 if all(v == low for v in cur) else math.inf
+        # Keep the alert measurable and serializable: a degenerate reference
+        # distribution with a changed current distribution is maximal drift.
+        return 1e12 if not all(v == low for v in cur) else 0.0
     width = (high - low) / bins
     edges = [low + width * i for i in range(bins + 1)]
     def dist(values: list[float]) -> list[float]:

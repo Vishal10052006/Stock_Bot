@@ -93,6 +93,11 @@ class MarketEventValidator:
         if not isinstance(event, MarketEvent):
             raise TypeError("event must be a MarketEvent")
 
+        if event.exchange_timestamp.tzinfo is None:
+            raise ValueError("exchange_timestamp must be timezone-aware")
+        if event.received_timestamp.tzinfo is None:
+            raise ValueError("received_timestamp must be timezone-aware")
+
         current_time = (
             now.astimezone(timezone.utc)
             if now is not None

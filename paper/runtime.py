@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
+import hashlib
 
 import pandas as pd
 
@@ -52,12 +53,15 @@ class PaperOrder:
     fees: float
     slippage_cost: float
     reason: str
+    client_order_id: str = ""
 
     def __post_init__(self) -> None:
         if pd.Timestamp(self.timestamp).tzinfo is None:
             raise ValueError("paper order timestamp must be timezone-aware")
         if self.quantity <= 0:
             raise ValueError("quantity must be positive")
+        if self.client_order_id and not self.client_order_id.strip():
+            raise ValueError("client_order_id must not be whitespace")
         if self.requested_price <= 0 or self.fill_price <= 0:
             raise ValueError("prices must be positive")
 
@@ -166,6 +170,25 @@ class PaperTradingRuntime:
         """Return current position for a symbol."""
         return self._positions.get(symbol.upper())
 
+    @staticmethod
+    def _client_order_id(authorization: ExecutionAuthorization, *, price: float, quantity: float) -> str:
+        """Build a deterministic paper-order identity from authorization lineage.
+
+        Paper execution remains broker-free, but its orders must retain the same
+        client-order lineage needed by downstream audit/reconciliation checks.
+        """
+        decision_id = authorization.risk_decision_id.strip()
+        if not decision_id:
+            decision_id = (
+                f"paper:{authorization.timestamp.isoformat()}:{authorization.symbol}:"
+                f"{authorization.direction.value}:{price:.12g}:{quantity:.12g}"
+            )
+        raw = (
+            f"{decision_id}|{authorization.symbol}|{authorization.direction.value}|"
+            f"{authorization.risk_version}"
+        )
+        return "SB-PAPER-" + hashlib.sha256(raw.encode("utf-8")).hexdigest()[:24]
+
     def submit(
         self,
         authorization: ExecutionAuthorization,
@@ -180,6 +203,11 @@ class PaperTradingRuntime:
             raise ValueError("price and quantity must be positive")
 
         symbol = authorization.symbol.upper()
+        client_order_id = self._client_order_id(
+            authorization,
+            price=price,
+            quantity=quantity,
+        )
 
         if authorization.status is not ExecutionAuthorizationStatus.AUTHORIZED:
             order = PaperOrder(
@@ -193,6 +221,7 @@ class PaperTradingRuntime:
                 fees=0.0,
                 slippage_cost=0.0,
                 reason="Paper order blocked because authorization is not approved.",
+                client_order_id=client_order_id,
             )
             self._journal.append(order)
             return order
@@ -291,6 +320,7 @@ class PaperTradingRuntime:
             fees=fees,
             slippage_cost=slippage_cost,
             reason="Paper fill simulated deterministically.",
+            client_order_id=client_order_id,
         )
         self._journal.append(order)
         return order

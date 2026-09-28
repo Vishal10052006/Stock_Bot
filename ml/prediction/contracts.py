@@ -97,6 +97,11 @@ class ClassificationPrediction:
     lineage: PredictionLineage | None = None
     uncertainty: float | None = None
 
+    @property
+    def model_version(self) -> str:
+        """Return the version identifier carried by prediction provenance."""
+        return self.provenance.model_version
+
     def __post_init__(self) -> None:
         timestamp = pd.Timestamp(self.timestamp)
         if timestamp.tzinfo is None:

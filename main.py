@@ -1,11 +1,11 @@
-import asyncio
-from core.ceo import CEO
+"""STOCK_BOT boot entrypoint.
 
-async def main():
-    ceo = CEO()
+M20 changes the default root runtime to the fail-closed real-market SHADOW
+runtime. It consumes Upstox market data and never submits broker orders.
+"""
 
-    for i in range(3):
-        print(f"\nRUN {i+1}")
-        await ceo.act("analyze stock: RELIANCE")
+from scripts.run_m20_shadow import main
 
-asyncio.run(main())
+
+if __name__ == "__main__":
+    raise SystemExit(main())

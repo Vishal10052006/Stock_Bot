@@ -13,6 +13,7 @@ from trading.risk.engine import RiskConfig
 from execution.reconciliation import (
     BrokerPosition,
     BrokerReconciler,
+    ReconciliationConfig,
     ReconciliationStatus,
 )
 from execution.readiness import LiveReadinessGate, LiveReadinessInput, ReadinessEvidence
@@ -562,3 +563,46 @@ def test_research_artifact_fingerprints_are_deterministic() -> None:
     )
 
     assert first.fingerprint == second.fingerprint
+
+
+def test_reconciliation_supports_signed_short_positions():
+    report = BrokerReconciler().reconcile(
+        (BrokerPosition("ITC", -10, 100.0),),
+        (BrokerPosition("itc", -10, 100.0),),
+    )
+    assert report.status is ReconciliationStatus.MATCH
+
+
+def test_reconciliation_tolerates_explicit_provider_rounding():
+    reconciler = BrokerReconciler(
+        ReconciliationConfig(
+            quantity_tolerance=1e-6,
+            price_tolerance=1e-4,
+        )
+    )
+    report = reconciler.reconcile(
+        (BrokerPosition("ITC", 10.0, 100.0),),
+        (BrokerPosition("ITC", 10.0000005, 100.00005),),
+    )
+    assert report.status is ReconciliationStatus.MATCH
+
+
+def test_reconciliation_requires_intervention_on_mismatch_or_block():
+    reconciler = BrokerReconciler()
+
+    mismatch = reconciler.reconcile(
+        (BrokerPosition("ITC", 10, 100.0),),
+        (BrokerPosition("ITC", 9, 100.0),),
+    )
+    blocked = reconciler.reconcile(None, ())
+
+    assert mismatch.requires_intervention
+    assert blocked.requires_intervention
+
+
+def test_reconciliation_rejects_non_finite_position_values():
+    with pytest.raises(ValueError, match="finite"):
+        BrokerPosition("ITC", float("nan"), 100.0)
+
+    with pytest.raises(ValueError, match="finite"):
+        BrokerPosition("ITC", 10.0, float("inf"))

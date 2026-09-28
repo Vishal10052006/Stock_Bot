@@ -85,3 +85,31 @@ def test_mapper_loads_context_instrument_map_from_separate_environment(
 
     assert mapper.symbols() == ("NIFTY50",)
     assert mapper.instrument_key("NIFTY50") == "NSE_INDEX|Nifty 50"
+
+
+def test_mapper_rejects_conflicting_normalized_symbols():
+    """Equivalent symbols must not silently select one provider identifier."""
+    with pytest.raises(ValueError, match="conflicting Upstox instrument keys"):
+        UpstoxInstrumentMapper(
+            {"reliance": "NSE_EQ|111", " RELIANCE ": "NSE_EQ|222"}
+        )
+
+
+def test_mapper_rejects_empty_symbol_lookup():
+    """Empty subscription symbols must fail before provider I/O."""
+    mapper = UpstoxInstrumentMapper({"RELIANCE": "NSE_EQ|111"})
+    with pytest.raises(ValueError, match="symbol must be a non-empty"):
+        mapper.instrument_key("   ")
+
+
+def test_mapper_evidence_is_non_secret_and_deterministic():
+    """Evidence must describe the instrument universe without credentials."""
+    mapper = UpstoxInstrumentMapper(
+        {"RELIANCE": "NSE_EQ|111", "TCS": "NSE_EQ|222"}
+    )
+    evidence = mapper.evidence()
+    assert evidence["provider"] == "upstox"
+    assert evidence["instrument_count"] == 2
+    assert evidence["symbols"] == ("RELIANCE", "TCS")
+    assert evidence["live_broker_order_submission"] is False
+    assert mapper.fingerprint() == mapper.fingerprint()

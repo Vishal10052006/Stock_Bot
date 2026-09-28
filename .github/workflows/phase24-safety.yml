@@ -1,0 +1,33 @@
+name: Phase 24 Safety Kill-Switch Validation
+
+on:
+  pull_request:
+    paths:
+      - "execution/safety.py"
+      - "execution/safety_controller.py"
+      - "execution/control.py"
+      - "tests/execution/test_safety_controller.py"
+      - "tests/execution/test_control.py"
+      - "docs/PHASE_24_SAFETY_KILLSWITCH.md"
+  push:
+    branches:
+      - feat/m20-shadow-runtime
+
+jobs:
+  phase24-safety:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install numpy pandas pytest
+      - name: Phase 24 safety tests
+        run: |
+          python -m pytest -q tests/execution/test_safety_controller.py tests/execution/test_control.py
+      - name: Compile safety boundary
+        run: |
+          python -m py_compile execution/safety.py execution/safety_controller.py execution/control.py
