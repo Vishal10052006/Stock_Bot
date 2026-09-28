@@ -246,11 +246,16 @@ class PaperBrokerAdapter:
         elif abs(current_qty) == close_qty:
             self._positions.pop(symbol, None)
         else:
+            # A smaller opposite-side fill partially closes the existing
+            # position. Reduce the signed quantity by the actual fill and
+            # preserve the existing average entry price.
+            remaining_qty = current_qty + signed_fill
             self._positions[symbol] = PositionSnapshot(
                 symbol=symbol,
-                quantity=current_qty,
+                quantity=remaining_qty,
                 average_price=current.average_price,
             )
+
 
 
 

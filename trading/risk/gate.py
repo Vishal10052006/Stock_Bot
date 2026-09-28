@@ -85,6 +85,8 @@ def evaluate_strategy_risk(
     decision: StrategyDecision,
     *,
     risk_enabled: bool = True,
+    approved_quantity: float = 1.0,
+    approved_notional: float = 0.0,
 ) -> RiskDecision:
     """Apply the legacy deterministic pre-trade gate."""
     if not isinstance(decision, StrategyDecision):
@@ -94,14 +96,20 @@ def evaluate_strategy_risk(
         status = RiskDecisionStatus.REJECTED
         reason = "Strategy produced NO_TRADE; risk gate blocks execution."
         reason_code = RiskReasonCode.GENERIC_REJECT
+        final_qty = 0.0
+        final_notional = 0.0
     elif not risk_enabled:
         status = RiskDecisionStatus.REJECTED
         reason = "Global risk gate is disabled."
         reason_code = RiskReasonCode.SYSTEM_NOT_READY
+        final_qty = 0.0
+        final_notional = 0.0
     else:
         status = RiskDecisionStatus.APPROVED
         reason = "Strategy direction passed the deterministic pre-trade risk gate."
         reason_code = RiskReasonCode.APPROVED
+        final_qty = max(1.0, float(approved_quantity))
+        final_notional = float(approved_notional)
 
     return RiskDecision(
         timestamp=decision.timestamp,
@@ -110,7 +118,10 @@ def evaluate_strategy_risk(
         strategy_direction=decision.direction,
         reason=reason,
         reason_code=reason_code,
+        approved_quantity=final_qty,
+        approved_notional=final_notional,
     )
+
 
 
 __all__ = [
