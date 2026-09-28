@@ -23,7 +23,7 @@ jobs:
         with:
           python-version: "3.11"
       - name: Install test dependency
-        run: python -m pip install --disable-pip-version-check pytest
+        run: python -m pip install --disable-pip-version-check pytest pandas
       - name: Phase 26 tests
         run: pytest -q tests/execution/test_deployment_gate.py
       - name: Compile deployment boundary
