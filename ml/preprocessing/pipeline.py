@@ -27,6 +27,17 @@ from .models import (
 )
 
 
+def _boolean_to_numeric(X: pd.DataFrame) -> pd.DataFrame:
+    """Convert boolean feature columns to numeric values.
+
+    Kept as a module-level callable so the fitted preprocessing pipeline
+    remains serializable for candidate artifact identity and registry
+    provenance. A local lambda would make an otherwise valid fitted
+    pipeline unpicklable.
+    """
+    return X.astype(float)
+
+
 class FeaturePreprocessor:
     """
     Leakage-safe transformer for STOCK BOT FeatureDataset v1.
@@ -79,7 +90,7 @@ class FeaturePreprocessor:
                 (
                     "to_numeric",
                     FunctionTransformer(
-                        lambda X: X.astype(float),
+                        _boolean_to_numeric,
                         feature_names_out="one-to-one",
                     ),
                 ),

@@ -1,147 +1,154 @@
-# STOCK_BOT — Self-Learning Engine SL-0..SL-20
+# STOCK_BOT — SELF-LEARNING ENGINE SL-00..SL-26
 
-## Purpose
+## Objective
 
-The Self-Learning Engine converts accumulated trading evidence into controlled,
-versioned research candidates. It does not directly execute orders, change hard
-risk controls, enable live trading, or silently promote models.
+Build a controlled evidence-driven improvement system:
 
-Canonical loop:
+Trade Outcome -> Experience -> Error Analysis -> Dataset Version ->
+Experiment -> Retraining -> Validation -> OOS -> Walk-Forward -> Paper ->
+Promotion Review -> Explicit Approval -> Monitoring -> New Evidence.
 
-    Trade Outcome
-        -> Experience
-        -> Error Analysis
-        -> Learning Evidence
-        -> Hypothesis
-        -> Frozen Experiment
-        -> Dataset Version
-        -> Controlled Retraining
-        -> Validation
-        -> OOS
-        -> Walk-Forward
-        -> Paper
-        -> Promotion Review
-        -> Explicit Governance Approval
-        -> Champion / Challenger
-        -> Monitoring
-        -> Drift Investigation
-        -> New Evidence
+The engine never places broker orders, changes Risk controls, enables live
+execution, or mutates production code.
 
-## Repository integration
+## Existing components reused
 
-The implementation reuses the existing repository boundaries:
+- journal/ — authoritative decision/outcome memory (Phase 16).
+- analysis/ — observable failure and pattern analysis (Phase 17).
+- learning/ — trading-outcome evidence (Phase 18).
+- candidate_improvement/ — bounded strategy candidates (Phase 19).
+- experiments/ — frozen definitions, execution, evaluation, lineage,
+  paper evidence and monitoring.
+- ml/datasets/ — causal training datasets.
+- ml/training/ — chronological Phase-9 training.
+- ml/model_registry.py — immutable model provenance/governance (Phase 20).
 
-- Phase 16: journal decision/outcome contracts.
-- Phase 17: deterministic error/pattern analysis.
-- Phase 18: evidence-based LearningEngine.
-- Phase 19: bounded CandidateImprovementEngine.
-- Phase 9: temporal training and calibration pipeline.
-- Existing backtesting, leakage audit, OOS, walk-forward, and paper evidence.
-- Phase 20: immutable ml.model_registry.ModelRegistry.
+## SL roadmap
 
-No second trading model pipeline or second model registry is introduced.
+| SL | Capability | Implementation boundary |
+|---:|---|---|
+| 00 | Package integration | self_learning/ |
+| 01 | Experience contract | ExperienceBundle |
+| 02 | Journal/outcome linking | orchestrator requires linked trade IDs |
+| 03 | Learning input hardening | typed immutable evidence |
+| 04 | Experiment registry | ExperimentSpec |
+| 05 | Dataset versioning | DatasetVersion |
+| 06 | Controlled retraining | retraining.retrain_candidate |
+| 07 | Candidate lifecycle | ModelCandidate |
+| 08 | Validation orchestration | validate_candidate |
+| 09 | Promotion gate | PromotionController.review |
+| 10 | Champion/challenger | explicit champion/challenger versions |
+| 11 | Rollback | PromotionController.rollback |
+| 12 | Drift investigation | existing monitoring feeds triggers |
+| 13 | End-to-end evidence cycle | SelfLearningOrchestrator |
+| 14 | Reproducibility | SHA-256 fingerprints and provenance |
+| 15 | Experiment memory | append-only learning ledger |
+| 16 | Strategy learning | research-side candidate surfaces only |
+| 17 | Risk learning | analysis only; no hard-limit mutation |
+| 18 | Execution learning | slippage/fill evidence only |
+| 19 | Failure injection | promotion/evidence safety tests |
+| 20 | Integration gate | full repository regression |
+| 21 | Real Phase-9 dataset adapter | real_dataset.py |
+| 22 | Dataset provenance builder | build_phase9_dataset_version |
+| 23 | Controlled candidate retraining | retrain_candidate |
+| 24 | Candidate model lifecycle | CandidateLifecycleController |
+| 25 | Validation evidence orchestration | ValidationOrchestrator |
+| 26 | Promotion gate hardening | PromotionController.review_run |
 
-## Build order
+## Promotion policy
 
-### SL-0 — Audit / architecture boundary
-learning/experience.py audits decision/outcome linkage and causal ordering.
+A candidate must carry artifact, experiment, evaluation and lineage identities.
+Required evidence stages are:
 
-### SL-1 — Journal ↔ outcome
-build_trade_experience() requires an exact shared trade_id, preserves the
-decision-time feature snapshot, and derives an immutable outcome context.
+BACKTEST -> LEAKAGE_AUDIT -> OOS -> WALK_FORWARD -> PAPER.
 
-### SL-2 — Learning input hardening
-TradeOutcomeContext validates finite economics, MAE/MFE constraints, and
-provenance fields.
+Structural completeness makes a candidate eligible for review, not promoted.
+Promotion requires explicit approval evidence. Rollback returns to a previously
+verified model without retraining.
 
-### SL-3 — Evidence persistence
-learning/cycle_store.py provides append-only learning-cycle storage.
+## Non-authority boundary
 
-### SL-4 — Experiment registry
-learning/experiment_store.py persists existing ExperimentDefinition,
-ExperimentRecord, and LineageRecord identities.
+The Self-Learning Engine cannot:
 
-### SL-5 — Dataset versioning
-learning/dataset_store.py persists immutable dataset manifests by version.
-
-### SL-6 — Controlled retraining
-learning/retraining.py is an adapter over the existing Phase-9 trainer.
-Training creates a research result only.
-
-### SL-7 — Candidate lifecycle
-Existing Phase-19 candidate contracts remain authoritative; the new orchestration
-layer consumes their research-only configuration.
-
-### SL-8 — Validation orchestration
-learning/validation.py assembles explicit integrity, leakage, OOS,
-walk-forward, paper, reproducibility, stratified, and effective-sample evidence.
-
-### SL-9 — Promotion gate
-learning/promotion.py fails closed unless every required validation gate passes.
-Governance approval remains explicit.
-
-### SL-10 — Champion / challenger
-learning/champion.py validates the reviewed model pair and creates an immutable
-champion activation record after approval.
-
-### SL-11 — Rollback
-Rollback is represented as an explicit immutable plan. Runtime model loading is
-outside the learning engine.
-
-### SL-12 — Drift investigation
-learning/drift.py turns monitoring alerts into hypotheses. Drift is never an
-automatic retraining trigger.
-
-### SL-13 — End-to-end loop
-learning/orchestrator.py composes evidence collection, experiment registration,
-validation, and promotion-review boundaries.
-
-## Safety boundaries
-
-The learning engine MUST NOT:
-
-- place orders;
-- change Risk Engine limits;
-- change kill-switch behavior;
+- place or cancel orders;
+- alter Risk or Safety settings;
+- alter broker permissions;
 - enable live trading;
-- change broker permissions;
-- modify credentials;
-- bypass Strategy or Risk;
-- automatically promote after a metric increase;
-- automatically retrain because of a single loss or recent negative P&L.
+- change credentials;
+- directly promote from metrics;
+- bypass Prediction, Strategy, Risk, or Execution.
 
-## Model-learning policy
+## Data integrity
 
-A model/strategy change must follow:
+All learning records are immutable and fingerprinted. Dataset provenance
+contains source, period, symbols, row count, label distribution, feature and
+label versions, source fingerprints and limitations.
 
-    Observation
-        -> Investigation
-        -> Hypothesis
-        -> Controlled Experiment
-        -> Validation
-        -> OOS
-        -> Walk-Forward
-        -> Paper
-        -> Promotion Review
-        -> Explicit Governance Approval
+## Quantitative discipline
 
-A negative or inconclusive result is a valid research result.
+Learning experiments preserve chronological splits, train-only preprocessing,
+purge/embargo where required, protected test partitions,
+effective-sample-size awareness, and one-primary-variable experiment changes.
 
-## Required human action
+A losing trade is evidence to investigate, not an instruction to retrain.
 
-No live trading is enabled by this branch. Human approval remains required for
-the final consequential promotion/live-deployment decision, and broker/API
-authorization remains outside the repository learning engine.
+## Human boundary
 
-## Validation command
+Automation may prepare evidence and candidates. Final consequential approval,
+live broker authorization, credentials and account-level actions remain
+human-controlled.
 
-Run locally from the repository root:
+## Current verification state
 
-    python -m pytest tests/learning tests/ml tests/experiments tests/candidate_improvement -q
+The architecture and contracts have been implemented on this branch. Full
+pytest execution still requires a repository execution environment; the
+GitHub connector provides source/repository operations but not arbitrary shell
+execution.
 
-Then run the complete regression suite:
 
-    python -m pytest -q
+## SL-23 — Controlled Candidate Retraining
 
-The environment with the repository checkout must execute these tests; the
-GitHub connector itself does not expose a local Python runtime for this branch.
+SL-23 binds an explicit TrainingDataset, immutable DatasetVersion, and
+ExperimentSpec to the existing Phase-9 training engine. It supports only
+the explicitly named Logistic Regression and Random Forest trainers and
+returns an immutable RetrainingResult whose status remains CANDIDATE.
+
+The retraining boundary verifies that the supplied dataset fingerprint is
+present in DatasetVersion.source_fingerprints, so a dataset cannot be
+trained under unrelated provenance metadata. Candidate artifact identity is
+derived from the serialized fitted model state and SHA-256 hashed.
+
+SL-23 does not select datasets, automatically retrain from losses, promote
+models, mutate production models, modify risk controls, or access execution.
+
+
+## SL-24 — Candidate Model Lifecycle
+
+SL-24 converts a verified RetrainingResult into an immutable ModelCandidate,
+binding dataset, experiment, artifact, evaluation, parent-model and lineage
+identities. Lifecycle transitions are explicit and fail closed.
+
+Allowed progression is CANDIDATE -> VALIDATING -> PAPER ->
+PROMOTION_REVIEW. Rejection is terminal. PROMOTED can only be applied from an
+explicit PROMOTION_REVIEW state using a matching PROMOTION decision; it is not
+a direct lifecycle transition. PROMOTED may later transition to RETIRED.
+
+Every candidate state is persisted through the existing append-only
+LearningStore when a store is supplied. No model is deployed, broker action is
+performed, risk control is changed, or Phase-20 model approval is invoked by
+this lifecycle controller.
+
+
+## SL-25 — Validation Evidence Orchestration
+
+SL-25 adds `ValidationOrchestrator` and immutable `ValidationRun` records. The orchestrator binds existing `ValidationSummary` evidence to one `ModelCandidate`, requires the candidate to enter `VALIDATING`, rejects unknown or mismatched stage keys, and preserves missing-stage failures rather than treating them as passes. Required evidence remains BACKTEST, LEAKAGE_AUDIT, OOS, WALK_FORWARD, and PAPER.
+
+The orchestrator delegates structural gating to the existing `validate_candidate()` function. A valid gate may advance the candidate from VALIDATING through PAPER to PROMOTION_REVIEW; it never creates a promotion decision, deploys a model, accesses a broker, or changes risk/execution controls. Stage evidence is supplied by existing validation boundaries rather than by a second backtest or validation engine.
+
+
+## SL-26 — Hardened Promotion Review
+
+SL-26 binds promotion review to an immutable ValidationRun belonging to the exact ModelCandidate under review. PromotionController.review_run requires the candidate to be in PROMOTION_REVIEW, verifies the run's candidate fingerprint, revalidates the stage evidence through the existing structural gate, and records the validation-run fingerprint alongside stage artifact fingerprints in the promotion decision.
+
+A stale or mismatched validation run therefore cannot produce an eligible review. Explicit approval remains separate from eligibility; this change does not deploy models, access a broker, alter risk controls, or infer profitability.
+

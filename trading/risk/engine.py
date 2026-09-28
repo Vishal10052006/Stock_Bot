@@ -264,6 +264,9 @@ class RiskAssessment:
     position_size: float | None = None
     requested_position_size: float | None = None
     gross_exposure_after: float | None = None
+    gross_exposure_before: float | None = None
+    gross_exposure_limit: float | None = None
+    proposed_value: float | None = None
     daily_pnl: float | None = None
     volatility_factor: float | None = None
 
@@ -557,6 +560,16 @@ class RiskEngine:
                     "Maximum gross exposure would be exceeded.",
                     daily_pnl,
                     RiskReasonCode.MAX_GROSS_EXPOSURE,
+                    entry_price=entry,
+                    stop_price=stop,
+                    risk_budget=sizing.risk_budget,
+                    stop_distance=stop_distance,
+                    position_size=quantity,
+                    requested_position_size=requested_quantity,
+                    gross_exposure_after=gross_after,
+                    gross_exposure_before=value.gross_exposure,
+                    gross_exposure_limit=exposure_limit,
+                    proposed_value=proposed_value,
                 )
 
         # 8. Optional concentration/correlation controls.
@@ -643,6 +656,16 @@ class RiskEngine:
         reason: str,
         daily_pnl: float,
         reason_code: RiskReasonCode,
+        entry_price: float | None = None,
+        stop_price: float | None = None,
+        risk_budget: float | None = None,
+        stop_distance: float | None = None,
+        position_size: float | None = None,
+        requested_position_size: float | None = None,
+        gross_exposure_after: float | None = None,
+        gross_exposure_before: float | None = None,
+        gross_exposure_limit: float | None = None,
+        proposed_value: float | None = None,
     ) -> RiskAssessment:
         """Create an auditable rejection with no execution side effects."""
         return RiskAssessment(
@@ -655,6 +678,16 @@ class RiskEngine:
                 risk_version=self.config.risk_version,
                 reason_code=reason_code,
             ),
+            entry_price=entry_price,
+            stop_price=stop_price,
+            risk_budget=risk_budget,
+            stop_distance=stop_distance,
+            position_size=position_size,
+            requested_position_size=requested_position_size,
+            gross_exposure_after=gross_exposure_after,
+            gross_exposure_before=gross_exposure_before,
+            gross_exposure_limit=gross_exposure_limit,
+            proposed_value=proposed_value,
             daily_pnl=daily_pnl,
         )
 
