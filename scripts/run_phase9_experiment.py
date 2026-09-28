@@ -52,6 +52,36 @@ STRATEGY_CLASS_MAP = {
 }
 
 
+SECTOR_FEATURES = (
+    "sector_return_1",
+    "sector_return_3",
+    "sector_return_12",
+    "sector_volatility_20",
+    "stock_vs_sector_return_1",
+)
+
+
+def _json_safe(value: object) -> object:
+    """Convert nested NumPy/Pandas scalars and arrays to JSON-safe values."""
+    if isinstance(value, dict):
+        return {str(key): _json_safe(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_safe(item) for item in value]
+    if hasattr(value, "tolist"):
+        try:
+            return _json_safe(value.tolist())
+        except (TypeError, ValueError):
+            pass
+    if hasattr(value, "item"):
+        try:
+            return value.item()
+        except (TypeError, ValueError):
+            pass
+    return value
+
+
+
+
 def _feature_coverage_report(data: pd.DataFrame) -> dict[str, object]:
     """Record frozen-feature availability without altering the dataset."""
     total_rows = len(data)
@@ -90,28 +120,34 @@ def _feature_coverage_report(data: pd.DataFrame) -> dict[str, object]:
     }
 
 
-def _phase9_data_source_limitations() -> dict[str, object]:
-    """Document known historical sector-context source limitations."""
+def _phase9_data_source_limitations(data: pd.DataFrame) -> dict[str, object]:
+    """Report observed sector-context coverage from the persisted dataset."""
+    total_rows = len(data)
+    per_feature = {
+        feature: (
+            float(data[feature].notna().mean()) * 100.0
+            if total_rows
+            else 0.0
+        )
+        for feature in SECTOR_FEATURES
+        if feature in data.columns
+    }
+    complete_rows = (
+        data.loc[:, list(SECTOR_FEATURES)].notna().all(axis=1).mean() * 100.0
+        if total_rows and all(feature in data.columns for feature in SECTOR_FEATURES)
+        else 0.0
+    )
     return {
         "sector_context": {
-            "features": [
-                "sector_return_1",
-                "sector_return_3",
-                "sector_return_12",
-                "sector_volatility_20",
-                "stock_vs_sector_return_1",
-            ],
-            "observed_coverage_pct": 0.0,
-            "source": "Yahoo Finance",
+            "features": list(SECTOR_FEATURES),
+            "observed_coverage_pct": complete_rows,
+            "per_feature_coverage_pct": per_feature,
+            "source": "Upstox",
             "timeframe_minutes": 5,
-            "limitation": (
-                "Yahoo Finance rolling intraday retention prevents "
-                "retrieval of 5-minute sector-index history for the "
-                "historical Phase 9 experiment dates."
-            ),
             "handling": (
-                "Sector context remains missing; no sector membership or "
-                "historical values are unavailable and are not fabricated."
+                "Sector context is populated only where PIT membership and "
+                "historical provider coverage are both available; missing "
+                "values are preserved and never fabricated."
             ),
         },
         "retest_distance_pct": {
@@ -454,7 +490,7 @@ def main() -> int:
             "test": split.test.y.value_counts().to_dict(),
         },
         "feature_coverage": _feature_coverage_report(dataset.data),
-        "data_source_limitations": _phase9_data_source_limitations(),
+        "data_source_limitations": _phase9_data_source_limitations(dataset.data),
         "majority_class": majority,
         "benchmarks": {
             "majority_class": {
@@ -548,7 +584,7 @@ def main() -> int:
     }
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(json.dumps(report, indent=2))
+    output_path.write_text(json.dumps(_json_safe(report), indent=2))
 
     print("=" * 72)
     print("PHASE 9 — REAL EXPERIMENT COMPLETE")

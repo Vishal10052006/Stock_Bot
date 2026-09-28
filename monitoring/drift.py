@@ -35,7 +35,18 @@ def calculate_psi(reference: list[float], current: list[float], *, bins: int = 1
         raise ValueError("invalid PSI parameters")
     low, high = min(ref), max(ref)
     if high == low:
-        return 0.0 if all(v == low for v in cur) else math.inf
+        # A constant reference distribution has no finite bin width. Treat
+        # equality with the reference point as the dominant bucket and apply
+        # epsilon smoothing so PSI remains finite and persistable.
+        same_fraction = sum(v == low for v in cur) / len(cur)
+        reference_same = 1.0 - epsilon
+        reference_other = epsilon
+        current_same = min(max(same_fraction, epsilon), 1.0 - epsilon)
+        current_other = 1.0 - current_same
+        return float(
+            (current_same - reference_same) * math.log(current_same / reference_same)
+            + (current_other - reference_other) * math.log(current_other / reference_other)
+        )
     width = (high - low) / bins
     edges = [low + width * i for i in range(bins + 1)]
     def dist(values: list[float]) -> list[float]:

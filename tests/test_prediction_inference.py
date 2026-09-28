@@ -82,3 +82,31 @@ def test_prediction_inference_emits_monitoring_telemetry() -> None:
     dashboard = runtime.dashboard()
     assert "model.prediction_count" in dashboard["metrics"]
     assert "model.prediction_max_probability" in dashboard["metrics"]
+
+
+def test_inference_binds_deterministic_input_lineage() -> None:
+    request = _request()
+    prediction = PredictionInferenceService(_FakePredictor()).predict(request)[0]
+
+    assert prediction.lineage is not None
+    assert prediction.lineage.source_type == "prediction_inference_request"
+    assert prediction.lineage.feature_names == ("feature",)
+    assert len(prediction.lineage.feature_hash) == 64
+    assert prediction.lineage.input_timestamp == request.identifiers.iloc[0]["timestamp"]
+
+
+def test_inference_rejects_predictor_identifier_mismatch() -> None:
+    class _BadPredictor(_FakePredictor):
+        def predict(
+            self,
+            features: pd.DataFrame,
+            *,
+            identifiers: pd.DataFrame,
+        ) -> pd.DataFrame:
+            result = super().predict(features, identifiers=identifiers)
+            result.loc[0, "symbol"] = "TCS"
+            return result
+
+    with pytest.raises(ValueError, match="identifiers do not match"):
+        PredictionInferenceService(_BadPredictor()).predict(_request())
+

@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - feat/market-bot-production-v2
+      - feat/prediction-complete-model
   pull_request:
     branches:
       - main
