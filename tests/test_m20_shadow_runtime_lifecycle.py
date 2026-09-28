@@ -14,6 +14,7 @@ from market.candles.models import Candle
 from runtime.health import ShadowHealth
 from runtime.mode import RuntimeSafety
 from runtime.shadow_runtime import ShadowRuntime
+from runtime.shadow_session import ShadowSessionJournal
 
 
 class _FakePipeline:

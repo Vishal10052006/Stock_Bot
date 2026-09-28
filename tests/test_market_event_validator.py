@@ -218,3 +218,15 @@ def test_reset_allows_event_id_again():
     validator.reset()
 
     assert validator.validate(event, now=now).valid is True
+
+
+def test_naive_exchange_timestamp_is_rejected():
+    """Naive timestamps must not enter a timezone-sensitive pipeline."""
+    with pytest.raises(ValueError, match="exchange_timestamp must be timezone-aware"):
+        make_event(exchange_timestamp=datetime(2026, 8, 31, 10, 25))
+
+
+def test_naive_received_timestamp_is_rejected():
+    """Receipt timestamps must also be explicitly timezone-aware."""
+    with pytest.raises(ValueError, match="received_timestamp must be timezone-aware"):
+        make_event(received_timestamp=datetime(2026, 8, 31, 10, 25))

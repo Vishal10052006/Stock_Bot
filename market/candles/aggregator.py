@@ -197,6 +197,11 @@ class CandleAggregator:
         if not isinstance(event, MarketEvent):
             raise TypeError("event must be a MarketEvent")
 
+        if event.exchange_timestamp.tzinfo is None:
+            raise ValueError("exchange_timestamp must be timezone-aware")
+        if event.received_timestamp.tzinfo is None:
+            raise ValueError("received_timestamp must be timezone-aware")
+
         if event.event_type is not MarketEventType.TRADE:
             raise ValueError(
                 "CandleAggregator currently accepts trade events only"

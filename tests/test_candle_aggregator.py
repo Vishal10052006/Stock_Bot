@@ -313,3 +313,32 @@ def test_flush_specific_symbol() -> None:
 
     assert len(remaining) == 1
     assert remaining[0].symbol == "RELIANCE"
+
+
+def test_naive_exchange_timestamp_is_rejected():
+    """Candle bucketing must never interpret a naive exchange timestamp."""
+    aggregator = CandleAggregator()
+
+    with pytest.raises(ValueError, match="exchange_timestamp must be timezone-aware"):
+        make_event(
+            datetime(2026, 9, 1, 9, 15),
+            100.0,
+            10.0,
+        )
+
+
+def test_naive_received_timestamp_is_rejected():
+    """Receipt timestamps must remain explicitly timezone-aware."""
+    aggregator = CandleAggregator()
+
+    with pytest.raises(ValueError, match="received_timestamp must be timezone-aware"):
+        MarketEvent(
+            event_id="naive-received",
+            symbol="ITC",
+            exchange="NSE",
+            event_type=MarketEventType.TRADE,
+            price=100.0,
+            volume=10.0,
+            exchange_timestamp=ist_timestamp(9, 15),
+            received_timestamp=datetime(2026, 9, 1, 9, 15),
+        )

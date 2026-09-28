@@ -253,6 +253,16 @@ def _build_strategy_rows(
         ],
     )
 
+    # FeatureDataset intentionally contains engineered features only; retain
+    # the decision-time close from the canonical indicator frame explicitly.
+    close_context = indicators_all.loc[:, ["timestamp", "symbol", "close"]].copy()
+    features = features.merge(
+        close_context,
+        on=["timestamp", "symbol"],
+        how="left",
+        validate="one_to_one",
+    )
+
     regime = detect_market_regime(features)
 
     # Phase 6 is one market regime per timestamp. Join by timestamp only,

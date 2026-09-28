@@ -24,6 +24,10 @@ class PredictionRecord:
     generated_at: pd.Timestamp
     prediction_type: str
     payload: dict[str, float | str | int | None]
+    model_family: str = "classification"
+    target_version: str = "phase9-label-v1"
+    code_version: str = "unknown"
+    calibration_version: str | None = None
 
     def __post_init__(self) -> None:
         for name in (
@@ -39,6 +43,9 @@ class PredictionRecord:
             "dataset_version",
             "feature_version",
             "prediction_type",
+            "model_family",
+            "target_version",
+            "code_version",
         ):
             if not str(getattr(self, name)).strip():
                 raise ValueError(f"{name} must not be empty")
@@ -79,6 +86,10 @@ class PredictionStore:
                     "feature_version",
                     "generated_at",
                     "prediction_type",
+                    "model_family",
+                    "target_version",
+                    "code_version",
+                    "calibration_version",
                     "payload",
                 ]
             )

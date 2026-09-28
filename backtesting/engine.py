@@ -668,6 +668,7 @@ class HistoricalBacktestEngine:
                 record.get("entry_slippage_cost", order.slippage_cost)
             ),
             reason=order.reason,
+            client_order_id=order.client_order_id,
         )
 
     def _prepare_rows(self, rows: pd.DataFrame) -> pd.DataFrame:

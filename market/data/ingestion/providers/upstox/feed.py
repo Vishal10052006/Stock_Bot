@@ -164,16 +164,29 @@ class UpstoxMarketFeed(MarketFeed):
 
     def subscribe(self, symbols: Iterable[str]) -> None:
         """Subscribe internal symbols using Upstox instrument keys."""
-        normalized = {symbol.strip().upper() for symbol in symbols if symbol.strip()}
+        if not isinstance(symbols, Iterable):
+            raise TypeError("symbols must be iterable")
+
+        normalized = {
+            symbol.strip().upper()
+            for symbol in symbols
+            if isinstance(symbol, str) and symbol.strip()
+        }
         if not normalized:
             raise ValueError("at least one non-empty symbol is required")
         if not self.connected:
             raise RuntimeError("market feed must be connected before subscribing")
 
+        # Make subscriptions idempotent. Only send symbols that are not
+        # already active on this connection.
+        new_symbols = normalized - self._subscribed_symbols
+        if not new_symbols:
+            return
+
         websocket = self._load_websocket_module()
         instrument_keys = [
             self.instrument_mapper.instrument_key(symbol)
-            for symbol in sorted(normalized)
+            for symbol in sorted(new_symbols)
         ]
         request = {
             "guid": str(uuid.uuid4()),
@@ -188,7 +201,7 @@ class UpstoxMarketFeed(MarketFeed):
             json.dumps(request).encode("utf-8"),
             opcode=websocket.ABNF.OPCODE_BINARY,
         )
-        self._subscribed_symbols.update(normalized)
+        self._subscribed_symbols.update(new_symbols)
 
     def events(self) -> Iterator[MarketEvent]:
         """Yield canonical trade events from decoded LTPC feed messages."""
@@ -343,7 +356,14 @@ class UpstoxMarketFeed(MarketFeed):
 
     def disconnect(self) -> None:
         """Close the active provider connection safely."""
-        if self._ws is not None:
-            self._ws.close()
+        websocket = self._ws
         self._ws = None
         self._subscribed_symbols.clear()
+
+        if websocket is not None:
+            try:
+                websocket.close()
+            except Exception:
+                # Disconnect is best-effort cleanup; never leave stale
+                # connection state behind because provider close failed.
+                pass

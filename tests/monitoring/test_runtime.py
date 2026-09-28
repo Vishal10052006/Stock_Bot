@@ -1,3 +1,5 @@
+import pytest
+
 from monitoring.engine import MonitoringEngine
 from monitoring.runtime import MonitoringRuntime, RuntimeTelemetryResult
 from monitoring.models import ModelMonitoringSnapshot
@@ -61,3 +63,25 @@ def test_runtime_report_is_observational():
     report = runtime.report()
     assert report.readiness.status.value in {"READY", "DEGRADED", "BLOCKED", "UNKNOWN"}
     assert report.validation_passed is True
+
+
+def test_execution_monitoring_rejects_inconsistent_counts():
+    from monitoring.execution import ExecutionMonitoringSnapshot
+
+    with pytest.raises(ValueError, match="filled_count"):
+        ExecutionMonitoringSnapshot(
+            order_count=2,
+            filled_count=2,
+            rejected_count=1,
+        )
+
+
+def test_execution_monitoring_rejects_partial_without_fill():
+    from monitoring.execution import ExecutionMonitoringSnapshot
+
+    with pytest.raises(ValueError, match="partial_fill_count"):
+        ExecutionMonitoringSnapshot(
+            order_count=2,
+            filled_count=0,
+            partial_fill_count=1,
+        )

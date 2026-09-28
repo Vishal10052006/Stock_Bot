@@ -7,6 +7,8 @@ import pandas as pd
 from market.bot.orchestrator import MarketBot, MarketBotConfig
 from ml.models.logistic import LogisticOutcomeModel
 from ml.preprocessing.pipeline import FeaturePreprocessor
+from monitoring.engine import MonitoringEngine
+from monitoring.journal import MonitoringJournal
 from monitoring.runtime import MonitoringRuntime
 from trading.runtime_pipeline import TradingResearchRuntime
 from trading.market_bot_pipeline import build_market_analysis_from_market_bot
@@ -55,6 +57,29 @@ def test_market_bot_context_feeds_frozen_ab30_without_duplicate_regime_logic():
     assert result.analysis.timestamp == result.features.iloc[-1]["timestamp"]
     assert result.analysis.provenance["market_bot"]["market_version"] == context.metadata.market_version
     assert result.analysis.provenance["market_bot"]["data_version"] == "market-test"
+
+
+def test_market_bot_persists_causal_context_for_dashboard(tmp_path):
+    benchmark = _benchmark()
+    journal = MonitoringJournal(tmp_path / "monitoring.jsonl")
+    runtime = MonitoringRuntime(
+        engine=MonitoringEngine(journal=journal)
+    )
+
+    context = MarketBot(
+        MarketBotConfig(benchmark="NIFTY", data_version="market-test")
+    ).build(
+        benchmark_data=benchmark,
+        monitoring=runtime,
+    )
+
+    events = journal.replay(event_type="MARKET_CONTEXT", source="market_bot")
+    assert len(events) == 1
+    assert events[0].payload["benchmark"] == "NIFTY"
+    assert events[0].payload["timestamp"] == context.timestamp.isoformat()
+    assert events[0].payload["provenance"]["causal_boundary"] == (
+        "information_available_at_context_timestamp"
+    )
 
 
 def test_market_bot_ab30_composition_rejects_stale_snapshot_endpoint():
