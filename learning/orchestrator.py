@@ -18,7 +18,6 @@ import json
 from typing import Iterable, Mapping
 
 from analysis import ErrorAnalysisReport, TradeErrorAnalyzer
-from candidate_improvement.engine import CandidateImprovementEngine
 from experiments.definition import ExperimentDefinition
 from experiments.evaluation import EvaluationReport, evaluate_experiment_record
 from experiments.lineage import LineageRecord, build_lineage
@@ -342,7 +341,13 @@ class SelfLearningEngine:
         candidate: object,
         baseline_config: object,
     ) -> object:
-        """Materialize a whitelisted research strategy candidate."""
+        """Materialize a whitelisted research strategy candidate.
+
+        Import lazily to avoid the package-initialization cycle between
+        ``candidate_improvement`` and the public ``learning`` package.
+        """
+        from candidate_improvement.engine import CandidateImprovementEngine
+
         return CandidateImprovementEngine.materialize_strategy_config(
             candidate,  # type: ignore[arg-type]
             baseline_config,  # type: ignore[arg-type]
