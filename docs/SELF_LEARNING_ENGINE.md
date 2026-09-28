@@ -151,3 +151,4 @@ The orchestrator delegates structural gating to the existing `validate_candidate
 SL-26 binds promotion review to an immutable ValidationRun belonging to the exact ModelCandidate under review. PromotionController.review_run requires the candidate to be in PROMOTION_REVIEW, verifies the run's candidate fingerprint, revalidates the stage evidence through the existing structural gate, and records the validation-run fingerprint alongside stage artifact fingerprints in the promotion decision.
 
 A stale or mismatched validation run therefore cannot produce an eligible review. Explicit approval remains separate from eligibility; this change does not deploy models, access a broker, alter risk controls, or infer profitability.
+
