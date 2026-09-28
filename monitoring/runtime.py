@@ -33,7 +33,11 @@ class RuntimeTelemetryResult:
 
 
 class MonitoringRuntime:
-    """Single runtime entry point for producer telemetry -> monitoring."""
+    """Single runtime entry point for producer telemetry -> monitoring.
+
+    Conflict-resolution note: preserve compatibility with callers that pass
+    the central MonitoringEngine directly.
+    """
 
     def __init__(
         self,
