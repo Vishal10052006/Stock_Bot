@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import pandas as pd
 
+from ml.prediction.contracts import ClassificationPrediction, PredictionProvenance
+
 from experiments.paper_journal import PaperEvidenceJournal
 
 from experiments.paper_journal import PaperEvidenceJournal
@@ -138,3 +140,45 @@ def test_paper_decision_loop_emits_monitoring_telemetry():
     assert len(run.steps) == 1
     assert "strategy.decisions" in payload["metrics"]
     assert "risk.equity" in payload["metrics"]
+
+
+def test_paper_passes_versioned_prediction_into_strategy() -> None:
+    """Historical prediction artifacts must reach Strategy without fabrication."""
+    rows = pd.DataFrame([risk_row("2026-09-21 10:00:00")])
+    timestamp = pd.Timestamp("2026-09-21 10:00:00", tz="UTC")
+    prediction = ClassificationPrediction(
+        timestamp=timestamp,
+        symbol="RELIANCE",
+        probabilities={
+            "LONG_SUCCESS": 0.80,
+            "SHORT_SUCCESS": 0.10,
+            "NO_EDGE": 0.10,
+        },
+        provenance=PredictionProvenance(
+            model_version="phase9-logistic-v1",
+            model_family="logistic",
+            dataset_version="phase9-test-v1",
+            feature_version="feature-v1",
+            target_version="label-v1",
+            code_version="test-code-v1",
+            calibration_version="isotonic-v1",
+        ),
+    )
+
+    result = PaperDecisionLoop().run(
+        rows,
+        predictions={(timestamp, "RELIANCE"): prediction},
+    )
+
+    assert result.steps[0].strategy.prediction_class == "LONG_SUCCESS"
+    assert result.steps[0].strategy.prediction_probability == 0.80
+    assert result.steps[0].strategy.prediction_model_version == "phase9-logistic-v1"
+
+
+def test_paper_missing_prediction_does_not_fabricate_probabilities() -> None:
+    """Absent prediction artifacts remain absent at the Strategy boundary."""
+    rows = pd.DataFrame([risk_row("2026-09-21 10:00:00")])
+    result = PaperDecisionLoop().run(rows, predictions={})
+
+    assert result.steps[0].strategy.prediction_class is None
+    assert result.steps[0].strategy.prediction_probability is None

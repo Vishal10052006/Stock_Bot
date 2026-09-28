@@ -59,7 +59,7 @@ def test_full_sandbox_paper_path_is_observable_and_fail_closed(tmp_path):
     )
 
     assert result.summary()["live_broker_order_submission"] is False
-    assert result.evidence.source_run_id == result.run.run_id
+    assert result.evidence.source_run_id == f"E2E-SANDBOX-001:{result.run.run_id}"
     assert len(result.run.steps) == 2
     assert result.run.orders
 

@@ -211,6 +211,12 @@ class PaperEvidenceCollector:
         if false_signal is not None:
             self._false_signal_count += int(bool(false_signal))
 
+        if realized_equity is None:
+            # PaperDecisionLoop records equity at each causal decision point.
+            # Prefer that observation over a sidecar so drawdown evidence is
+            # derived from the actual paper-account state.
+            realized_equity = getattr(step, "equity", None)
+
         if realized_equity is not None:
             equity = float(realized_equity)
             if not math.isfinite(equity) or equity <= 0:
@@ -280,6 +286,48 @@ class PaperEvidenceCollector:
         )
 
 
+
+
+def build_calibration_outcomes(
+    run: object,
+    realized_labels: dict[int, str],
+) -> dict[int, float]:
+    """Convert explicit future labels into causal 0/1 calibration outcomes.
+
+    The labels must be supplied separately from the decision-time run because
+    future outcomes are forbidden inside decision-time StrategyInput. An
+    observation is recorded only when the strategy carries prediction
+    probability/class information.
+    """
+    steps = getattr(run, "steps", None)
+    if steps is None:
+        raise TypeError("run must expose a steps sequence")
+
+    allowed = {"LONG_SUCCESS", "SHORT_SUCCESS", "NO_EDGE"}
+    outcomes: dict[int, float] = {}
+
+    for raw_index, raw_label in realized_labels.items():
+        index = int(raw_index)
+        if index < 0 or index >= len(steps):
+            raise ValueError(f"realized_labels contains invalid step index: {index}")
+        label = str(raw_label).strip().upper()
+        if label not in allowed:
+            raise ValueError(f"invalid realized label: {raw_label!r}")
+
+        strategy = getattr(steps[index], "strategy", None)
+        if strategy is None:
+            raise TypeError(f"step {index} does not expose a strategy decision")
+        predicted_class = getattr(strategy, "prediction_class", None)
+        prediction_probability = getattr(strategy, "prediction_probability", None)
+        if predicted_class is None or prediction_probability is None:
+            raise ValueError(
+                f"step {index} has no prediction evidence for calibration"
+            )
+
+        outcomes[index] = float(predicted_class == label)
+
+    return outcomes
+
 def collect_paper_decision_run(
     run: object,
     *,
@@ -324,13 +372,27 @@ def collect_paper_decision_run(
     )
 
     for index, step in enumerate(steps):
+        fill_timestamp = fill_timestamps.get(index)
+        if fill_timestamp is None:
+            order = getattr(step, "order", None)
+            if order is not None and getattr(getattr(order, "status", None), "value", None) == "FILLED":
+                # The paper runtime records the simulated fill timestamp on the
+                # order itself. This is a paper-simulation latency observation,
+                # not a claim about broker/exchange network latency.
+                fill_timestamp = getattr(order, "timestamp", None)
+
         collector.record_step(
             step,
-            fill_timestamp=fill_timestamps.get(index),
+            fill_timestamp=fill_timestamp,
             false_signal=false_signals.get(index),
             realized_equity=equity_observations.get(index),
             calibration_outcome=calibration_outcomes.get(index),
         )
+
+    if operational_events == 0:
+        # Every processed paper step is a real operational observation of the
+        # paper loop. Do not invent errors/stale events; only count processing.
+        operational_events = len(steps)
 
     collector.record_operational_summary(
         events=operational_events,

@@ -22,6 +22,7 @@ from .pipeline import MonitoringPipeline
 from .performance import PerformanceMonitoringSnapshot
 from .regime import RegimeMonitoringSnapshot
 from .models import ModelMonitoringSnapshot
+from .journal import MonitoringEvent
 
 
 @dataclass(frozen=True, slots=True)
@@ -35,8 +36,22 @@ class RuntimeTelemetryResult:
 class MonitoringRuntime:
     """Single runtime entry point for producer telemetry -> monitoring."""
 
-    def __init__(self, pipeline: MonitoringPipeline | None = None) -> None:
-        self.pipeline = pipeline or MonitoringPipeline()
+    def __init__(
+        self,
+        pipeline: MonitoringPipeline | MonitoringEngine | None = None,
+        *,
+        engine: MonitoringEngine | None = None,
+    ) -> None:
+        if pipeline is not None and engine is not None:
+            raise ValueError("provide pipeline or engine, not both")
+        if isinstance(pipeline, MonitoringEngine):
+            self.pipeline = MonitoringPipeline(engine=pipeline)
+        elif pipeline is not None:
+            self.pipeline = pipeline
+        elif engine is not None:
+            self.pipeline = MonitoringPipeline(engine=engine)
+        else:
+            self.pipeline = MonitoringPipeline()
 
     @property
     def engine(self) -> MonitoringEngine:
@@ -58,6 +73,22 @@ class MonitoringRuntime:
         if getattr(metrics, "quality", None) is not None:
             self.pipeline.record_metric("market.quality", float(metrics.quality))
         self.pipeline.record_metric("market.latency_seconds", float(metrics.latency_seconds))
+        return self._result("market_bot", before_metrics, before_alerts)
+
+    def observe_market_context(self, context: Any) -> RuntimeTelemetryResult:
+        """Persist the latest descriptive MarketContext for observability/JARVIS only."""
+        before_metrics = len(self.engine.snapshot().metrics)
+        before_alerts = len(self.engine.snapshot().alerts)
+        if self.engine.journal is not None:
+            self.engine.record_event(
+                MonitoringEvent.create(
+                    event_type="MARKET_CONTEXT",
+                    source="market_bot",
+                    timestamp=context.timestamp,
+                    correlation_id=f"market:{context.timestamp.isoformat()}",
+                    payload=context.to_mapping(),
+                )
+            )
         return self._result("market_bot", before_metrics, before_alerts)
 
     def observe_analysis(self, metrics: Any) -> RuntimeTelemetryResult:

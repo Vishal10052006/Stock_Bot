@@ -120,6 +120,10 @@ class PredictionInferenceService:
                             "p_no_edge": prediction.probabilities["NO_EDGE"],
                             "api_version": self.api_version,
                         },
+                        model_family=request.provenance.model_family,
+                        target_version=request.provenance.target_version,
+                        code_version=request.provenance.code_version,
+                        calibration_version=request.provenance.calibration_version,
                     )
                 )
 

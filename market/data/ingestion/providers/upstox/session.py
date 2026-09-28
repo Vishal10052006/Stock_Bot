@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from .auth import get_authorized_websocket_uri
 from .config import UpstoxFeedConfig
@@ -12,7 +12,7 @@ from .config import UpstoxFeedConfig
 class UpstoxMarketDataSession:
     """Authorized, non-ordering session for Upstox Market Data V3."""
 
-    config: UpstoxFeedConfig
+    config: UpstoxFeedConfig = field(repr=False)
     websocket_uri: str
 
     @classmethod

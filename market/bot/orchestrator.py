@@ -176,6 +176,8 @@ class MarketBot:
         )
         if monitoring is not None:
             monitoring.observe_market(measure_context(context, started_at))
+            if hasattr(monitoring, "observe_market_context"):
+                monitoring.observe_market_context(context)
         return context
 
     def _canonical_benchmark(self, data: pd.DataFrame) -> pd.DataFrame:
