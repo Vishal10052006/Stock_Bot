@@ -284,6 +284,13 @@ class OrderStateMachine:
             OrderStatus.CANCELLED,
             OrderStatus.UNKNOWN,
         },
+        # A previously terminal broker state can become unresolvable during
+        # reconciliation; represent that loss of authoritative state as UNKNOWN.
+        OrderStatus.FILLED: {OrderStatus.UNKNOWN},
+        OrderStatus.CANCELLED: {OrderStatus.UNKNOWN},
+        OrderStatus.REJECTED_BROKER: {OrderStatus.UNKNOWN},
+        OrderStatus.EXPIRED: {OrderStatus.UNKNOWN},
+        OrderStatus.FAILED: {OrderStatus.UNKNOWN},
         OrderStatus.CANCEL_PENDING: {OrderStatus.CANCELLED, OrderStatus.FILLED, OrderStatus.UNKNOWN},
         OrderStatus.UNKNOWN: {
             OrderStatus.SUBMITTED,
