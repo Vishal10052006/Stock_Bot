@@ -1,0 +1,28 @@
+{
+  "timestamp": "DEMO",
+  "mode": "research_paper_demo",
+  "focus_symbol": "RELIANCE",
+  "decision_time": "10:45:00+05:30",
+  "total_latency_ms": 3.4,
+  "pipeline_state": "CASCADE / REPLAY",
+  "metrics": {
+    "model.prediction_count": 0,
+    "strategy.signal_rate": 0,
+    "risk.gross_exposure_utilization": 0,
+    "risk.daily_loss_utilization": 0,
+    "execution.fill_count": 0,
+    "execution.rejection_rate": 0,
+    "performance.total_return": 0,
+    "performance.max_drawdown": 0
+  },
+  "health": [
+    {"component":"DATA","status":"HEALTHY","message":"freshness within SLA"},
+    {"component":"FEATURES","status":"HEALTHY","message":"decision-time only"},
+    {"component":"CAUSALITY","status":"HEALTHY","message":"future ticks: 0"},
+    {"component":"RISK","status":"HEALTHY","message":"hard limits enforced"},
+    {"component":"EXECUTION","status":"LOCKED","message":"paper simulation"},
+    {"component":"MODEL","status":"OBSERVING","message":"research gate"}
+  ],
+  "alerts": [],
+  "alert_summary": {"total":0,"by_severity":{},"by_code":{}}
+}

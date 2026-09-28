@@ -21,10 +21,8 @@ class FillConfig:
     fill_type: FillType = FillType.MARKET
 
     def __post_init__(self) -> None:
-        if not math.isfinite(float(self.slippage_bps)):
-            raise ValueError("slippage_bps must be finite")
-        if self.slippage_bps < 0:
-            raise ValueError("slippage_bps must be non-negative")
+        if not math.isfinite(float(self.slippage_bps)) or self.slippage_bps < 0:
+            raise ValueError("slippage_bps must be finite and non-negative")
 
 
 @dataclass(frozen=True, slots=True)
@@ -36,21 +34,6 @@ class SimulatedFill:
     quantity: float
     slippage_cost: float
     fill_type: FillType
-
-    def __post_init__(self) -> None:
-        if (
-            not math.isfinite(float(self.requested_price))
-            or not math.isfinite(float(self.fill_price))
-            or self.requested_price <= 0
-            or self.fill_price <= 0
-        ):
-            raise ValueError("simulated fill prices must be positive and finite")
-        if not math.isfinite(float(self.quantity)) or self.quantity <= 0:
-            raise ValueError("simulated fill quantity must be positive and finite")
-        if not math.isfinite(float(self.slippage_cost)) or self.slippage_cost < 0:
-            raise ValueError("simulated slippage cost must be finite and non-negative")
-        if not isinstance(self.fill_type, FillType):
-            raise ValueError("fill_type must be a FillType")
 
 
 class FillModel:

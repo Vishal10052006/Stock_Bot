@@ -1,11 +1,18 @@
 """Run one reproducible empirical paper-trading evidence job.
 
-The input is a frozen, strategy-ready chronological parquet dataset. The command
-refuses to reorder empirical observations and does not synthesize missing
-observations. Optional evidence that cannot be inferred by the paper runtime is
-supplied explicitly through a JSON sidecar.
-"""
+The input is a frozen, strategy-ready chronological parquet dataset. This command
+does not manufacture observations that the PaperDecisionLoop cannot establish.
+Optional evidence that exists outside the loop is supplied through a JSON sidecar.
 
+Example:
+    python scripts/trading/run_empirical_paper.py \
+      --input data/paper/frozen_rows.parquet \
+      --dataset-version paper-2026-09-v1 \
+      --code-version <git-sha> \
+      --evidence-version PAPER-EVIDENCE-v1 \
+      --journal data/paper/paper_evidence.jsonl \
+      --output data/paper/empirical_paper_report.json
+"""
 from __future__ import annotations
 
 import argparse
@@ -44,16 +51,16 @@ def _load_rows(path: str | Path) -> pd.DataFrame:
         raise ValueError("paper input is empty")
 
     frame = frame.copy()
-    timestamp = pd.to_datetime(frame["timestamp"], utc=True)
-    if timestamp.isna().any():
+    raw_timestamp = pd.to_datetime(frame["timestamp"], utc=True)
+    if raw_timestamp.isna().any():
         raise ValueError("paper input contains invalid timestamps")
 
-    frame["timestamp"] = timestamp
+    frame["timestamp"] = raw_timestamp
     frame["symbol"] = frame["symbol"].astype(str).str.strip().str.upper()
     if (frame["symbol"] == "").any():
         raise ValueError("paper input contains an empty symbol")
 
-    if not timestamp.is_monotonic_increasing:
+    if not raw_timestamp.is_monotonic_increasing:
         raise ValueError(
             "paper input must already be in chronological order; "
             "refusing to reorder empirical observations"
@@ -80,32 +87,16 @@ def _indexed_map(payload: dict[str, Any], name: str) -> dict[int, object]:
         return {}
     if not isinstance(value, dict):
         raise ValueError(f"{name} must be an object keyed by step index")
-
     result: dict[int, object] = {}
     for key, item in value.items():
         try:
             index = int(key)
         except (TypeError, ValueError) as exc:
-            raise ValueError(
-                f"{name} contains a non-integer step index: {key!r}"
-            ) from exc
+            raise ValueError(f"{name} contains a non-integer step index: {key!r}") from exc
         if index < 0:
             raise ValueError(f"{name} contains a negative step index: {index}")
         result[index] = item
     return result
-
-
-def _non_negative_int(payload: dict[str, Any], name: str) -> int:
-    value = payload.get(name, 0)
-    if isinstance(value, bool):
-        raise ValueError(f"{name} must be an integer")
-    try:
-        parsed = int(value)
-    except (TypeError, ValueError) as exc:
-        raise ValueError(f"{name} must be an integer") from exc
-    if parsed < 0:
-        raise ValueError(f"{name} must be non-negative")
-    return parsed
 
 
 def main() -> None:
@@ -121,24 +112,22 @@ def main() -> None:
     parser.add_argument("--quantity", type=float, default=1.0)
     args = parser.parse_args()
 
-    if args.quantity <= 0:
-        raise ValueError("--quantity must be positive")
-
     rows = _load_rows(args.input)
     sidecar = _load_sidecar(args.observations_json)
 
-    operational_events = _non_negative_int(sidecar, "operational_events")
-    operational_errors = _non_negative_int(sidecar, "operational_errors")
-    stale_events = _non_negative_int(sidecar, "stale_events")
-
-    if operational_errors > operational_events:
-        raise ValueError("operational_errors cannot exceed operational_events")
-    if stale_events > operational_events:
-        raise ValueError("stale_events cannot exceed operational_events")
+    operational_events = int(sidecar.get("operational_events", 0))
+    operational_errors = int(sidecar.get("operational_errors", 0))
+    stale_events = int(sidecar.get("stale_events", 0))
+    for name, value in (
+        ("operational_events", operational_events),
+        ("operational_errors", operational_errors),
+        ("stale_events", stale_events),
+    ):
+        if value < 0:
+            raise ValueError(f"{name} must be non-negative")
 
     journal = PaperEvidenceJournal(args.journal)
     loop = PaperDecisionLoop()
-
     run, record = loop.run_and_persist_evidence(
         rows,
         journal=journal,
@@ -180,20 +169,19 @@ def main() -> None:
             "run_id": record.run_id,
             "fingerprint": record.fingerprint,
             "source_run_id": record.source_run_id,
-            "evidence": json.loads(record.evidence.canonical_json()),
+            "evidence": record.evidence.to_dict() if hasattr(record.evidence, "to_dict") else json.loads(record.evidence.canonical_json()),
         },
         "quality": {
             "valid": quality.valid,
             "issues": list(quality.issues),
             "records": quality.record_count,
-            "fingerprint": quality.fingerprint,
         },
     }
 
     target = Path(args.output)
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(
-        json.dumps(report, indent=2, sort_keys=True) + "\n",
+        json.dumps(report, indent=2, sort_keys=True, default=str) + "\n",
         encoding="utf-8",
     )
 

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from time import perf_counter
 from typing import Any
 
 import numpy as np
@@ -10,6 +11,7 @@ import pandas as pd
 from market.regime.detector import detect_market_regime
 
 from .failure import InsufficientMarketDataError
+from .monitoring import measure_context
 from .validation_pipeline import validate_market_inputs
 
 from .breadth import BreadthEngine
@@ -65,8 +67,10 @@ class MarketBot:
         sector_membership: pd.DataFrame | None = None,
         timeframe_data: dict[str, pd.DataFrame] | None = None,
         provenance: dict[str, Any] | None = None,
+        monitoring: Any | None = None,
     ) -> MarketContext:
         """Build a causal context using only data at or before the final benchmark timestamp."""
+        started_at = perf_counter()
         benchmark = self._canonical_benchmark(benchmark_data)
         timestamp = benchmark["timestamp"].iloc[-1]
         validate_market_inputs(benchmark, constituent_data)
@@ -148,7 +152,7 @@ class MarketBot:
         )
 
         mtf = self._multi_timeframe(timeframe_data or {}, timestamp)
-        return MarketContext(
+        context = MarketContext(
             timestamp=timestamp.to_pydatetime(),
             benchmark=self.config.benchmark,
             state=state,
@@ -170,6 +174,9 @@ class MarketBot:
                 },
             ),
         )
+        if monitoring is not None:
+            monitoring.observe_market(measure_context(context, started_at))
+        return context
 
     def _canonical_benchmark(self, data: pd.DataFrame) -> pd.DataFrame:
         required={"timestamp","close"}

@@ -31,10 +31,13 @@ class CostConfig:
             self.stamp_duty_bps,
         )
 
-        if any(not math.isfinite(float(value)) for value in values):
-            raise ValueError("transaction costs must be finite")
-        if any(value < 0 for value in values):
-            raise ValueError("transaction costs cannot be negative")
+        if any(
+            not math.isfinite(float(value)) or value < 0
+            for value in values
+        ):
+            raise ValueError(
+                "transaction costs must be finite and non-negative"
+            )
 
 
 @dataclass(frozen=True, slots=True)
@@ -48,23 +51,6 @@ class CostBreakdown:
     gst: float
     sebi: float
     stamp_duty: float
-
-    def __post_init__(self) -> None:
-        values = (
-            self.notional,
-            self.brokerage,
-            self.exchange_transaction,
-            self.stt,
-            self.gst,
-            self.sebi,
-            self.stamp_duty,
-        )
-        if any(not math.isfinite(float(value)) for value in values):
-            raise ValueError("cost breakdown values must be finite")
-        if self.notional <= 0:
-            raise ValueError("cost breakdown notional must be positive")
-        if any(value < 0 for value in values[1:]):
-            raise ValueError("cost breakdown components must be non-negative")
 
     @property
     def total(self) -> float:
@@ -97,8 +83,6 @@ class TransactionCostModel:
             raise ValueError("quantity must be positive and finite")
 
         notional = price * quantity
-        if not math.isfinite(notional):
-            raise ValueError("notional must be finite")
 
         def bps(value: float) -> float:
             return notional * value / 10_000.0

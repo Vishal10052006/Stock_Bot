@@ -3,9 +3,14 @@ from __future__ import annotations
 
 import pandas as pd
 
+from ml.models.logistic import LogisticOutcomeModel
+from ml.preprocessing.pipeline import FeaturePreprocessor
+from monitoring.runtime import MonitoringRuntime
+
 from trading.ab30_pipeline import (
     MarketAnalysisPipelineError,
     build_market_analysis,
+    build_market_analysis_and_prediction,
 )
 
 
@@ -72,3 +77,30 @@ def test_ab30_requires_market_context_for_phase6_regime() -> None:
         assert "requires market context" in str(exc)
     else:
         raise AssertionError("missing market context must fail closed")
+
+
+def test_ab30_market_to_prediction_uses_shared_monitoring_runtime() -> None:
+    from tests.test_analysis_prediction_integration import _training_frame
+
+    X_train, y_train = _training_frame()
+    preprocessor = FeaturePreprocessor()
+    model = LogisticOutcomeModel()
+    model.fit(preprocessor.fit_transform(X_train), y_train)
+
+    runtime = MonitoringRuntime()
+    result, prediction = build_market_analysis_and_prediction(
+        _candles(),
+        symbol="RELIANCE",
+        model=model,
+        preprocessor=preprocessor,
+        market_context=_market_context(),
+        monitoring=runtime,
+    )
+
+    payload = runtime.dashboard()
+    assert result.analysis.symbol == "RELIANCE"
+    assert prediction.symbol == "RELIANCE"
+    assert prediction.model_version == "phase9-logistic-v1"
+    assert "analysis.completeness" in payload["metrics"]
+    assert "model.prediction_count" in payload["metrics"]
+    assert "model.prediction_max_probability" in payload["metrics"]

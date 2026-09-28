@@ -1,4 +1,9 @@
-"""Build PIT sector-index context for one Phase 9 research date."""
+"""Build PIT sector-index context for one Phase 9 research date.
+
+This helper keeps sector membership resolution separate from market-data
+acquisition and fetches only sector indices explicitly mapped to the supplied
+Phase 9 symbols.
+"""
 
 from __future__ import annotations
 
@@ -10,16 +15,28 @@ import os
 
 import pandas as pd
 
-from market.data.context import build_sector_context, load_sector_mappings_csv
-from market.data.context.sector_membership import PointInTimeSectorMembershipProvider
-from market.data.historical.adapters.upstox import UpstoxHistoricalMarketDataProvider
-from market.data.ingestion.providers.upstox.instrument_mapper import UpstoxInstrumentMapper
+from market.data.context import (
+    build_sector_context,
+    load_sector_mappings_csv,
+)
+from market.data.context.sector_membership import (
+    PointInTimeSectorMembershipProvider,
+)
+from market.data.historical.adapters.upstox import (
+    UpstoxHistoricalMarketDataProvider,
+)
+from market.data.ingestion.providers.upstox.instrument_mapper import (
+    UpstoxInstrumentMapper,
+)
+from market.data.context.sector_registry import (
+    DEFAULT_UPSTOX_INDEX_INSTRUMENT_KEYS,
+)
 
-MAPPING_PATH = Path("data/reference/nse/sector_membership/sector_membership.csv")
+
+MAPPING_PATH = Path(
+    "data/reference/nse/sector_membership/sector_membership.csv"
+)
 IST = ZoneInfo("Asia/Kolkata")
-SECTOR_INSTRUMENTS = {
-    "NIFTY_IT": "NSE_INDEX|Nifty IT",
-}
 
 
 def build_phase9_sector_context_for_date(
@@ -30,7 +47,12 @@ def build_phase9_sector_context_for_date(
     timeframe_minutes: int = 5,
     access_token: str | None = None,
 ) -> pd.DataFrame:
-    """Fetch PIT-mapped sector indices using the canonical Upstox adapter."""
+    """Fetch only PIT-mapped sector indices for one research date.
+
+    Upstox is the canonical historical provider. Sector membership remains
+    point-in-time; unsupported provider mappings remain absent rather than
+    being fabricated.
+    """
     if lookback_days <= 0:
         raise ValueError("lookback_days must be positive")
 
@@ -67,18 +89,32 @@ def build_phase9_sector_context_for_date(
             ]
         )
 
-    instrument_mapping = {
-        symbol: SECTOR_INSTRUMENTS[symbol]
+    supported = [
+        symbol
         for symbol in sector_symbols
-        if symbol in SECTOR_INSTRUMENTS
-    }
-    if len(instrument_mapping) != len(sector_symbols):
-        missing = sorted(set(sector_symbols).difference(instrument_mapping))
-        raise ValueError(f"missing Upstox sector instrument mappings: {missing}")
+        if symbol in DEFAULT_UPSTOX_INDEX_INSTRUMENT_KEYS
+    ]
+    if not supported:
+        return pd.DataFrame(
+            columns=[
+                "timestamp",
+                "sector_index_symbol",
+                "return_1",
+                "return_3",
+                "return_12",
+                "volatility_20",
+            ]
+        )
 
+    instrument_mapper = UpstoxInstrumentMapper(
+        {
+            symbol: DEFAULT_UPSTOX_INDEX_INSTRUMENT_KEYS[symbol]
+            for symbol in supported
+        }
+    )
     provider = UpstoxHistoricalMarketDataProvider(
         access_token=access_token,
-        instrument_mapper=UpstoxInstrumentMapper(instrument_mapping),
+        instrument_mapper=instrument_mapper,
     )
 
     start = datetime.combine(
@@ -94,7 +130,7 @@ def build_phase9_sector_context_for_date(
 
     return build_sector_context(
         provider,
-        symbols=sector_symbols,
+        symbols=supported,
         timeframe_minutes=timeframe_minutes,
         start=start,
         end=end,

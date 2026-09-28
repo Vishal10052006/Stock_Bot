@@ -100,6 +100,7 @@ class ModelRegistryRecord:
     test_period_end: str
     hyperparameters: Mapping[str, object]
     metrics: Mapping[str, float]
+    target_version: str = "unspecified"
     approval_status: str = ModelRegistryStatus.RESEARCH_ONLY.value
     artifact_uri: str = ""
     artifact_fingerprint: str = ""
@@ -127,6 +128,7 @@ class ModelRegistryRecord:
             ("validation_period_end", self.validation_period_end),
             ("test_period_start", self.test_period_start),
             ("test_period_end", self.test_period_end),
+            ("target_version", self.target_version),
         )
         for field_name, value in text_fields:
             _require_text(value, field_name)
@@ -196,6 +198,7 @@ class ModelRegistryRecord:
             "validation_period_end": self.validation_period_end,
             "test_period_start": self.test_period_start,
             "test_period_end": self.test_period_end,
+            "target_version": self.target_version,
             "hyperparameters": _canonical_mapping(self.hyperparameters),
             "metrics": _canonical_mapping(self.metrics),
             "approval_status": self.approval_status,

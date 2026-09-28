@@ -6,7 +6,7 @@ The production trading execution boundary is implemented in `execution/engine.py
 The existing `execution/execution_engine.py` worker adapter is intentionally
 preserved because it serves a different legacy worker-execution responsibility.
 
-## EXEC-1 → EXEC-15
+## EXEC-1 → EXEC-12
 
 1. **Contracts** — immutable order, fill, snapshot, position, and result models.
 2. **Validation** — execution requires an explicit `ExecutionAuthorization`.
@@ -21,14 +21,6 @@ preserved because it serves a different legacy worker-execution responsibility.
 11. **Execution journal** — immutable in-process order snapshots and lifecycle events.
 12. **Validation tests** — unit/integration coverage for authorization, lifecycle,
     fills, shorts, reconciliation, cancellation, idempotency and metrics.
-13. **Latency telemetry** — submission round-trip latency is retained per client order
-    and included in execution metrics.
-14. **Routing boundary** — deterministic multi-broker route selection evaluates
-    explicit broker health, liquidity, slippage, fees and latency without changing
-    Risk-approved quantity or submitting an order.
-15. **Recovery hardening** — UNKNOWN is unresolved state, cancellation ambiguity
-    is fail-closed, malformed broker state is rejected, and duplicate submission
-    is prevented by deterministic client-order identity.
 
 ## Hard boundaries
 
@@ -42,27 +34,14 @@ Live broker execution remains locked. The Upstox adapter is deliberately
 fail-closed until the broker integration is separately validated against the
 current provider contract and the complete live-readiness gates pass.
 
-## Routing and execution composition
-
-execution.routing.SmartOrderRouter is a broker-neutral selection layer. It does
-not submit orders and cannot change approved quantity. A route is eligible only
-when it is healthy, within configured slippage/latency limits, and has enough
-available quantity when full-fill routing is required. Among eligible routes the
-router selects the deterministic minimum of weighted slippage, fee, and latency
-cost, with broker-name tie breaking. The selected adapter must then be passed
-into
-the normal Execution Engine boundary.
-
-This is intentionally a routing policy rather than a live market-making or
-order-splitting system. Multi-broker live deployment remains locked until each
-provider's current API, authentication, order semantics, rate limits, and
-operational controls are independently validated.
-
 ## Current adapters
 
 - `PaperBrokerAdapter`: deterministic, no network I/O.
 - `UpstoxBrokerAdapter`: integration boundary only; live methods fail closed
   until an explicitly enabled, externally supplied client is validated.
+- `UpstoxSandboxClient`: legacy sandbox HTTP transport retained for isolated unit tests. It is not the preferred provider-evidence path.
+- `UpstoxSDKSandboxClient`: preferred sandbox transport for provider
+  integration validation, backed by the official `upstox-python-sdk`.
 
 ## Required validation
 
@@ -71,169 +50,120 @@ Run:
 ```bash
 pytest -q tests/execution tests/paper tests/risk
 pytest -q
+
+# Explicit provider integration validation (network + sandbox credentials required)
+pytest -q tests/execution/test_upstox_sandbox_client.py -m integration
 ```
 
 A clean repository-wide test run is required after any execution-engine change.
 
+## Completion extension — execution recovery and exits
 
-## Risk-approved exposure boundary
+The execution boundary now includes the remaining production-safety pieces that can be implemented without enabling live broker trading:
 
-Execution consumes the immutable RiskDecision.approved_quantity and
-RiskDecision.approved_notional. A caller may not replace these values with a
-different quantity or notional. If optional values are supplied to the
-authorization boundary, they must exactly match the Risk-approved values.
+13. **UNKNOWN recovery** — `recover_unknown()` re-queries authoritative broker state and updates the lifecycle only when the broker can resolve the order. A missing broker record remains `UNKNOWN`; the engine never blindly resubmits the uncertain order.
+14. **Exit execution** — `from_exit_authorization()` creates an explicit `purpose="EXIT"` order, requires the authorization quantity to match the requested exit quantity, requires the authorization direction to oppose the current signed position, and prevents exits larger than the observed position.
+15. **Execution lineage** — lifecycle events retain `decision_id` and `purpose`, while deterministic client order IDs include the execution purpose. This links decision → authorization → order lifecycle without introducing a second journal system.
+16. **Failure-matrix tests** — coverage now includes late broker acknowledgements, unresolved UNKNOWN orders, exit-size limits, exit idempotency, and lifecycle lineage.
 
-This creates a fail-closed boundary:
+### Safety invariant
 
-Risk -> Safety -> Execution
+An UNKNOWN submission is **not** evidence that the broker did not receive the order. The only safe automatic action is to query broker truth. If the broker cannot resolve the order, execution remains blocked in `UNKNOWN` and requires external operational resolution; no automatic duplicate submission is performed.
 
-Risk owns sizing; Safety can only block; Execution cannot reconstruct, enlarge,
-or silently resize the approved order.
+### Live execution status
 
+These changes do **not** enable Upstox/live trading. The existing live lock, independent safety gate, broker validation requirements, reconciliation gates, and readiness provenance remain authoritative.
 
-## Broker response invariants
+## Production-side completion
 
-The Execution Engine fail-closes broker responses before recording them as
-accepted execution state. It verifies:
+Production validation controls now live in `execution/production.py`: adapter contract checks, partial-fill and rejection coverage, restart rehydration, signed position reconciliation, kill-switch tests, execution monitoring, paper soak execution, backtest cost-assumption parity, and a fail-closed production readiness gate.
 
-- client order identity matches the submitted order;
-- requested quantity matches the immutable OrderRequest;
-- filled quantity is within the requested quantity;
-- every returned fill belongs to the same client order;
-- fill quantities and prices are positive;
-- FILLED means the complete requested quantity was filled;
-- PARTIALLY_FILLED means a strictly positive but incomplete quantity was filled.
-- a filled order provides a positive average fill price;
-- fill fees are finite and non-negative;
-- position average prices are finite and strictly positive.
+`ExecutionEngine.rehydrate()` rebuilds order state from broker truth using client IDs recovered from durable journal storage. Missing broker state remains unresolved rather than being recreated by duplicate submission.
 
-The client order identifier is deterministic for the decision, symbol, direction,
-and Risk version. Re-submitting the same immutable request is therefore
-idempotent; an already-journaled client order is not submitted to the adapter a
-second time.
+`.github/workflows/execution-engine.yml` runs the execution suite and full repository regression for execution-related changes.
 
-A malformed broker response must never be treated as a valid fill. If a
-submission response is malformed, the local order is journaled as UNKNOWN
-before the validation error is surfaced, preventing a subsequent caller from
-blindly submitting the same client order again. Cancellation transport
-failures or malformed cancellation responses likewise transition the order
-from CANCEL_PENDING to UNKNOWN because cancellation outcome is not known.
+The final readiness gate remains blocked until provider-specific integration evidence exists for authentication, submission, acknowledgement, partial fills, rejection, cancellation, lookup, position reconciliation, rate limiting, timeout recovery, and process restart recovery.
 
+Live broker execution remains locked.
 
-UNKNOWN orders are unresolved rather than accepted in execution
-metrics, keeping `ExecutionResult.accepted` and aggregate accepted-order
-counts semantically aligned. Submission round-trip latency is retained by
-client order ID and contributes to `ExecutionMetrics.average_latency_ms`.
+## Upstox provider-contract validation
 
-## Paper-runtime accounting boundary
+The Upstox adapter implements provider request/response mapping behind an injected client boundary. The adapter remains disabled by default and does not construct HTTP clients or read credentials.
 
-The deterministic Paper Runtime is downstream of ExecutionAuthorization. For
-authorized fills, execution fees reduce account realized P&L exactly once and
-the same fee is allocated into the symbol's position-level realized P&L.
-Mark-to-market therefore includes the execution costs already incurred by the
-open position. Paper orders, positions, and trade outcomes reject non-finite
-numeric accounting values.
+The current Upstox V3 order contract uses quantity, product, validity, price, tag, instrument_token, order_type, and transaction_type; successful placement returns provider order IDs. The adapter preserves the Stock_Bot deterministic client order ID as the Upstox tag.
 
-For historical trade outcomes, the lifecycle keeps the execution fill price
-separate from the decision/reference price. Gross P&L is calculated from the
-reference prices, while explicit entry/exit slippage is recorded as a separate
-cost and deducted once. This keeps backtest net P&L consistent with the
-economic result of the slippage-adjusted fills.
+`execution/adapters/upstox_sdk.py` provides the official SDK-backed sandbox transport. It constructs `Configuration(sandbox=True)` internally, so callers cannot accidentally select a live base URL. The repository pins `upstox-python-sdk==2.23.0` in `requirements-execution.txt`.
 
-## Position reconciliation boundary
+Provider-specific mapping tests cover:
+- request payload construction
+- filled-order response mapping
+- partial-fill mapping
+- broker rejection mapping
+- broker-order lookup
+- cancellation using the provider order ID
+- signed position mapping
+- disabled/fail-closed behavior
 
-Broker positions are authoritative for reconciliation. The comparison is
-fail-closed: duplicate symbols or invalid position values invalidate the
-reconciliation rather than being silently normalized.
+The adapter intentionally depends on an externally supplied client with place_order, find_order_by_tag, cancel_order, and get_positions methods. This keeps authentication and transport outside the execution domain.
 
-A PARTIALLY_FILLED order may legitimately leave a smaller signed position than
-the requested order quantity. That broker position must be reconciled against
-the local position snapshot before downstream state is considered synchronized.
+## UPSTOX-VALIDATION-02 — sandbox evidence harness
 
-An UNKNOWN order state remains unresolved; it must not be treated as a
-successful fill or as evidence that the expected position exists.
+`execution/adapters/upstox_sandbox.py` provides a legacy sandbox-only transport client retained for isolated contract tests. Provider evidence uses `UpstoxSDKSandboxClient`, because the official SDK's `Configuration(sandbox=True)` selects the current sandbox host and API surface.
 
-UNKNOWN recovery is explicitly fail-closed and idempotent. If the broker
-temporarily returns no order state, the local order remains UNKNOWN. Repeating
-the refresh does not create UNKNOWN -> UNKNOWN lifecycle events. A later
-authoritative broker snapshot may recover the order to OPEN,
-PARTIALLY_FILLED, FILLED, CANCELLED, or another valid lifecycle state without
-resubmitting the order. Re-submitting an already-journaled UNKNOWN request
-returns the unresolved state with `accepted=False`; reconciliation is the
-recovery path rather than a duplicate broker submission.
+The client:
+- is restricted to its legacy sandbox base URL and is not used for the preferred provider-evidence path
+- requires a caller-supplied sandbox token
+- never logs or persists the token
+- never constructs a live API URL
+- normalizes order history into the adapter's provider-client shape
+- raises `UpstoxSandboxError` on transport, HTTP, or malformed-response failures
 
+The opt-in integration test is `tests/execution/test_upstox_sandbox_client.py`.
+It is skipped unless all of the following are supplied locally:
 
+```bash
+UPSTOX_SANDBOX_ACCESS_TOKEN
+UPSTOX_SANDBOX_INSTRUMENT_TOKEN
+UPSTOX_SANDBOX_PRICE
+UPSTOX_SANDBOX_CONFIRM=YES
+```
 
-## Transition lifecycle provenance
+The test places one sandbox LIMIT order, resolves it by tag, verifies broker-order
+lineage, and attempts cancellation when the order is still cancellable.
 
-Risk decisions carry the transition classification and approved projected
-quantity when Portfolio position context is available. The immutable
-ExecutionAuthorization preserves that provenance.
+Current Upstox documentation explicitly lists Place Order and Cancel Order as
+sandbox-enabled APIs. Upstox's sandbox announcement also describes order
+details/history as available for sandbox orders, while the current sandbox
+capability list does not include portfolio/position APIs. Therefore position
+reconciliation is **not** claimed as sandbox evidence by this test; it remains
+a separate provider/readiness gate.
 
-Supported transitions are:
+These tests provide a mechanism for real provider evidence, but **no sandbox
+evidence is claimed until the opt-in test has actually been run with a valid
+sandbox credential, instrument token, and reachable provider endpoint**.
 
-- OPEN — broker order creates the new directional position.
-- INCREASE — broker order adds only the approved incremental quantity.
-- REDUCE — broker order releases the approved reduction quantity.
-- FLATTEN — broker order releases the full existing quantity.
-- REVERSE — broker order quantity contains the full closing leg plus the
-  Risk-approved opening leg; the order side is the new direction.
+A failed DNS/network preflight is an environment/infrastructure failure, not
+evidence of successful or unsuccessful broker authentication.
 
-Risk remains responsible for deriving these quantities. Execution does not
-recompute transition sizing from the original Portfolio intent.
+**Live trading remains locked.**
 
 
-## Authoritative broker-state validation
+## Final certification checkpoint
 
-Every broker snapshot accepted by the execution journal is validated for:
+The execution hardening layer is implemented in `execution/certification.py` and
+covered by `tests/execution/test_production_execution.py`. It adds:
 
-- client-order identity and requested quantity;
-- finite cumulative filled quantity;
-- fill identity uniqueness;
-- fill quantities/prices and cumulative fill total;
-- consistency between lifecycle status and cumulative fills.
+- timeout/network-error validation that remains `UNKNOWN` without blind retry
+- duplicate replay/idempotency validation
+- bounded exponential backoff policy
+- operational preflight, incident, and shutdown runbook checks
 
-The same validation is applied during initial submission, refresh, and
-cancellation responses. This prevents malformed or internally inconsistent
-broker state from becoming local execution state.
+CI validation for commit `0d56ee6a941c7639e868845fef3afc2d9fd96d89`
+completed successfully for Execution Validation, Backtesting Validation, and
+Market Bot validation.
 
-Cancellation is not treated as proof that no further fill can occur. A broker
-race may produce a later authoritative FILLED snapshot after cancellation;
-the state machine permits that correction and portfolio reconciliation follows
-the final broker position.
+This establishes the software-side execution certification boundary. It does
+not constitute live-broker certification. Real Upstox sandbox lifecycle evidence
+requires a valid externally supplied sandbox credential and remains opt-in.
 
-
-The standalone broker reconciliation contract also supports signed
-quantities for long/short positions, normalizes symbols, rejects zero or
-non-finite quantities and non-positive/non-finite average prices, and allows
-only representation-level floating-point noise (1e-12) when comparing
-quantity and price.
-
-### Position-set invariants
-
-Position reconciliation canonicalizes symbols using strip().upper() and
-requires the local and broker snapshots to contain exactly the same symbol
-set. A symbol present on only one side is a reconciliation failure.
-
-Signed quantities are compared as signed values, so a long/short sign reversal
-cannot be hidden by absolute-value comparison. Quantities and average prices
-must be finite, positions must be non-zero, and average prices must be
-strictly positive. Duplicate symbols are rejected on either side.
-
-A very small floating-point tolerance (1e-12) is allowed for quantity and
-average-price representation noise; material differences remain failures.
-These rules also apply to duck-typed adapter/test objects, so validation does
-not depend on the broker adapter constructing PositionSnapshot instances.
-
-
-### Order reconciliation invariants
-
-The reconcile_order() method now applies the same broker-snapshot validation
-used by submission, refresh, and cancellation. A broker snapshot is not
-considered reconciled merely because status and filled quantity match: its
-identity, requested quantity, fills, cumulative fill accounting, and lifecycle
-consistency must also be valid.
-
-Average fill prices are compared with the same 1e-12 representation tolerance
-used for position reconciliation. Missing local journal/request state is a
-reconciliation failure rather than an implicit recovery.
+**Live trading remains locked.**

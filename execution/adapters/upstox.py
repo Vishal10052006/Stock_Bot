@@ -1,210 +1,307 @@
-"""Phase 25 sandbox-first Upstox broker adapter boundary."""
+"""Upstox broker adapter with automatic symbol resolution.
+
+The execution contract remains broker-neutral: OrderRequest carries a symbol.
+When an instrument resolver is supplied, the adapter resolves the symbol at
+submission time instead of requiring a manually maintained instrument token.
+"""
+
 from __future__ import annotations
+
 from dataclasses import dataclass
 import math
-from typing import Any, Protocol
-from execution.engine import OrderRequest, OrderSnapshot, OrderStatus, OrderType, PositionSnapshot
-from execution.instruments import InstrumentResolver
+from typing import Any, Callable, Mapping
+
+from execution.adapters.base import BrokerAdapter
+from execution.adapters.upstox_instruments import UpstoxInstrumentResolver
+from execution.engine import (
+    Fill,
+    OrderRequest,
+    OrderSnapshot,
+    OrderStatus,
+    PositionSnapshot,
+)
+
 
 @dataclass(frozen=True, slots=True)
 class UpstoxAdapterConfig:
-    api_base_url: str = "https://api-hft.upstox.com"
+    """Provider configuration and deterministic request defaults."""
+
+    api_base_url: str
     access_token_env: str = "UPSTOX_ACCESS_TOKEN"
-    sandbox: bool = True
     enabled: bool = False
     product: str = "D"
     validity: str = "DAY"
-    slice_orders: bool = False
+    slice: bool = False
     market_protection: int = -1
+    instrument_token_resolver: Callable[[str], str] | None = None
+    position_provider: Callable[[], Mapping[str, Any]] | None = None
+    instrument_resolver: UpstoxInstrumentResolver | None = None
+
     def __post_init__(self) -> None:
-        if not self.api_base_url.strip() or not self.access_token_env.strip():
-            raise ValueError("Upstox endpoints/env must be non-empty")
+        if not self.api_base_url.strip():
+            raise ValueError("api_base_url must not be empty")
+        if not self.access_token_env.strip():
+            raise ValueError("access_token_env must not be empty")
         if self.product not in {"I", "D", "MTF"}:
-            raise ValueError("unsupported Upstox product")
+            raise ValueError("product must be I, D, or MTF")
         if self.validity not in {"DAY", "IOC"}:
-            raise ValueError("unsupported Upstox validity")
-        if self.market_protection < -1 or self.market_protection > 25:
-            raise ValueError("invalid market protection")
-        if not isinstance(self.sandbox, bool) or not isinstance(self.enabled, bool):
-            raise TypeError("sandbox and enabled must be bool")
-        if not isinstance(self.slice_orders, bool):
-            raise TypeError("slice_orders must be bool")
-        if self.slice_orders:
-            raise ValueError("slice_orders is not supported by the single-order execution contract")
-        if self.enabled and not self.sandbox:
-            raise ValueError("live Upstox adapter remains locked; sandbox=True is required")
+            raise ValueError("validity must be DAY or IOC")
+        if not -1 <= self.market_protection <= 25:
+            raise ValueError("market_protection must be between -1 and 25")
+        if self.instrument_token_resolver is not None and self.instrument_resolver is not None:
+            raise ValueError(
+                "configure either instrument_token_resolver or instrument_resolver, not both"
+            )
 
-class UpstoxClient(Protocol):
-    def place_order_v3(self, payload: dict[str, Any]) -> dict[str, Any]: ...
-    def get_order(self, order_id: str) -> dict[str, Any]: ...
-    def cancel_order(self, order_id: str) -> dict[str, Any]: ...
-    def positions(self) -> dict[str, Any]: ...
 
-def _status(value: str) -> OrderStatus:
-    mapping = {
-        "PUT_ORDER_REQ_RECEIVED": OrderStatus.SUBMITTED,
-        "VALIDATION_PENDING": OrderStatus.SUBMITTED,
-        "OPEN": OrderStatus.OPEN,
-        "PARTIALLY_FILLED": OrderStatus.PARTIALLY_FILLED,
-        "COMPLETE": OrderStatus.FILLED,
-        "FILLED": OrderStatus.FILLED,
-        "CANCELLED": OrderStatus.CANCELLED,
-        "REJECTED": OrderStatus.REJECTED_BROKER,
-        "EXPIRED": OrderStatus.EXPIRED,
-    }
-    return mapping.get(value.strip().upper().replace(" ", "_"), OrderStatus.UNKNOWN)
+class UpstoxBrokerAdapter(BrokerAdapter):
+    """Map broker-neutral execution contracts to an injected Upstox client."""
 
-class UpstoxBrokerAdapter:
-    VERSION = "UPSTOX-ADAPTER-v1.2"
-    def __init__(self, config: UpstoxAdapterConfig, client: UpstoxClient | None = None, instrument_resolver: InstrumentResolver | None = None) -> None:
+    def __init__(self, config: UpstoxAdapterConfig, client: Any | None = None) -> None:
         self.config = config
         self.client = client
-        self.instrument_resolver = instrument_resolver
-        self._broker_order_ids: dict[str, str] = {}
 
     def _require_enabled(self) -> None:
         if not self.config.enabled:
-            raise RuntimeError("Upstox adapter is disabled")
-        if not self.config.sandbox:
-            raise RuntimeError("live Upstox adapter is locked")
+            raise RuntimeError(
+                "Upstox live adapter is disabled; enable only after controlled "
+                "validation and current broker/compliance verification."
+            )
         if self.client is None:
-            raise RuntimeError("an explicitly supplied sandbox client is required")
-        if self.instrument_resolver is None:
-            raise RuntimeError("an explicit instrument resolver is required")
-
-    def _payload(self, order: OrderRequest) -> dict[str, Any]:
-        if order.quantity != int(order.quantity):
-            raise ValueError("Upstox quantity must be an integer")
-        instrument = self.instrument_resolver.resolve(order.symbol)
-        if order.quantity % instrument.lot_size != 0:
-            raise ValueError("order quantity violates instrument lot size")
-        price = 0.0 if order.order_type is OrderType.MARKET else float(order.limit_price)
-        if not math.isfinite(price) or price < 0:
-            raise ValueError("Upstox order price must be finite and non-negative")
-        if order.order_type is OrderType.LIMIT:
-            ticks = price / instrument.tick_size
-            if not math.isclose(ticks, round(ticks), rel_tol=0.0, abs_tol=1e-9):
-                raise ValueError("limit price violates instrument tick size")
-        return {
-            "quantity": int(order.quantity), "product": self.config.product,
-            "validity": self.config.validity, "price": price,
-            "tag": order.client_order_id, "instrument_token": instrument.instrument_token,
-            "order_type": order.order_type.value, "transaction_type": order.side.value,
-            "disclosed_quantity": 0, "trigger_price": 0.0, "is_amo": False,
-            "slice": False, "market_protection": self.config.market_protection,
-        }
+            raise RuntimeError(
+                "No Upstox client was supplied. Credentials/client construction "
+                "must remain outside the execution domain."
+            )
 
     @staticmethod
-    def _data(response: Any) -> dict[str, Any]:
-        if not isinstance(response, dict) or response.get("status") != "success":
-            raise ValueError("invalid Upstox response")
-        data = response.get("data")
-        if not isinstance(data, dict):
+    def _data(response: Mapping[str, Any]) -> Mapping[str, Any]:
+        data = response.get("data", response)
+        if not isinstance(data, Mapping):
             raise ValueError("Upstox response data must be an object")
         return data
 
     @staticmethod
-    def _number(data: dict[str, Any], key: str, *, positive: bool = False) -> float:
-        value = data.get(key)
+    def _status(value: Any) -> OrderStatus:
+        normalized = str(value or "").strip().lower().replace("_", " ")
+        mapping = {
+            "put order req received": OrderStatus.SUBMITTED,
+            "validation pending": OrderStatus.SUBMITTED,
+            "open": OrderStatus.OPEN,
+            "open pending": OrderStatus.OPEN,
+            "trigger pending": OrderStatus.OPEN,
+            "partially filled": OrderStatus.PARTIALLY_FILLED,
+            "partial": OrderStatus.PARTIALLY_FILLED,
+            "complete": OrderStatus.FILLED,
+            "completed": OrderStatus.FILLED,
+            "filled": OrderStatus.FILLED,
+            "cancel pending": OrderStatus.CANCEL_PENDING,
+            "cancelled": OrderStatus.CANCELLED,
+            "canceled": OrderStatus.CANCELLED,
+            "rejected": OrderStatus.REJECTED_BROKER,
+            "expired": OrderStatus.EXPIRED,
+        }
         try:
-            number = float(value)
+            return mapping[normalized]
+        except KeyError as exc:
+            raise ValueError(f"unsupported Upstox order status: {value!r}") from exc
+
+    @staticmethod
+    def _fill_tuple(
+        data: Mapping[str, Any],
+        client_order_id: str,
+    ) -> tuple[Fill, ...]:
+        raw_fills = data.get("fills") or data.get("trades") or ()
+        if not isinstance(raw_fills, (list, tuple)):
+            return ()
+
+        fills: list[Fill] = []
+        for index, raw in enumerate(raw_fills):
+            if not isinstance(raw, Mapping):
+                continue
+            quantity = float(
+                raw.get("quantity", raw.get("fill_quantity", raw.get("filled_quantity", 0)))
+            )
+            price = float(raw.get("price", raw.get("fill_price", 0)))
+            if quantity <= 0 or price <= 0:
+                continue
+            fill_id = str(raw.get("fill_id") or raw.get("trade_id") or f"{client_order_id}-F{index}")
+            fills.append(
+                Fill(
+                    fill_id=fill_id,
+                    client_order_id=client_order_id,
+                    quantity=quantity,
+                    price=price,
+                    fee=float(raw.get("fee", 0.0)),
+                )
+            )
+        return tuple(fills)
+
+    def _snapshot(
+        self,
+        response: Mapping[str, Any],
+        *,
+        client_order_id: str | None = None,
+    ) -> OrderSnapshot:
+        data = self._data(response)
+        raw_ids = data.get("order_ids")
+        first_id = raw_ids[0] if isinstance(raw_ids, (list, tuple)) and raw_ids else None
+        broker_order_id = str(data.get("order_id") or first_id or "")
+        tag = str(data.get("tag") or client_order_id or "")
+        if not broker_order_id:
+            raise ValueError("Upstox response missing order_id")
+        if not tag:
+            raise ValueError("Upstox response missing order tag")
+
+        try:
+            requested = float(data.get("quantity", data.get("requested_quantity", 0)))
+            filled = float(data.get("filled_quantity", data.get("filled_qty", 0)))
         except (TypeError, ValueError) as exc:
-            raise ValueError(f"Upstox field {key!r} must be numeric") from exc
-        if not math.isfinite(number):
-            raise ValueError(f"Upstox field {key!r} must be finite")
-        if positive and number <= 0:
-            raise ValueError(f"Upstox field {key!r} must be positive")
-        if number < 0:
-            raise ValueError(f"Upstox field {key!r} must be non-negative")
-        return number
+            raise ValueError("Upstox order quantity fields must be numeric") from exc
+        if not math.isfinite(requested) or requested <= 0:
+            raise ValueError("Upstox response missing positive finite quantity")
+        if not math.isfinite(filled) or filled < 0 or filled > requested:
+            raise ValueError("Upstox response has invalid filled quantity")
+
+        status = self._status(data.get("status"))
+        fills = self._fill_tuple(data, tag)
+        fill_sum = sum(fill.quantity for fill in fills)
+        if fills and abs(fill_sum - filled) > 1e-9:
+            raise ValueError("Upstox fill quantity does not match filled quantity")
+        if status is OrderStatus.FILLED and abs(filled - requested) > 1e-9:
+            raise ValueError("Upstox FILLED status has incomplete quantity")
+        if status is OrderStatus.PARTIALLY_FILLED and not 0 < filled < requested:
+            raise ValueError("Upstox PARTIALLY_FILLED status has invalid quantity")
+
+        average = data.get("average_price", data.get("average_fill_price"))
+        if average is None and fills:
+            average = sum(fill.quantity * fill.price for fill in fills) / fill_sum
+        if average is not None:
+            try:
+                average = float(average)
+            except (TypeError, ValueError) as exc:
+                raise ValueError("Upstox average price must be numeric") from exc
+            if not math.isfinite(average) or average <= 0:
+                raise ValueError("Upstox average price must be positive and finite")
+
+        return OrderSnapshot(
+            broker_order_id=broker_order_id,
+            client_order_id=tag,
+            status=status,
+            requested_quantity=requested,
+            filled_quantity=filled,
+            average_fill_price=float(average) if average is not None else None,
+            reason=str(data.get("status_message") or data.get("reason") or ""),
+            fills=fills,
+        )
+
+    def _resolve_instrument(self, symbol: str) -> str:
+        if self.config.instrument_resolver is not None:
+            return self.config.instrument_resolver.resolve_key(symbol)
+        resolver = self.config.instrument_token_resolver
+        if resolver is not None:
+            return str(resolver(symbol)).strip()
+        raise ValueError(
+            "Upstox instrument_resolver is required for orders; "
+            "manual token resolution is not available"
+        )
+
+    def _payload(self, order: OrderRequest) -> dict[str, Any]:
+        instrument_token = self._resolve_instrument(order.symbol)
+        if not instrument_token:
+            raise ValueError("Upstox instrument resolver returned an empty instrument key")
+
+        quantity = float(order.quantity)
+        if not math.isfinite(quantity) or quantity <= 0:
+            raise ValueError("Upstox quantity must be positive and finite")
+        if not quantity.is_integer():
+            raise ValueError(
+                "Upstox equity quantity must be an integer; refusing to truncate "
+                "Risk-approved quantity"
+            )
+
+        return {
+            "quantity": int(quantity),
+            "product": self.config.product,
+            "validity": self.config.validity,
+            "price": float(order.limit_price or 0.0),
+            "tag": order.client_order_id,
+            "instrument_token": instrument_token,
+            "order_type": order.order_type.value,
+            "transaction_type": order.side.value,
+            "disclosed_quantity": 0,
+            "trigger_price": 0.0,
+            "is_amo": False,
+            "slice": self.config.slice,
+            "market_protection": self.config.market_protection,
+        }
 
     def submit(self, order: OrderRequest) -> OrderSnapshot:
         self._require_enabled()
-        if order.client_order_id in self._broker_order_ids:
-            broker_id = self._broker_order_ids[order.client_order_id]
-            return self._snapshot(self._data(self.client.get_order(broker_id)), order.client_order_id)
-        data = self._data(self.client.place_order_v3(self._payload(order)))
-        ids = data.get("order_ids")
-        if not isinstance(ids, list) or not ids or not all(isinstance(x, str) and x.strip() for x in ids):
-            raise ValueError("Upstox place response must contain order_ids")
-        if len(ids) != 1:
-            raise ValueError("Upstox returned multiple order_ids; multi-child order aggregation is unsupported")
-        broker_id = ids[0].strip()
-        self._broker_order_ids[order.client_order_id] = broker_id
-        return OrderSnapshot(broker_order_id=broker_id, client_order_id=order.client_order_id,
-            status=OrderStatus.SUBMITTED, requested_quantity=order.quantity,
-            reason="Upstox sandbox order accepted")
+        return self._snapshot(
+            self.client.place_order(self._payload(order)),
+            client_order_id=order.client_order_id,
+        )
 
-    def _snapshot(self, data: dict[str, Any], client_order_id: str) -> OrderSnapshot:
-        qty = self._number(data, "quantity", positive=True)
-        filled_key = "filled_quantity" if "filled_quantity" in data else "filled_qty"
-        filled = self._number(data, filled_key)
-        if filled > qty:
-            raise ValueError("Upstox filled_quantity exceeds quantity")
-        avg_raw = data.get("average_price", data.get("average_fill_price"))
-        if filled == 0:
-            avg = None
-        else:
-            try:
-                avg = float(avg_raw)
-            except (TypeError, ValueError) as exc:
-                raise ValueError("Upstox average price must be numeric when filled") from exc
-            if not math.isfinite(avg) or avg <= 0:
-                raise ValueError("Upstox average price must be positive and finite when filled")
-        broker_id = str(data.get("order_id", "")).strip()
-        if not broker_id:
-            raise ValueError("Upstox order response must contain order_id")
-        self._broker_order_ids.setdefault(client_order_id, broker_id)
-        return OrderSnapshot(broker_order_id=broker_id, client_order_id=client_order_id,
-            status=_status(str(data.get("status", "UNKNOWN"))), requested_quantity=qty,
-            filled_quantity=filled, average_fill_price=avg,
-            reason=str(data.get("status_message") or ""))
-
-    def _recover_by_tag(self, client_order_id: str) -> OrderSnapshot:
-        history_fn = getattr(self.client, "get_order_history", None)
-        if not callable(history_fn):
-            raise RuntimeError("broker order identity is unavailable; injected Upstox client must support order history by tag for restart reconciliation")
-        response = history_fn(tag=client_order_id)
-        if not isinstance(response, dict) or response.get("status") != "success":
-            raise ValueError("invalid Upstox order-history response")
-        rows = response.get("data")
-        if not isinstance(rows, list) or not rows:
-            raise RuntimeError(f"no Upstox order history found for tag {client_order_id}")
-        if any(not isinstance(row, dict) for row in rows):
-            raise ValueError("Upstox order-history contains malformed entries")
-        latest = max(rows, key=lambda row: str(row.get("order_timestamp") or row.get("exchange_timestamp") or ""))
-        return self._snapshot(latest, client_order_id)
-
-    def get_order(self, client_order_id: str) -> OrderSnapshot:
+    def get_order(self, client_order_id: str) -> OrderSnapshot | None:
         self._require_enabled()
-        broker_id = self._broker_order_ids.get(client_order_id)
-        if broker_id is None:
-            return self._recover_by_tag(client_order_id)
-        return self._snapshot(self._data(self.client.get_order(broker_id)), client_order_id)
+        response = self.client.find_order_by_tag(client_order_id)
+        if response is None:
+            return None
+        return self._snapshot(response, client_order_id=client_order_id)
 
     def cancel(self, client_order_id: str) -> OrderSnapshot:
         self._require_enabled()
-        current = self.get_order(client_order_id)
-        self._data(self.client.cancel_order(current.broker_order_id))
-        return OrderSnapshot(broker_order_id=current.broker_order_id, client_order_id=client_order_id,
-            status=OrderStatus.CANCELLED, requested_quantity=current.requested_quantity,
-            filled_quantity=current.filled_quantity, average_fill_price=current.average_fill_price,
-            reason="Upstox sandbox cancellation accepted")
+        current = self.client.find_order_by_tag(client_order_id)
+        if current is None:
+            raise KeyError(f"Upstox order not found: {client_order_id}")
+        current_data = self._data(current)
+        order_id = str(current_data.get("order_id") or "")
+        if not order_id:
+            raise ValueError("Upstox order lookup missing order_id")
+        return self._snapshot(
+            self.client.cancel_order(order_id),
+            client_order_id=client_order_id,
+        )
 
     def positions(self) -> tuple[PositionSnapshot, ...]:
         self._require_enabled()
-        data = self._data(self.client.positions())
-        rows = data.get("net_positions", data.get("positions", []))
-        if not isinstance(rows, list):
-            raise ValueError("Upstox positions must be a list")
-        result = []
-        for row in rows:
-            if not isinstance(row, dict):
-                raise ValueError("invalid Upstox position")
-            symbol = str(row.get("trading_symbol") or row.get("instrument_token") or "").strip()
-            quantity = self._number(row, "quantity" if "quantity" in row else "net_quantity")
-            price = self._number(row, "average_price" if "average_price" in row else "avg_price", positive=True)
+        if self.config.position_provider is not None:
+            response = self.config.position_provider()
+        else:
+            response = self.client.get_positions()
+        data = self._data(response)
+        raw_positions = data.get("positions", ())
+        if not isinstance(raw_positions, (list, tuple)):
+            raise ValueError("Upstox positions response must contain a list")
+
+        positions: list[PositionSnapshot] = []
+        for raw in raw_positions:
+            if not isinstance(raw, Mapping):
+                raise ValueError("Upstox position entry must be an object")
+            symbol = str(raw.get("trading_symbol") or raw.get("symbol") or "")
             if not symbol:
-                raise ValueError("invalid Upstox position symbol")
-            result.append(PositionSnapshot(symbol, quantity, price))
-        return tuple(result)
+                raise ValueError("Upstox position missing trading symbol")
+
+            try:
+                quantity = float(raw.get("quantity", raw.get("net_quantity", 0)))
+            except (TypeError, ValueError) as exc:
+                raise ValueError("Upstox position quantity must be numeric") from exc
+            if not math.isfinite(quantity):
+                raise ValueError("Upstox position quantity must be finite")
+
+            try:
+                average = float(
+                    raw.get("average_price", raw.get("average_buy_price", 0))
+                )
+            except (TypeError, ValueError) as exc:
+                raise ValueError("Upstox position average price must be numeric") from exc
+            if not math.isfinite(average) or average < 0:
+                raise ValueError(
+                    "Upstox position average price must be non-negative and finite"
+                )
+
+            positions.append(PositionSnapshot(symbol, quantity, average))
+        return tuple(positions)
+
+
+__all__ = ["UpstoxAdapterConfig", "UpstoxBrokerAdapter"]
