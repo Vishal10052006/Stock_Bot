@@ -19,14 +19,25 @@ Automated coverage is in `tests/execution/test_upstox_adapter.py`.
 
 This hardening does not claim real sandbox position capability and does not weaken the BLOCKED-on-provider-unavailability rule.
 
+## Real sandbox evidence — 2026-09-27
+
+The opt-in official-SDK sandbox test was executed with real sandbox credentials and passed:
+
+`SUBMIT → BROKER ORDER ID → CANCEL ORDER V3 ACK`
+
+This verifies the provider-supported order submission/cancellation boundary. It does **not** verify history lookup or terminal-state reconciliation. The official SDK sandbox currently rejects `/v2/order/history`, so the full sequence below cannot be claimed from the observed sandbox runtime.
+
 ## Remaining external evidence
 
 ### 1. Real sandbox order transaction
 
 The opt-in test requires a real sandbox token, instrument token and valid price. It must be executed outside normal CI with explicit confirmation. The repository must not contain the credential.
 
-Expected evidence:
+Expected full evidence:
 `SUBMIT → BROKER ORDER ID → HISTORY LOOKUP → ELIGIBLE CANCEL → TERMINAL STATE`
+
+Observed so far:
+`SUBMIT → BROKER ORDER ID → CANCEL V3 ACK`
 
 ### 2. Sandbox position reconciliation
 
