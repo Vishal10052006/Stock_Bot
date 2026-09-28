@@ -264,6 +264,17 @@ def _build_strategy_rows(
         validate="many_to_one",
     )
 
+    # build_features intentionally emits the frozen feature contract and does
+    # not retain raw OHLCV columns. Strategy-ready v1 explicitly requires the
+    # decision-time close, so restore it from the causally aligned stock row.
+    decision_close = stocks.loc[:, ["timestamp", "symbol", "close"]].copy()
+    decision_rows = decision_rows.merge(
+        decision_close,
+        on=["timestamp", "symbol"],
+        how="left",
+        validate="one_to_one",
+    )
+
     result = decision_rows.loc[
         :,
         list(STRATEGY_READY_COLUMNS),
