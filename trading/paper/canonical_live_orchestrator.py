@@ -22,6 +22,7 @@ from ml.preprocessing.pipeline import FeaturePreprocessor
 from trading.market_bot_pipeline import build_market_analysis_from_market_bot
 from trading.paper.live_loop import LivePaperEngine, LivePaperSessionResult
 from trading.paper.canonical_paper_callback import execute_prediction_to_paper
+from trading.paper.causal_history import CausalCandleHistory
 
 
 class CanonicalLivePaperError(RuntimeError):
@@ -226,6 +227,8 @@ class CanonicalLivePaperOrchestrator:
         self.market_data.start(requested)
         try:
             for candle in self.market_data.run():
+                if self.history is not None:
+                    self.history.append(candle)
                 self.process_candle(candle)
                 if self.paper_engine.session_completed:
                     break
