@@ -44,6 +44,8 @@ from trading.paper.metrics import (
 from trading.risk.engine import RiskConfig, RiskEngine
 from trading.risk.gate import RiskDecisionStatus, evaluate_strategy_risk
 from trading.strategy.engine import StrategyEngine
+from intelligence.analysis.contracts import AnalysisContext
+from ml.integration.analysis_prediction import PredictionContext
 from trading.strategy.models import (
     BaselineStrategyConfig,
     StrategyConfig,
@@ -201,6 +203,161 @@ class LivePaperEngine:
             self._evaluate_entry(candle_dict)
 
         return closed_now
+
+    def on_candle_with_context(
+        self,
+        candle: Any,
+        *,
+        analysis: AnalysisContext,
+        prediction: PredictionContext,
+        regime: str,
+        regime_probability: float,
+    ) -> list[TradeOutcome]:
+        """Process one live candle using canonical Analysis + Prediction output.
+
+        This is the authoritative live-paper entry path. The legacy causal
+        feature fallback remains available for isolated historical/synthetic
+        tests, but real-market callers must provide the canonical upstream
+        contexts explicitly.
+        """
+        raw_symbol = getattr(candle, "symbol", None) or candle["symbol"]
+        symbol = str(raw_symbol).strip().upper()
+        if symbol != self.config.symbol:
+            return []
+
+        raw_ts = getattr(candle, "timestamp", None) or candle["timestamp"]
+        timestamp = pd.Timestamp(raw_ts)
+        if pd.Timestamp(analysis.timestamp) != timestamp:
+            raise ValueError("analysis timestamp must equal candle timestamp")
+        if pd.Timestamp(prediction.timestamp) != timestamp:
+            raise ValueError("prediction timestamp must equal candle timestamp")
+        if analysis.symbol != symbol or prediction.symbol != symbol:
+            raise ValueError("analysis/prediction symbol must equal candle symbol")
+        if not regime.strip():
+            raise ValueError("regime must not be empty")
+        if not 0.0 <= float(regime_probability) <= 1.0:
+            raise ValueError("regime_probability must be in [0, 1]")
+
+        open_p = float(getattr(candle, "open", None) if hasattr(candle, "open") else candle["open"])
+        high_p = float(getattr(candle, "high", None) if hasattr(candle, "high") else candle["high"])
+        low_p = float(getattr(candle, "low", None) if hasattr(candle, "low") else candle["low"])
+        close_p = float(getattr(candle, "close", None) if hasattr(candle, "close") else candle["close"])
+        vol = float(getattr(candle, "volume", None) if hasattr(candle, "volume") else candle.get("volume", 1000.0))
+        candle_dict = {
+            "timestamp": timestamp,
+            "symbol": symbol,
+            "open": open_p,
+            "high": high_p,
+            "low": low_p,
+            "close": close_p,
+            "volume": vol,
+        }
+
+        if self._start_time is None:
+            self._start_time = timestamp
+        self._last_time = timestamp
+        self._candle_history.append(candle_dict)
+
+        closed_now = self.exit_engine.process_candle(candle_dict)
+        if self.config.stop_on_target_trades and self.completed_count >= self.config.target_trades:
+            self._session_completed = True
+            return closed_now
+        if self._session_completed or self.exit_engine.has_open_position(symbol):
+            return closed_now
+
+        self._evaluate_entry_with_context(
+            candle_dict,
+            analysis=analysis,
+            prediction=prediction,
+            regime=regime,
+            regime_probability=float(regime_probability),
+        )
+        return closed_now
+
+    def _evaluate_entry_with_context(
+        self,
+        candle: dict[str, Any],
+        *,
+        analysis: AnalysisContext,
+        prediction: PredictionContext,
+        regime: str,
+        regime_probability: float,
+    ) -> None:
+        """Evaluate Strategy -> Risk -> Paper using canonical upstream context."""
+        timestamp = candle["timestamp"]
+        symbol = candle["symbol"]
+        close_p = candle["close"]
+
+        strategy_input = StrategyInput(
+            timestamp=timestamp,
+            symbol=symbol,
+            decision_features=analysis.feature_vector,
+            prediction=prediction,
+            market_context=analysis.market_context,
+            analysis_context=analysis,
+            research_context=analysis.research_context,
+            regime=regime,
+            regime_probability=regime_probability,
+            versions={
+                "model": prediction.model_version,
+                "analysis": analysis.analysis_version,
+                "feature": analysis.feature_version,
+                "market": analysis.data_version,
+            },
+        )
+        strategy_decision, _trace = self.strategy_engine.decide(strategy_input)
+        if strategy_decision.direction is StrategyDirection.NO_TRADE:
+            self._record_decision(strategy_decision, None, None)
+            return
+
+        risk_decision = evaluate_strategy_risk(
+            strategy_decision,
+            risk_enabled=True,
+            approved_quantity=10.0,
+            approved_notional=close_p * 10.0,
+        )
+        if risk_decision.status is not RiskDecisionStatus.APPROVED:
+            self._record_decision(strategy_decision, risk_decision, None)
+            return
+
+        safety_eval = self.safety_gate.evaluate(SafetyState(live_execution_enabled=False))
+        if safety_eval.block not in (SafetyBlock.NONE, SafetyBlock.LIVE_LOCKED):
+            self._record_decision(strategy_decision, risk_decision, None)
+            return
+
+        direction = strategy_decision.direction
+        if direction is StrategyDirection.LONG:
+            stop_price = close_p * (1.0 - self.config.stop_loss_pct)
+            target_price = close_p * (1.0 + self.config.take_profit_pct)
+        else:
+            stop_price = close_p * (1.0 + self.config.stop_loss_pct)
+            target_price = close_p * (1.0 - self.config.take_profit_pct)
+
+        trade_index = len(self._submitted_orders) + 1
+        trade_id = f"TR-{self.config.experiment_id}-{trade_index:03d}"
+        risk_version = getattr(risk_decision, "risk_version", "v1.0") or "v1.0"
+        auth = authorize_risk_decision(
+            risk_decision,
+            risk_decision_id=f"{timestamp.isoformat()}:{symbol}:{risk_version}",
+        )
+        if auth.status is not ExecutionAuthorizationStatus.AUTHORIZED:
+            self._record_decision(strategy_decision, risk_decision, None)
+            return
+
+        order = self.runtime.submit(auth, price=close_p, quantity=risk_decision.approved_quantity)
+        if order.status is PaperOrderStatus.FILLED:
+            self._submitted_orders.append(order)
+            self.exit_engine.open_position(
+                order,
+                stop_price=stop_price,
+                target_price=target_price,
+                trade_id=trade_id,
+                strategy_version=self.config.strategy_version,
+                model_version=prediction.model_version,
+                risk_version=self.config.risk_version,
+                regime=regime,
+            )
+            self._record_decision(strategy_decision, risk_decision, order)
 
     def _evaluate_entry(self, candle: dict[str, Any]) -> None:
         """Generate causal features and evaluate Strategy -> Risk -> Paper Entry."""
