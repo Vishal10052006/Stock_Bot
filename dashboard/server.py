@@ -12,6 +12,7 @@ from http import HTTPStatus
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
+from functools import partial
 
 from dashboard.paper_control import PaperControlPlane
 from ml.prediction.live_runtime import LiveModelRuntime, LiveModelRuntimeConfig
@@ -83,12 +84,9 @@ def build_server(*, host: str, port: int, config: LiveModelRuntimeConfig) -> Thr
         target_trades=config.target_trades,
     )
     root = Path(__file__).resolve().parent
-    handler = type(
-        "BoundDashboardHandler",
-        (DashboardHandler,),
-        {"control": control, "directory": str(root)},
-    )
-    return ThreadingHTTPServer((host, port), handler)
+    handler = type("BoundDashboardHandler", (DashboardHandler,), {"control": control})
+    bound_handler = partial(handler, directory=str(root))
+    return ThreadingHTTPServer((host, port), bound_handler)
 
 
 def main() -> None:
