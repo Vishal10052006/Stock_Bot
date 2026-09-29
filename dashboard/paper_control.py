@@ -86,10 +86,9 @@ class PaperControlPlane:
             self._runtime.resume()
             self._kill_requested = False
             self._error = None
-            self._state = PaperControlState.STARTING
+            self._state = PaperControlState.RUNNING
             self._thread = Thread(target=self._run, name="stock-bot-paper", daemon=True)
             self._thread.start()
-            self._state = PaperControlState.RUNNING
             return self.snapshot()
 
     def pause(self) -> PaperControlSnapshot:
