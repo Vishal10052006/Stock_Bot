@@ -17,6 +17,7 @@ from .contracts import (
     ValidationSummary,
 )
 from .dataset import build_dataset_version, dataframe_fingerprint
+from .evidence_runner import EvidenceBundle, REQUIRED_STAGES, build_evidence_bundle
 from .experiments import ExperimentArtifact, ExperimentRegistry
 from .orchestrator import LearningRunResult, SelfLearningOrchestrator
 from .promotion import PromotionController
@@ -53,6 +54,9 @@ __all__ = [
     "ExperimentLifecycle",
     "ExperimentRegistry",
     "ExperimentSpec",
+    "EvidenceBundle",
+    "REQUIRED_STAGES",
+    "build_evidence_bundle",
     "LearningCycleReport",
     "LearningEvidence",
     "LearningRunResult",
