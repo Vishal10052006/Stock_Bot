@@ -19,6 +19,12 @@ from sklearn.preprocessing import (
     StandardScaler,
 )
 
+
+
+def _boolean_to_numeric(X):
+    """Pickle-safe conversion for boolean feature columns."""
+    return X.astype(float)
+
 from .models import (
     BOOLEAN_FEATURES,
     NUMERIC_FEATURES,
@@ -79,7 +85,7 @@ class FeaturePreprocessor:
                 (
                     "to_numeric",
                     FunctionTransformer(
-                        lambda X: X.astype(float),
+                        _boolean_to_numeric,
                         feature_names_out="one-to-one",
                     ),
                 ),
