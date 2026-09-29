@@ -96,3 +96,54 @@ def test_live_prediction_bundle_round_trip(tmp_path: Path):
     assert bundle.provenance.model_version == "phase9-live-test"
     assert bundle.model.is_fitted
     assert bundle.preprocessor.is_fitted
+
+def test_live_runtime_reports_silent_feed_exit_before_prediction():
+    from threading import Event
+    from types import SimpleNamespace
+
+    class EmptyFeed:
+        def __init__(self):
+            self.started = False
+            self.stopped = False
+
+        def start(self, symbols):
+            self.started = True
+
+        def run(self):
+            return iter(())
+
+        def stop(self):
+            self.stopped = True
+
+    from ml.prediction.live_runtime import LiveModelRuntime
+
+    runtime = object.__new__(LiveModelRuntime)
+    runtime.config = SimpleNamespace(symbol="RELIANCE", benchmark="NIFTY50", max_predictions=500)
+    runtime.feed = EmptyFeed()
+    runtime.paper_engine = SimpleNamespace(
+        session_completed=False,
+        finalize_session=lambda: None,
+    )
+    runtime._pause_event = Event()
+    runtime._pause_event.set()
+    runtime._stop_requested = Event()
+    runtime._kill_requested = Event()
+    runtime.predictions = 0
+    runtime.last_prediction = None
+    runtime.paper_result = None
+    runtime.benchmark_history = pd.DataFrame()
+    runtime.target_history = pd.DataFrame()
+    runtime.lifecycle_state = "CREATED"
+    runtime.lifecycle_error = None
+    runtime.benchmark_candles = 0
+    runtime.target_candles = 0
+    runtime.warmup = lambda: setattr(runtime, "lifecycle_state", "WARMUP_COMPLETED")
+
+    with pytest.raises(RuntimeError, match="FEED_ENDED_BEFORE_FIRST_TARGET_CANDLE"):
+        runtime.run()
+
+    assert runtime.lifecycle_state == "FAILED"
+    assert runtime.lifecycle_error == "FEED_ENDED_BEFORE_FIRST_TARGET_CANDLE"
+    assert runtime.predictions == 0
+    assert runtime.feed.started is True
+    assert runtime.feed.stopped is True
