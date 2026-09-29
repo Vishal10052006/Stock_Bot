@@ -107,7 +107,7 @@ def test_max_holding_time_closes_trade() -> None:
 
 
 def test_invalid_price_is_rejected() -> None:
-    with pytest.raises(ValueError, match="positive.*prices"):
+    with pytest.raises(ValueError, match="prices.*positive"):
         HistoricalBacktestEngine().run(pd.DataFrame([
             _row("2026-01-01 09:15:00+05:30", close=0.0),
         ]))
