@@ -18,7 +18,6 @@ from execution.trading_execution import (
     authorize_risk_decision,
 )
 from ml.integration.analysis_prediction import PredictionContext
-from trading.paper.exit_engine import ExitReason
 from trading.paper.live_loop import LivePaperEngine
 from trading.risk.engine import RiskEngine
 from trading.risk.pipeline import evaluate_strategy_candidate_risk
@@ -181,7 +180,17 @@ def execute_prediction_to_paper(
             trade_id=None,
         )
 
-    candidate = build_candidate_from_strategy(strategy_decision, row)
+    try:
+        candidate = build_candidate_from_strategy(strategy_decision, row)
+    except (TypeError, ValueError) as exc:
+        return CanonicalPaperDecision(
+            prediction=prediction,
+            strategy=strategy_decision,
+            risk_status="CANDIDATE_REJECTED",
+            risk_reason=str(exc),
+            paper_order_status=None,
+            trade_id=None,
+        )
 
     # Build the paper position using the authoritative Strategy -> Candidate
     # stop and Risk-approved entry. Target uses the existing Risk multiple.
@@ -196,7 +205,7 @@ def execute_prediction_to_paper(
 
     trade_id = (
         f"TR-{paper_engine.config.experiment_id}-"
-        f"{len(paper_engine._submitted_orders):03d}"
+        f"{len(paper_engine._submitted_orders) + 1:03d}"
     )
 
     paper_engine.exit_engine.open_position(
