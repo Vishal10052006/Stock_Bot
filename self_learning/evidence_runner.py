@@ -137,6 +137,17 @@ def build_evidence_bundle(
         )
     if not validation_run.gate.valid:
         raise ValueError("validation run gate is invalid")
+
+    for stage in REQUIRED_STAGES:
+        fingerprints = set(stage_map[stage].artifact_fingerprints)
+        if candidate.artifact_fingerprint not in fingerprints:
+            raise ValueError(
+                f"{stage} evidence is not bound to candidate artifact"
+            )
+        if candidate.evaluation_fingerprint not in fingerprints:
+            raise ValueError(
+                f"{stage} evidence is not bound to candidate evaluation"
+            )
     if promotion_review.state.value != "ELIGIBLE":
         raise ValueError("promotion review is blocked")
 
