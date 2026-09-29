@@ -1,30 +1,25 @@
 # Evidence Cycle — Post-Phase-12 Integration
 
-The evidence cycle connects existing research, backtest, OOS, walk-forward, paper evidence, lineage and readiness boundaries without creating a second validation or trading engine.
+This boundary connects the repository's existing research, backtest, OOS, walk-forward, paper-evidence, lineage, and readiness authorities.
 
-## Flow
+## Canonical flow
 
-BACKTEST -> LEAKAGE_AUDIT -> OOS -> WALK_FORWARD -> PAPER -> REPRODUCIBILITY
+Trade Outcome -> Experience -> Error Analysis -> Learning Evidence -> Frozen Experiment -> BACKTEST -> LEAKAGE_AUDIT -> OOS -> WALK_FORWARD -> PAPER -> REPRODUCIBILITY -> PROMOTION_REVIEW.
 
-The cycle may produce eligibility evidence. It never authorizes live execution.
+Missing evidence is not converted into a pass. Evidence is bound to immutable artifact identities.
 
-## Required rules
+## Authority boundaries
 
-- Evidence stages must be supplied from actual artifacts.
-- Missing stages remain missing; they are not synthesized as passes.
-- Stage artifact fingerprints must be preserved.
-- Candidate/model identity must match validation artifacts.
-- Learning remains research-side.
-- Promotion requires explicit governance approval.
-- Live broker execution remains independently locked.
+- Backtesting remains the historical replay authority.
+- Validation remains the candidate-evidence authority.
+- Lineage remains the reproducibility authority.
+- Paper evidence remains observation/quality evidence.
+- Readiness remains fail-closed and never enables live execution.
+- Learning can propose research changes but cannot mutate Strategy/Risk/Safety or broker permissions.
+- Promotion remains a separate governance action.
 
-## Current repository authorities
+## Operational limitation
 
-- backtesting/engine.py — historical replay.
-- self_learning/validation.py — structural validation policy.
-- self_learning/validation_orchestrator.py — candidate-bound validation run.
-- experiments/lineage.py — reproducibility lineage.
-- execution/readiness.py — fail-closed readiness gate.
-- experiments/paper_quality.py — structural paper-evidence quality.
+The software can validate structure and provenance. It must not manufacture real OOS, walk-forward, paper, latency, calibration, or operational observations.
 
-This document is an integration contract, not a profitability claim.
+Live broker execution remains locked.
