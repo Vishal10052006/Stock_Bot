@@ -19,10 +19,11 @@ from market.data.realtime_pipeline import RealtimeMarketDataPipeline
 from ml.integration.analysis_prediction import PredictionContext, predict_from_analysis
 from ml.models.logistic import LogisticOutcomeModel
 from ml.preprocessing.pipeline import FeaturePreprocessor
+from trading.ab30_pipeline import MarketAnalysisResult
 from trading.market_bot_pipeline import build_market_analysis_from_market_bot
-from trading.paper.live_loop import LivePaperEngine, LivePaperSessionResult
 from trading.paper.canonical_paper_callback import execute_prediction_to_paper
 from trading.paper.causal_history import CausalCandleHistory
+from trading.paper.live_loop import LivePaperEngine, LivePaperSessionResult
 
 
 class CanonicalLivePaperError(RuntimeError):
@@ -69,7 +70,8 @@ class CanonicalLivePaperOrchestrator:
     paper_engine: LivePaperEngine
     benchmark_history_provider: Callable[[pd.Timestamp], pd.DataFrame]
     benchmark_context_provider: Callable[[pd.Timestamp, pd.DataFrame], MarketContext]
-    downstream_handler: Callable[[PredictionContext, Any, Candle, LivePaperEngine], None] | None = None
+    downstream_handler: Callable[[PredictionContext, MarketAnalysisResult, Candle, LivePaperEngine], None] | None = None
+    history_provider: Callable[[pd.Timestamp], Iterable[Candle]] | None = None
     history: CausalCandleHistory | None = None
     config: CanonicalLivePaperConfig = CanonicalLivePaperConfig()
 
@@ -105,10 +107,20 @@ class CanonicalLivePaperOrchestrator:
             raise CanonicalLivePaperError(
                 "paper engine target_trades must match orchestrator"
             )
+        if self.history is not None and self.history.symbol.strip().upper() != expected_symbol:
+            raise CanonicalLivePaperError(
+                "candle history symbol must match orchestrator"
+            )
+        if self.history is None:
+            object.__setattr__(
+                self,
+                "history",
+                CausalCandleHistory(expected_symbol),
+            )
 
     @staticmethod
     def _candle_frame(candle: Candle) -> pd.DataFrame:
-        """Convert one canonical candle into the AB-30 input frame."""
+        """Convert one canonical candle into an OHLCV DataFrame."""
         return pd.DataFrame(
             [
                 {
@@ -123,7 +135,62 @@ class CanonicalLivePaperOrchestrator:
             ]
         )
 
-    def build_prediction(self, candle: Candle) -> tuple[PredictionContext, Any]:
+    def _ensure_causal_history(self, candle: Candle) -> pd.DataFrame:
+        """Seed and append one live candle without admitting future bars."""
+        if self.history is None:
+            raise CanonicalLivePaperError("causal candle history is not initialized")
+
+        cutoff = pd.Timestamp(candle.timestamp)
+        current = self.history.frame()
+
+        if current.empty and self.history_provider is not None:
+            seeded = tuple(self.history_provider(cutoff))
+            previous_timestamp: pd.Timestamp | None = None
+            for bar in seeded:
+                if not isinstance(bar, Candle):
+                    raise CanonicalLivePaperError(
+                        "history provider must return Candle objects"
+                    )
+                bar_timestamp = pd.Timestamp(bar.timestamp)
+                if bar_timestamp >= cutoff:
+                    raise CanonicalLivePaperError(
+                        "history provider returned a candle at or after the live decision time"
+                    )
+                if previous_timestamp is not None and bar_timestamp <= previous_timestamp:
+                    raise CanonicalLivePaperError(
+                        "history provider returned non-chronological candles"
+                    )
+                previous_timestamp = bar_timestamp
+                self.history.append(bar)
+
+        current = self.history.frame()
+        if current.empty:
+            self.history.append(candle)
+        else:
+            last_timestamp = pd.Timestamp(current["timestamp"].iloc[-1])
+            if last_timestamp < cutoff:
+                self.history.append(candle)
+            elif last_timestamp > cutoff:
+                raise CanonicalLivePaperError(
+                    "causal candle history is newer than the live decision time"
+                )
+            else:
+                # A repeated delivery at the same decision timestamp is not
+                # allowed to mutate the causal history a second time.
+                expected = self._candle_frame(candle).iloc[0]
+                existing = current.iloc[-1]
+                for column in ("open", "high", "low", "close", "volume"):
+                    if float(existing[column]) != float(expected[column]):
+                        raise CanonicalLivePaperError(
+                            "candle history conflicts with an existing decision timestamp"
+                        )
+
+        causal = self.history.snapshot_at(cutoff)
+        if causal.empty:
+            raise CanonicalLivePaperError("causal candle history is empty")
+        return causal
+
+    def build_prediction(self, candle: Candle) -> tuple[PredictionContext, MarketAnalysisResult]:
         """Build one causal Market -> Analysis -> Prediction result."""
         if not isinstance(candle, Candle):
             raise TypeError("candle must be a Candle")
@@ -140,10 +207,26 @@ class CanonicalLivePaperOrchestrator:
                 "candle timestamp must be timezone-aware"
             )
 
+        causal_candles = self._ensure_causal_history(candle)
+
         benchmark_history = self.benchmark_history_provider(cutoff)
         if not isinstance(benchmark_history, pd.DataFrame) or benchmark_history.empty:
             raise CanonicalLivePaperError(
                 "benchmark history provider returned no causal benchmark history"
+            )
+
+        benchmark_timestamps = pd.to_datetime(
+            benchmark_history["timestamp"],
+            utc=True,
+            errors="coerce",
+        )
+        if benchmark_timestamps.isna().any():
+            raise CanonicalLivePaperError(
+                "benchmark history contains invalid timestamps"
+            )
+        if benchmark_timestamps.max() != cutoff:
+            raise CanonicalLivePaperError(
+                "benchmark history endpoint does not match candle decision time"
             )
 
         market_context = self.benchmark_context_provider(
@@ -166,7 +249,7 @@ class CanonicalLivePaperOrchestrator:
             )
 
         result = build_market_analysis_from_market_bot(
-            self._candle_frame(candle),
+            causal_candles,
             symbol=expected_symbol,
             benchmark_history=benchmark_history,
             market_context=market_context,
@@ -190,22 +273,21 @@ class CanonicalLivePaperOrchestrator:
                 "prediction symbol must exactly match candle symbol"
             )
 
-        return prediction, result.analysis
+        return prediction, result
 
     def process_candle(self, candle: Candle) -> PredictionContext:
         """Run one completed candle through the canonical prediction boundary."""
-        prediction, analysis = self.build_prediction(candle)
+        prediction, result = self.build_prediction(candle)
 
         # The callback is the only downstream handoff. No direct broker access
         # or alternate Strategy/Risk implementation exists in this module.
         handler = self.downstream_handler
         if handler is not None:
-            handler(prediction, analysis, candle, self.paper_engine)
+            handler(prediction, result, candle, self.paper_engine)
         else:
-            # Default to the canonical Strategy -> Risk -> Paper boundary.
             execute_prediction_to_paper(
                 prediction,
-                analysis,
+                result,
                 candle,
                 self.paper_engine,
             )
@@ -228,8 +310,6 @@ class CanonicalLivePaperOrchestrator:
         self.market_data.start(requested)
         try:
             for candle in self.market_data.run():
-                if self.history is not None:
-                    self.history.append(candle)
                 self.process_candle(candle)
                 if self.paper_engine.session_completed:
                     break
