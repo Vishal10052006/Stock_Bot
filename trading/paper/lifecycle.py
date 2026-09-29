@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
+import math
 
 import pandas as pd
 
@@ -45,10 +46,27 @@ class TradeOutcome:
             raise ValueError("trade timestamps must be timezone-aware")
         if self.exit_time < self.entry_time:
             raise ValueError("exit_time must not precede entry_time")
+        numeric_fields = (
+            ("entry_price", self.entry_price),
+            ("exit_price", self.exit_price),
+            ("quantity", self.quantity),
+            ("gross_pnl", self.gross_pnl),
+            ("fees", self.fees),
+            ("slippage_cost", self.slippage_cost),
+            ("net_pnl", self.net_pnl),
+            ("holding_minutes", self.holding_minutes),
+            ("mae", self.mae),
+            ("mfe", self.mfe),
+        )
+        for name, value in numeric_fields:
+            if not math.isfinite(float(value)):
+                raise ValueError(f"{name} must be finite")
         if self.entry_price <= 0 or self.exit_price <= 0:
             raise ValueError("trade prices must be positive")
         if self.quantity <= 0:
             raise ValueError("trade quantity must be positive")
+        if self.fees < 0 or self.slippage_cost < 0:
+            raise ValueError("fees and slippage_cost must be non-negative")
         if self.mae > 0 or self.mfe < 0:
             raise ValueError("MAE must be <= 0 and MFE must be >= 0")
 
@@ -90,8 +108,8 @@ class PaperTradeLifecycle:
         symbol = symbol.upper()
         if symbol not in self._open:
             raise KeyError(f"no open trade for {symbol}")
-        if price <= 0:
-            raise ValueError("mark price must be positive")
+        if not math.isfinite(float(price)) or price <= 0:
+            raise ValueError("mark price must be positive and finite")
 
         timestamp = pd.Timestamp(timestamp)
         if timestamp.tzinfo is None:
@@ -121,15 +139,40 @@ class PaperTradeLifecycle:
         quantity: float,
         exit_fees: float = 0.0,
         exit_slippage_cost: float = 0.0,
+        reference_price: float | None = None,
     ) -> TradeOutcome:
-        """Close part or all of an open trade without losing lifecycle state."""
+        """Close part or all of an open trade without losing lifecycle state.\n\n        ``price`` is the actual execution price. ``reference_price`` is the\n        decision/reference market price used to compute gross P&L before\n        explicit execution slippage. Keeping these distinct prevents\n        execution slippage from being embedded in gross P&L and then deducted\n        a second time from net P&L.\n        """
         symbol = symbol.upper()
         if symbol not in self._open:
             raise KeyError(f"no open trade for {symbol}")
-        if price <= 0 or quantity <= 0:
-            raise ValueError("price and quantity must be positive")
-        if exit_fees < 0 or exit_slippage_cost < 0:
-            raise ValueError("exit costs must be non-negative")
+        if (
+            not math.isfinite(float(price))
+            or not math.isfinite(float(quantity))
+            or price <= 0
+            or quantity <= 0
+        ):
+            raise ValueError("price and quantity must be positive and finite")
+        if (
+            not math.isfinite(float(exit_fees))
+            or not math.isfinite(float(exit_slippage_cost))
+            or exit_fees < 0
+            or exit_slippage_cost < 0
+        ):
+            raise ValueError("exit costs must be finite and non-negative")
+
+        if reference_price is None:
+            reference_price = price
+        elif (
+            not math.isfinite(float(reference_price))
+            or reference_price <= 0
+        ):
+            raise ValueError("reference_price must be positive and finite")
+
+        if exit_slippage_cost > 0 and reference_price == price:
+            raise ValueError(
+                "reference_price must differ from execution price when "
+                "exit_slippage_cost is non-zero"
+            )
 
         timestamp = pd.Timestamp(timestamp)
         if timestamp.tzinfo is None:
@@ -145,9 +188,9 @@ class PaperTradeLifecycle:
             raise ValueError("exit timestamp must not precede entry")
 
         signed_unit_pnl = (
-            price - order.fill_price
+            reference_price - order.requested_price
             if order.direction is StrategyDirection.LONG
-            else order.fill_price - price
+            else order.requested_price - reference_price
         )
         gross_pnl = signed_unit_pnl * quantity
         entry_fee_share = float(record["entry_fees"]) * quantity / current_quantity
@@ -191,6 +234,7 @@ class PaperTradeLifecycle:
         price: float,
         exit_fees: float = 0.0,
         exit_slippage_cost: float = 0.0,
+        reference_price: float | None = None,
     ) -> TradeOutcome:
         """Close an open trade and create its immutable outcome record."""
         symbol = symbol.upper()
@@ -218,4 +262,5 @@ class PaperTradeLifecycle:
             quantity=float(record["quantity"]),
             exit_fees=exit_fees,
             exit_slippage_cost=exit_slippage_cost,
+            reference_price=reference_price,
         )

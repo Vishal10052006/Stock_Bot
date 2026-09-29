@@ -47,3 +47,45 @@ def max_quantity_for_exposure(
 
     raw = available_exposure / entry_price
     return floor_to_step(raw, quantity_step)
+
+
+
+def projected_gross_exposure(
+    *,
+    current_gross_exposure: float,
+    existing_quantity: float,
+    projected_quantity: float,
+    mark_price: float,
+) -> float:
+    """Return gross exposure after a signed position transition.
+
+    The symbol's current gross contribution is replaced by its projected
+    absolute signed quantity at the decision-time mark. Other symbols remain
+    unchanged.
+    """
+    values = (
+        current_gross_exposure,
+        existing_quantity,
+        projected_quantity,
+        mark_price,
+    )
+    if not all(math.isfinite(float(value)) for value in values):
+        raise ValueError("projected exposure inputs must be finite")
+    if current_gross_exposure < 0:
+        raise ValueError("current gross exposure must be non-negative")
+    if mark_price <= 0:
+        raise ValueError("mark price must be positive")
+
+    current_symbol_exposure = abs(existing_quantity) * mark_price
+    projected_symbol_exposure = abs(projected_quantity) * mark_price
+
+    result = (
+        current_gross_exposure
+        - current_symbol_exposure
+        + projected_symbol_exposure
+    )
+
+    if result < -1e-12:
+        raise ValueError("projected gross exposure cannot be negative")
+
+    return max(0.0, result)

@@ -236,16 +236,6 @@ class PaperDecisionLoop:
             )
             authorization = authorize_risk_decision(
                 risk,
-                approved_quantity=(
-                    float(assessment.position_size)
-                    if assessment.position_size is not None
-                    else 0.0
-                ),
-                approved_notional=(
-                    float(assessment.entry_price) * float(assessment.position_size)
-                    if assessment.entry_price is not None and assessment.position_size is not None
-                    else 0.0
-                ),
                 risk_decision_id=(
                     f"{risk.timestamp.isoformat()}:{risk.symbol}:{risk.risk_version}"
                 ),
@@ -254,25 +244,12 @@ class PaperDecisionLoop:
             order = None
             monitoring_orders += 1
             if authorization.status.value == "AUTHORIZED":
-                position_size = assessment.position_size
-                if position_size is None:
-                    risk = RiskDecision(
-                        timestamp=timestamp,
-                        symbol=symbol,
-                        status=RiskDecisionStatus.REJECTED,
-                        strategy_direction=strategy.direction,
-                        reason="Risk assessment did not produce a position size.",
-                        risk_version="RISK-v1.0",
-                    )
-                    authorization = authorize_risk_decision(risk)
-                else:
-                    order = self.runtime.submit(
-                        authorization,
-                        price=price,
-                        quantity=position_size,
-                    )
-                    if order.status.value == "FILLED":
-                        trades_today += 1
+                order = self.runtime.submit(
+                    authorization,
+                    price=price,
+                )
+                if order.status.value == "FILLED":
+                    trades_today += 1
 
             if order is not None:
                 if order.status.value == "FILLED":

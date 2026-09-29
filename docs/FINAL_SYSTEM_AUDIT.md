@@ -300,12 +300,12 @@ The supplied STOCK BOT roadmap defines later phases for:
 - Phase 19 — Candidate Improvement Engine
 - Phase 20 — Model Registry
 - Phase 21 — Live Signal Engine
-- Phase 22 — Paper Trading
-- Phase 23 — Continuous Model Monitoring
-- Phase 24 — Safety / Kill-Switch
-- Phase 25 — Broker Integration
-- Phase 26 — Controlled Live Deployment
-- Phase 27 — Advanced Intelligence
+- Phase 22 — Paper Trading (engineering boundary implemented; empirical sufficiency evidence-dependent)
+- Phase 23 — Continuous Model Monitoring (engineering boundary implemented; operational evidence-dependent)
+- Phase 24 — Safety / Kill-Switch (engineering boundary implemented; operational exercise evidence-dependent)
+- Phase 25 — Broker Integration (sandbox engineering boundary implemented; live integration locked)
+- Phase 26 — Controlled Live Deployment (fail-closed governance boundary implemented; live execution remains locked)
+- Phase 27 — Advanced Intelligence (ensemble/uncertainty research boundary implemented; no live authority)
 
 Several control primitives for these later phases already exist in the repository (monitoring, safety, reconciliation, model-registry metadata, paper evidence, and research learning proposals), but that does **not** mean the complete phase objectives are empirically or operationally complete.
 
@@ -314,8 +314,8 @@ In particular:
 - Phase 25 broker integration remains intentionally locked.
 - Phase 26 controlled live deployment must not be treated as complete.
 - Phase 27 advanced intelligence is optional and must not be prioritized over robustness.
-- Phase 22 paper evidence requires real chronological paper observations.
-- Phase 23 monitoring requires real operational streams/measurements.
+- Phase 22 paper trading now has a reproducible empirical runner, chronological input validation, append-only evidence persistence, and structural quality reporting; empirical sufficiency still requires real paper observations.
+- Phase 23 monitoring now has a chronological continuous model-monitoring boundary with explicit degradation/drift thresholds; operational completion still requires real runtime telemetry.
 - Phase 17–20 need sufficient linked trade data and controlled validation before any automatic improvement authority is granted.
 
 ## 14. Final classification
@@ -355,3 +355,20 @@ The correct state of STOCK BOT is:
 **Profitability/robustness: not claimed without measured evidence.**
 
 The next engineering work should be driven by actual research and paper-trading evidence rather than by artificially completing phase numbers.
+
+
+## 16. Final hardening completed after Phase 27
+
+The remaining software-side deployment gaps identified during final audit were closed without enabling live execution:
+
+- deterministic provider-neutral instrument identity and resolver contract;
+- Upstox sandbox adapter now requires explicit instrument resolution rather than treating a trading symbol as an instrument token;
+- integer and instrument lot-size validation at the provider boundary;
+- broker-order identity retention for refresh/cancel;
+- restart-safe Upstox order recovery through provider Order History tag lookup when the injected client supports it;
+- strict provider numeric validation and instrument tick-size validation;
+- explicit rejection of multi-child/sliced broker responses until the canonical execution contract supports aggregation;
+- fail-closed refresh when broker order identity or restart reconciliation is unavailable;
+- Phase 26 controlled-deployment governance remains permanently blocked by the separate live lock, even when supplied checklist evidence is complete.
+
+The remaining work is evidence acquisition, not permission to bypass the lock.

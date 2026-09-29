@@ -81,6 +81,7 @@ The journal does not infer missing trading evidence.
 - Decision features are captured from StrategyDecision.features.
 - Risk sizing is taken from RiskAssessment.position_size or execution authorization.
 - Outcome values are taken from the canonical TradeOutcome.
+- Gross P&L is measured from decision/reference prices; execution slippage is recorded separately and deducted once from net P&L.
 - Deterministic SHA-256 identities make repeated identical decision snapshots reproducible.
 - Non-finite numeric journal values are rejected.
 - Timestamps must be timezone-aware.

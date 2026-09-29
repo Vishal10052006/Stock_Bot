@@ -23,9 +23,11 @@ It owns:
 - optional volatility-aware sizing;
 - liquidity block;
 - duplicate-symbol block;
+- position-transition/direction consistency;
 - independent kill-switch state;
 - machine-readable risk reason codes;
-- immutable risk assessments.
+- immutable risk assessments;
+- approved projected position state after any risk-driven resizing.
 
 It does not place broker orders or bypass execution authorization.
 
@@ -92,6 +94,30 @@ A separate action property exposes:
 RESIZE is only possible when an explicit advanced policy permits deterministic
 sizing reduction. The frozen v1 configuration keeps allow_resize=False, so
 gross-exposure and volatility violations remain hard NO_TRADE outcomes.
+
+## Position transition context
+
+Risk can consume an optional immutable `RiskPositionContext` describing the
+signed position transition at decision time:
+
+- OPEN: flat -> non-zero;
+- INCREASE: larger absolute position in the same direction;
+- REDUCE: smaller non-zero position in the same direction;
+- FLATTEN: existing position -> flat;
+- REVERSE: existing direction -> opposite direction.
+
+The context also carries existing and projected signed quantities and validates
+that the transition geometry is internally consistent.
+
+When supplied, position-count and daily-entry gates are transition-aware:
+REDUCE and FLATTEN do not consume a new open-position slot or daily entry
+budget, and they do not trigger the duplicate-symbol veto. OPEN creates a new
+position slot. INCREASE and REVERSE consume a daily entry, but neither
+increases the number of open symbols because they operate on an existing
+symbol. REVERSE remains subject to the duplicate-symbol exception because it
+replaces the existing direction.
+
+Risk economics now handle all three non-open transition classes explicitly. REDUCE and FLATTEN use the signed transition order quantity as exposure-release operations. REVERSE closes the existing signed position in full and risk-sizes only the newly opened directional quantity; the resulting broker order is the close quantity plus the new opening quantity. Risk may reduce the Portfolio-requested opening quantity, but never enlarge it. Gross exposure is calculated from the projected signed position rather than by blindly adding the full broker order value.
 
 ## Hard vetoes
 
@@ -168,7 +194,9 @@ RiskAssessment additionally records:
 - final quantity;
 - gross exposure after the trade;
 - daily P&L;
-- volatility factor.
+- volatility factor;
+- requested projected quantity;
+- approved projected quantity after Risk sizing.
 
 ## Integration boundary
 
@@ -193,6 +221,7 @@ Dedicated tests cover:
 - liquidity;
 - kill switch;
 - duplicate-symbol protection;
+- signed position-transition context and transition-aware entry gates;
 - causal timestamp identity;
 - optional symbol concentration;
 - optional sector concentration;

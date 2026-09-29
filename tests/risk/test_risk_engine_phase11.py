@@ -9,8 +9,15 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from trading.risk.contracts import RiskAction, RiskReasonCode
+from trading.risk.contracts import (
+    RiskAction,
+    RiskPositionContext,
+    RiskPositionTransition,
+    RiskTransitionSizing,
+    RiskReasonCode,
+)
 from trading.risk.engine import RiskConfig, RiskEngine, RiskInput
+from trading.risk.exposure import projected_gross_exposure
 from trading.risk.kill_switch import KillSwitchState
 from trading.signals.models import CandidateDirection, TradeCandidate
 
@@ -291,3 +298,470 @@ def test_optional_drawdown_limit_has_distinct_reason_code() -> None:
 
     assert assessment.decision.status.value == "REJECTED"
     assert assessment.decision.reason_code is RiskReasonCode.MAX_DRAWDOWN_LIMIT
+
+
+
+@pytest.mark.parametrize(
+    ("transition", "existing", "projected"),
+    [
+        (RiskPositionTransition.OPEN, 0.0, 10.0),
+        (RiskPositionTransition.INCREASE, 10.0, 15.0),
+        (RiskPositionTransition.REDUCE, 10.0, 5.0),
+        (RiskPositionTransition.FLATTEN, 10.0, 0.0),
+        (RiskPositionTransition.REVERSE, 10.0, -5.0),
+        (RiskPositionTransition.INCREASE, -10.0, -15.0),
+        (RiskPositionTransition.REDUCE, -10.0, -5.0),
+        (RiskPositionTransition.FLATTEN, -10.0, 0.0),
+        (RiskPositionTransition.REVERSE, -10.0, 5.0),
+    ],
+)
+def test_position_context_accepts_signed_transitions(
+    transition: RiskPositionTransition,
+    existing: float,
+    projected: float,
+) -> None:
+    context = RiskPositionContext(
+        transition=transition,
+        existing_quantity=existing,
+        projected_quantity=projected,
+    )
+
+    assert context.transition is transition
+
+
+@pytest.mark.parametrize(
+    ("transition", "existing", "projected"),
+    [
+        (RiskPositionTransition.OPEN, 10.0, 15.0),
+        (RiskPositionTransition.INCREASE, 10.0, 5.0),
+        (RiskPositionTransition.REDUCE, 10.0, -5.0),
+        (RiskPositionTransition.FLATTEN, 10.0, 1.0),
+        (RiskPositionTransition.REVERSE, 10.0, 5.0),
+    ],
+)
+def test_position_context_rejects_invalid_transition_geometry(
+    transition: RiskPositionTransition,
+    existing: float,
+    projected: float,
+) -> None:
+    with pytest.raises(ValueError):
+        RiskPositionContext(
+            transition=transition,
+            existing_quantity=existing,
+            projected_quantity=projected,
+        )
+
+
+def test_existing_position_can_reduce_without_duplicate_symbol_rejection() -> None:
+    context = RiskPositionContext(
+        transition=RiskPositionTransition.REDUCE,
+        existing_quantity=10.0,
+        projected_quantity=5.0,
+    )
+
+    assessment = RiskEngine().evaluate(
+        make_input(
+            candidate=make_candidate(CandidateDirection.SHORT),
+            symbol_already_open=True,
+            position_context=context,
+            gross_exposure=1_000.0,
+        )
+    )
+
+    assert assessment.decision.status.value == "APPROVED"
+    assert assessment.decision.reason_code is RiskReasonCode.APPROVED
+
+
+def test_existing_position_can_flatten_without_duplicate_symbol_rejection() -> None:
+    context = RiskPositionContext(
+        transition=RiskPositionTransition.FLATTEN,
+        existing_quantity=10.0,
+        projected_quantity=0.0,
+    )
+
+    assessment = RiskEngine().evaluate(
+        make_input(
+            candidate=make_candidate(CandidateDirection.SHORT),
+            symbol_already_open=True,
+            position_context=context,
+            gross_exposure=1_000.0,
+        )
+    )
+
+    assert assessment.decision.status.value == "APPROVED"
+
+
+def test_open_transition_still_rejects_duplicate_symbol() -> None:
+    context = RiskPositionContext(
+        transition=RiskPositionTransition.OPEN,
+        existing_quantity=0.0,
+        projected_quantity=10.0,
+    )
+
+    assessment = RiskEngine().evaluate(
+        make_input(
+            symbol_already_open=True,
+            position_context=context,
+        )
+    )
+
+    assert assessment.decision.status.value == "REJECTED"
+    assert assessment.decision.reason_code is RiskReasonCode.DUPLICATE_SYMBOL
+
+
+def test_reduction_does_not_consume_open_position_slot() -> None:
+    context = RiskPositionContext(
+        transition=RiskPositionTransition.REDUCE,
+        existing_quantity=10.0,
+        projected_quantity=5.0,
+    )
+
+    assessment = RiskEngine().evaluate(
+        make_input(
+            candidate=make_candidate(CandidateDirection.SHORT),
+            open_positions=3,
+            symbol_already_open=True,
+            position_context=context,
+            gross_exposure=1_000.0,
+        )
+    )
+
+    assert assessment.decision.status.value == "APPROVED"
+
+
+
+
+
+def test_reduction_gross_exposure_replaces_symbol_contribution() -> None:
+    context = RiskPositionContext(
+        transition=RiskPositionTransition.REDUCE,
+        existing_quantity=10.0,
+        projected_quantity=5.0,
+    )
+
+    assert projected_gross_exposure(
+        current_gross_exposure=62_000.0,
+        existing_quantity=context.existing_quantity,
+        projected_quantity=context.projected_quantity,
+        mark_price=100.0,
+    ) == 61_500.0
+
+
+def test_flatten_gross_exposure_removes_symbol_contribution() -> None:
+    context = RiskPositionContext(
+        transition=RiskPositionTransition.FLATTEN,
+        existing_quantity=10.0,
+        projected_quantity=0.0,
+    )
+
+    assert projected_gross_exposure(
+        current_gross_exposure=62_000.0,
+        existing_quantity=context.existing_quantity,
+        projected_quantity=context.projected_quantity,
+        mark_price=100.0,
+    ) == 61_000.0
+
+
+def test_reverse_gross_exposure_replaces_directional_contribution() -> None:
+    context = RiskPositionContext(
+        transition=RiskPositionTransition.REVERSE,
+        existing_quantity=10.0,
+        projected_quantity=-5.0,
+    )
+
+    assert projected_gross_exposure(
+        current_gross_exposure=62_000.0,
+        existing_quantity=context.existing_quantity,
+        projected_quantity=context.projected_quantity,
+        mark_price=100.0,
+    ) == 61_500.0
+
+
+
+@pytest.mark.parametrize(
+    ("transition", "existing", "projected", "order", "closing", "opening"),
+    [
+        (RiskPositionTransition.OPEN, 0.0, 10.0, 10.0, 0.0, 10.0),
+        (RiskPositionTransition.INCREASE, 10.0, 15.0, 5.0, 0.0, 5.0),
+        (RiskPositionTransition.REDUCE, 10.0, 5.0, 5.0, 5.0, 0.0),
+        (RiskPositionTransition.FLATTEN, 10.0, 0.0, 10.0, 10.0, 0.0),
+        (RiskPositionTransition.REVERSE, 10.0, -5.0, 15.0, 10.0, 5.0),
+        (RiskPositionTransition.INCREASE, -10.0, -15.0, 5.0, 0.0, 5.0),
+        (RiskPositionTransition.REDUCE, -10.0, -5.0, 5.0, 5.0, 0.0),
+        (RiskPositionTransition.FLATTEN, -10.0, 0.0, 10.0, 10.0, 0.0),
+        (RiskPositionTransition.REVERSE, -10.0, 5.0, 15.0, 10.0, 5.0),
+    ],
+)
+def test_transition_sizing_separates_close_and_open_quantities(
+    transition: RiskPositionTransition,
+    existing: float,
+    projected: float,
+    order: float,
+    closing: float,
+    opening: float,
+) -> None:
+    context = RiskPositionContext(
+        transition=transition,
+        existing_quantity=existing,
+        projected_quantity=projected,
+    )
+
+    sizing = RiskTransitionSizing.from_context(context)
+
+    assert sizing.order_quantity == order
+    assert sizing.closing_quantity == closing
+    assert sizing.opening_quantity == opening
+
+
+
+def test_reduction_does_not_double_count_symbol_concentration() -> None:
+    context = RiskPositionContext(
+        transition=RiskPositionTransition.REDUCE,
+        existing_quantity=100.0,
+        projected_quantity=50.0,
+    )
+
+    assessment = RiskEngine(
+        RiskConfig(max_symbol_exposure_fraction=0.10)
+    ).evaluate(
+        make_input(
+            candidate=make_candidate(CandidateDirection.SHORT),
+            symbol_already_open=True,
+            position_context=context,
+            symbol_exposure={"RELIANCE": 10_000.0},
+            gross_exposure=10_000.0,
+        )
+    )
+
+    assert assessment.decision.status.value == "APPROVED"
+
+
+def test_reduction_does_not_double_count_sector_concentration() -> None:
+    context = RiskPositionContext(
+        transition=RiskPositionTransition.REDUCE,
+        existing_quantity=100.0,
+        projected_quantity=50.0,
+    )
+
+    assessment = RiskEngine(
+        RiskConfig(max_sector_exposure_fraction=0.10)
+    ).evaluate(
+        make_input(
+            candidate=make_candidate(CandidateDirection.SHORT),
+            symbol_already_open=True,
+            position_context=context,
+            sector="ENERGY",
+            sector_exposure={"ENERGY": 10_000.0},
+            symbol_exposure={"RELIANCE": 10_000.0},
+            gross_exposure=10_000.0,
+        )
+    )
+
+    assert assessment.decision.status.value == "APPROVED"
+
+
+def test_flatten_does_not_require_available_cash() -> None:
+    context = RiskPositionContext(
+        transition=RiskPositionTransition.FLATTEN,
+        existing_quantity=10.0,
+        projected_quantity=0.0,
+    )
+
+    assessment = RiskEngine().evaluate(
+        make_input(
+            candidate=make_candidate(CandidateDirection.SHORT),
+            symbol_already_open=True,
+            position_context=context,
+            available_cash=0.0,
+            gross_exposure=1_000.0,
+        )
+    )
+
+    assert assessment.decision.status.value == "APPROVED"
+    assert assessment.position_size == 10.0
+
+
+
+def test_reverse_risk_sizes_only_the_new_direction() -> None:
+    context = RiskPositionContext(
+        transition=RiskPositionTransition.REVERSE,
+        existing_quantity=10.0,
+        projected_quantity=-5.0,
+    )
+
+    assessment = RiskEngine().evaluate(
+        make_input(
+            candidate=make_candidate(CandidateDirection.SHORT),
+            symbol_already_open=True,
+            position_context=context,
+            gross_exposure=1_000.0,
+        )
+    )
+
+    assert assessment.decision.status.value == "APPROVED"
+    assert assessment.closing_quantity == 10.0
+    assert assessment.opening_position_size == 5.0
+    assert assessment.position_size == 15.0
+    assert assessment.requested_projected_quantity == -5.0
+    assert assessment.approved_projected_quantity == -5.0
+    assert assessment.gross_exposure_after == 500.0
+
+
+def test_reverse_gross_limit_resizes_only_new_direction() -> None:
+    context = RiskPositionContext(
+        transition=RiskPositionTransition.REVERSE,
+        existing_quantity=10.0,
+        projected_quantity=-125.0,
+    )
+
+    assessment = RiskEngine(
+        RiskConfig(allow_resize=True)
+    ).evaluate(
+        make_input(
+            candidate=make_candidate(CandidateDirection.SHORT),
+            symbol_already_open=True,
+            position_context=context,
+            gross_exposure=74_000.0,
+        )
+    )
+
+    assert assessment.decision.status.value == "APPROVED"
+    assert assessment.decision.action is RiskAction.RESIZE
+    assert assessment.closing_quantity == 10.0
+    assert assessment.opening_position_size == 10.0
+    assert assessment.position_size == 20.0
+    assert assessment.requested_projected_quantity == -125.0
+    assert assessment.approved_projected_quantity == -10.0
+    assert assessment.gross_exposure_after == 74_000.0
+
+
+def test_reverse_does_not_consume_an_open_position_slot() -> None:
+    context = RiskPositionContext(
+        transition=RiskPositionTransition.REVERSE,
+        existing_quantity=10.0,
+        projected_quantity=-5.0,
+    )
+
+    assessment = RiskEngine().evaluate(
+        make_input(
+            candidate=make_candidate(CandidateDirection.SHORT),
+            open_positions=3,
+            symbol_already_open=True,
+            position_context=context,
+            gross_exposure=1_000.0,
+        )
+    )
+
+    assert assessment.decision.status.value == "APPROVED"
+
+
+def test_entry_budget_blocks_reverse_but_not_flatten() -> None:
+    reverse_context = RiskPositionContext(
+        transition=RiskPositionTransition.REVERSE,
+        existing_quantity=10.0,
+        projected_quantity=-5.0,
+    )
+    reverse = RiskEngine().evaluate(
+        make_input(
+            candidate=make_candidate(CandidateDirection.SHORT),
+            trades_today=5,
+            symbol_already_open=True,
+            position_context=reverse_context,
+        )
+    )
+
+    assert reverse.decision.status.value == "REJECTED"
+    assert reverse.decision.reason_code is RiskReasonCode.MAX_TRADES_REACHED
+
+    flatten_context = RiskPositionContext(
+        transition=RiskPositionTransition.FLATTEN,
+        existing_quantity=10.0,
+        projected_quantity=0.0,
+    )
+    flatten = RiskEngine().evaluate(
+        make_input(
+            candidate=make_candidate(CandidateDirection.SHORT),
+            trades_today=5,
+            symbol_already_open=True,
+            position_context=flatten_context,
+            gross_exposure=1_000.0,
+        )
+    )
+
+    assert flatten.decision.status.value == "APPROVED"
+
+
+def test_position_context_rejects_direction_mismatch() -> None:
+    context = RiskPositionContext(
+        transition=RiskPositionTransition.REDUCE,
+        existing_quantity=10.0,
+        projected_quantity=5.0,
+    )
+
+    assessment = RiskEngine().evaluate(
+        make_input(
+            candidate=make_candidate(CandidateDirection.LONG),
+            symbol_already_open=True,
+            position_context=context,
+        )
+    )
+
+    assert assessment.decision.status.value == "REJECTED"
+    assert assessment.decision.reason_code is RiskReasonCode.POSITION_CONTEXT_MISMATCH
+
+
+def test_position_context_accepts_correct_flatten_direction_for_short() -> None:
+    context = RiskPositionContext(
+        transition=RiskPositionTransition.FLATTEN,
+        existing_quantity=-10.0,
+        projected_quantity=0.0,
+    )
+
+    assessment = RiskEngine().evaluate(
+        make_input(
+            candidate=make_candidate(CandidateDirection.LONG),
+            symbol_already_open=True,
+            position_context=context,
+            gross_exposure=1_000.0,
+        )
+    )
+
+    assert assessment.decision.status.value == "APPROVED"
+
+
+def test_risk_cannot_increase_portfolio_open_intent() -> None:
+    context = RiskPositionContext(
+        transition=RiskPositionTransition.OPEN,
+        existing_quantity=0.0,
+        projected_quantity=5.0,
+    )
+
+    assessment = RiskEngine().evaluate(
+        make_input(
+            position_context=context,
+        )
+    )
+
+    assert assessment.decision.status.value == "APPROVED"
+    assert assessment.position_size == 5.0
+    assert assessment.requested_projected_quantity == 5.0
+    assert assessment.approved_projected_quantity == 5.0
+
+
+def test_risk_cannot_increase_portfolio_increase_intent() -> None:
+    context = RiskPositionContext(
+        transition=RiskPositionTransition.INCREASE,
+        existing_quantity=10.0,
+        projected_quantity=15.0,
+    )
+
+    assessment = RiskEngine().evaluate(
+        make_input(
+            symbol_already_open=True,
+            position_context=context,
+        )
+    )
+
+    assert assessment.decision.status.value == "APPROVED"
+    assert assessment.position_size == 5.0
+    assert assessment.approved_projected_quantity == 15.0

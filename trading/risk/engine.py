@@ -24,10 +24,11 @@ from trading.signals.models import TradeCandidate
 from trading.strategy.models import StrategyDirection
 
 from .concentration import check_sector_exposure, check_symbol_exposure
-from .contracts import RiskReasonCode
+from .contracts import RiskPositionContext, RiskPositionTransition, RiskReasonCode
+from .contracts import RiskTransitionSizing
 from .correlation import correlation_exposure_allowed
 from .daily_limits import DailyRiskState, daily_loss_limit_reached
-from .exposure import gross_exposure_after
+from .exposure import gross_exposure_after, projected_gross_exposure
 from .kill_switch import KillSwitchState
 from .position_sizing import calculate_position_size, floor_to_step
 from .stop_loss import validate_stop
@@ -125,6 +126,7 @@ class RiskInput:
     trades_today: int = 0
     gross_exposure: float = 0.0
     symbol_already_open: bool = False
+    position_context: RiskPositionContext | None = None
     liquidity_available: bool = True
     kill_switch_active: bool = False
 
@@ -191,6 +193,11 @@ class RiskInput:
 
         if self.gross_exposure < 0:
             raise ValueError("gross_exposure must be non-negative")
+
+        if self.position_context is not None and not isinstance(
+            self.position_context, RiskPositionContext
+        ):
+            raise TypeError("position_context must be a RiskPositionContext")
 
         if self.open_positions < 0:
             raise ValueError("open_positions must be non-negative")
@@ -269,6 +276,11 @@ class RiskAssessment:
     proposed_value: float | None = None
     daily_pnl: float | None = None
     volatility_factor: float | None = None
+    closing_quantity: float | None = None
+    opening_quantity: float | None = None
+    opening_position_size: float | None = None
+    requested_projected_quantity: float | None = None
+    approved_projected_quantity: float | None = None
 
 
 def _strategy_direction(candidate: TradeCandidate) -> StrategyDirection:
@@ -352,7 +364,12 @@ class RiskEngine:
                 RiskReasonCode.DAILY_LOSS_LIMIT,
             )
 
-        if value.trades_today >= self.config.max_trades_per_day:
+        position_context = value.position_context
+
+        if (
+            position_context is None
+            or position_context.consumes_trade_entry
+        ) and value.trades_today >= self.config.max_trades_per_day:
             return self._reject(
                 value,
                 "Maximum daily trade entries reached.",
@@ -360,7 +377,33 @@ class RiskEngine:
                 RiskReasonCode.MAX_TRADES_REACHED,
             )
 
-        if value.open_positions >= self.config.max_open_positions:
+        if position_context is not None:
+            direction_follows_projection = position_context.transition in {
+                RiskPositionTransition.OPEN,
+                RiskPositionTransition.INCREASE,
+                RiskPositionTransition.REVERSE,
+            }
+            expected_long = (
+                position_context.projected_quantity > 0
+                if direction_follows_projection
+                else position_context.existing_quantity < 0
+            )
+            actual_long = direction is StrategyDirection.LONG
+            if actual_long != expected_long:
+                return self._reject(
+                    value,
+                    "Candidate direction is inconsistent with the supplied position transition.",
+                    daily_pnl,
+                    RiskReasonCode.POSITION_CONTEXT_MISMATCH,
+                )
+
+        creates_position_slot = (
+            position_context.creates_position_slot
+            if position_context is not None
+            else not value.symbol_already_open
+        )
+
+        if creates_position_slot and value.open_positions >= self.config.max_open_positions:
             return self._reject(
                 value,
                 "Maximum open positions reached.",
@@ -368,7 +411,11 @@ class RiskEngine:
                 RiskReasonCode.MAX_OPEN_POSITIONS,
             )
 
-        if value.symbol_already_open:
+        duplicate_open = value.symbol_already_open and (
+            position_context is None
+            or position_context.transition.value == "OPEN"
+        )
+        if duplicate_open:
             return self._reject(
                 value,
                 "Symbol already has an open position.",
@@ -415,7 +462,23 @@ class RiskEngine:
                 code,
             )
 
-        # 4. Risk-first sizing.
+        # 4. Risk-first sizing. Existing-position reductions and flattening
+        # are exposure releases, not new risk-budget entries. Their broker
+        # quantity comes from the signed transition context.
+        transition_sizing = (
+            RiskTransitionSizing.from_context(position_context)
+            if position_context is not None
+            else None
+        )
+        release_only = position_context is not None and position_context.transition in {
+            RiskPositionTransition.REDUCE,
+            RiskPositionTransition.FLATTEN,
+        }
+        reverse_transition = (
+            position_context is not None
+            and position_context.transition is RiskPositionTransition.REVERSE
+        )
+
         sizing = calculate_position_size(
             available_equity=value.available_equity,
             risk_per_trade=self.config.risk_per_trade,
@@ -423,12 +486,48 @@ class RiskEngine:
             quantity_step=self.config.quantity_step,
         )
 
-        requested_quantity = sizing.quantity
-        cash_resized = False
+        # Portfolio is the source of trade intent. Risk may reduce that intent
+        # when a hard risk budget requires it, but it must never increase the
+        # requested opening quantity. This preserves the Portfolio -> Risk
+        # contract and prevents Risk from silently enlarging an order.
+        requested_opening_quantity = (
+            transition_sizing.opening_quantity
+            if (
+                transition_sizing is not None
+                and not release_only
+            )
+            else None
+        )
 
-        # Available cash is an optional account-level constraint. It can only
-        # reduce risk-first size; it never increases it.
-        if value.available_cash is not None:
+        if release_only:
+            requested_quantity = transition_sizing.order_quantity
+            if requested_quantity <= 0:
+                return self._reject(
+                    value,
+                    "Position transition produces no releasable quantity.",
+                    daily_pnl,
+                    RiskReasonCode.ZERO_POSITION_SIZE,
+                )
+        elif requested_opening_quantity is not None:
+            requested_quantity = min(sizing.quantity, requested_opening_quantity)
+        else:
+            requested_quantity = sizing.quantity
+
+        risk_sized_opening_quantity = (
+            min(sizing.quantity, requested_opening_quantity)
+            if requested_opening_quantity is not None
+            else sizing.quantity
+        )
+
+        cash_resized = False
+        reverse_closing_quantity = (
+            transition_sizing.closing_quantity
+            if reverse_transition and transition_sizing is not None
+            else 0.0
+        )
+
+        # Closing existing exposure does not require additional cash.
+        if not release_only and value.available_cash is not None:
             cash_quantity = floor_to_step(
                 value.available_cash / entry,
                 self.config.quantity_step,
@@ -470,21 +569,25 @@ class RiskEngine:
 
         # 6. Optional volatility policy. Default factor is 1.0, matching the
         # current frozen specification while keeping the extension point ready.
-        try:
-            vol_factor = volatility_size_factor(
-                entry_price=entry,
-                atr=value.atr,
-                high_volatility=value.high_volatility,
-                high_volatility_factor=self.config.high_volatility_factor,
-                max_atr_fraction=self.config.max_atr_fraction,
-            )
-        except ValueError as exc:
-            return self._reject(
-                value,
-                str(exc),
-                daily_pnl,
-                RiskReasonCode.VOLATILITY_LIMIT,
-            )
+        if release_only:
+            vol_factor = 1.0
+        else:
+            # Current frozen specification while keeping the extension point ready.
+            try:
+                vol_factor = volatility_size_factor(
+                    entry_price=entry,
+                    atr=value.atr,
+                    high_volatility=value.high_volatility,
+                    high_volatility_factor=self.config.high_volatility_factor,
+                    max_atr_fraction=self.config.max_atr_fraction,
+                )
+            except ValueError as exc:
+                return self._reject(
+                    value,
+                    str(exc),
+                    daily_pnl,
+                    RiskReasonCode.VOLATILITY_LIMIT,
+                )
 
         if vol_factor <= 0:
             return self._reject(
@@ -499,7 +602,35 @@ class RiskEngine:
             self.config.quantity_step,
         )
 
-        resized = cash_resized or quantity < requested_quantity
+        if reverse_transition:
+            opening_quantity = risk_sized_opening_quantity
+            quantity = reverse_closing_quantity + opening_quantity
+            requested_order_quantity = (
+                reverse_closing_quantity + (
+                    requested_opening_quantity
+                    if requested_opening_quantity is not None
+                    else sizing.quantity
+                )
+            )
+        elif transition_sizing is not None:
+            opening_quantity = risk_sized_opening_quantity
+            # REDUCE/FLATTEN are release-only transitions: the broker order
+            # closes existing exposure but creates no new opening quantity.
+            # The approved order quantity must therefore remain the transition
+            # order quantity rather than the zero opening quantity.
+            if release_only:
+                quantity = transition_sizing.order_quantity
+            else:
+                quantity = opening_quantity
+            requested_order_quantity = transition_sizing.order_quantity
+        else:
+            opening_quantity = quantity
+            requested_order_quantity = requested_quantity
+
+        if requested_opening_quantity is not None:
+            resized = cash_resized or opening_quantity < requested_opening_quantity
+        else:
+            resized = cash_resized or quantity < requested_order_quantity
         if quantity <= 0:
             return self._reject(
                 value,
@@ -516,19 +647,47 @@ class RiskEngine:
                 RiskReasonCode.VOLATILITY_LIMIT,
             )
 
-        proposed_value = entry * quantity
+        proposed_value = (
+            entry * opening_quantity
+            if reverse_transition
+            else entry * quantity
+        )
+
+        if reverse_transition and position_context is not None:
+            projected_reverse_quantity = (
+                -opening_quantity
+                if position_context.existing_quantity > 0
+                else opening_quantity
+            )
+            gross_after = projected_gross_exposure(
+                current_gross_exposure=value.gross_exposure,
+                existing_quantity=position_context.existing_quantity,
+                projected_quantity=projected_reverse_quantity,
+                mark_price=entry,
+            )
+
+        # A release-only transition replaces this symbol's existing gross
+        # contribution with its projected contribution. No new gross budget
+        # is consumed by REDUCE/FLATTEN.
+        elif release_only and position_context is not None:
+            gross_after = projected_gross_exposure(
+                current_gross_exposure=value.gross_exposure,
+                existing_quantity=position_context.existing_quantity,
+                projected_quantity=position_context.projected_quantity,
+                mark_price=entry,
+            )
+        else:
+            gross_after = gross_exposure_after(
+                current_gross_exposure=value.gross_exposure,
+                entry_price=entry,
+                quantity=quantity,
+            )
 
         # 7. Gross exposure is a frozen hard v1 control. A violation remains
         # NO_TRADE unless an explicitly validated resize policy is enabled.
         exposure_limit = (
             value.available_equity * self.config.max_gross_exposure
         )
-        gross_after = gross_exposure_after(
-            current_gross_exposure=value.gross_exposure,
-            entry_price=entry,
-            quantity=quantity,
-        )
-
         if gross_after > exposure_limit + 1e-12:
             if self.config.allow_resize:
                 remaining_exposure = max(
@@ -546,14 +705,33 @@ class RiskEngine:
                         daily_pnl,
                         RiskReasonCode.MAX_GROSS_EXPOSURE,
                     )
-                quantity = min(quantity, exposure_quantity)
-                resized = quantity < requested_quantity
-                proposed_value = entry * quantity
-                gross_after = gross_exposure_after(
-                    current_gross_exposure=value.gross_exposure,
-                    entry_price=entry,
-                    quantity=quantity,
-                )
+                if reverse_transition and position_context is not None:
+                    opening_quantity = min(opening_quantity, exposure_quantity)
+                    quantity = reverse_closing_quantity + opening_quantity
+                    resized = (
+                        requested_opening_quantity is not None
+                        and opening_quantity < requested_opening_quantity
+                    )
+                    proposed_value = entry * opening_quantity
+                    gross_after = projected_gross_exposure(
+                        current_gross_exposure=value.gross_exposure,
+                        existing_quantity=position_context.existing_quantity,
+                        projected_quantity=(
+                            -opening_quantity
+                            if position_context.existing_quantity > 0
+                            else opening_quantity
+                        ),
+                        mark_price=entry,
+                    )
+                else:
+                    quantity = min(quantity, exposure_quantity)
+                    resized = quantity < requested_order_quantity
+                    proposed_value = entry * quantity
+                    gross_after = gross_exposure_after(
+                        current_gross_exposure=value.gross_exposure,
+                        entry_price=entry,
+                        quantity=quantity,
+                    )
             else:
                 return self._reject(
                     value,
@@ -572,11 +750,30 @@ class RiskEngine:
                     proposed_value=proposed_value,
                 )
 
-        # 8. Optional concentration/correlation controls.
+        # 8. Optional concentration/correlation controls. A release replaces
+        # the current symbol contribution instead of adding a second copy.
+        exposure_by_symbol = dict(value.symbol_exposure)
+        exposure_by_sector = dict(value.sector_exposure)
+        if (release_only or reverse_transition) and position_context is not None:
+            current_symbol_value = abs(position_context.existing_quantity) * entry
+            projected_symbol_value = (
+                abs(position_context.projected_quantity) * entry
+                if release_only
+                else opening_quantity * entry
+            )
+            exposure_by_symbol.pop(value.symbol, None)
+            if value.sector:
+                current_sector_value = float(exposure_by_sector.get(value.sector, 0.0))
+                exposure_by_sector[value.sector] = max(
+                    0.0,
+                    current_sector_value - current_symbol_value,
+                )
+            proposed_value = projected_symbol_value
+
         if not check_symbol_exposure(
             symbol=value.symbol,
             proposed_value=proposed_value,
-            existing_by_symbol=value.symbol_exposure,
+            existing_by_symbol=exposure_by_symbol,
             max_symbol_exposure_fraction=self.config.max_symbol_exposure_fraction,
             equity=value.available_equity,
         ):
@@ -590,7 +787,7 @@ class RiskEngine:
         if not check_sector_exposure(
             sector=value.sector,
             proposed_value=proposed_value,
-            existing_by_sector=value.sector_exposure,
+            existing_by_sector=exposure_by_sector,
             max_sector_exposure_fraction=self.config.max_sector_exposure_fraction,
             equity=value.available_equity,
         ):
@@ -604,7 +801,7 @@ class RiskEngine:
         if not correlation_exposure_allowed(
             symbol=value.symbol,
             proposed_value=proposed_value,
-            existing_by_symbol=value.symbol_exposure,
+            existing_by_symbol=exposure_by_symbol,
             pairwise_correlation=value.pairwise_correlation,
             equity=value.available_equity,
             minimum_abs_correlation=self.config.minimum_abs_correlation,
@@ -615,6 +812,28 @@ class RiskEngine:
                 "Maximum correlated exposure would be exceeded.",
                 daily_pnl,
                 RiskReasonCode.CORRELATION_LIMIT,
+            )
+
+        if position_context is not None:
+            requested_projected_quantity = position_context.projected_quantity
+            if release_only:
+                approved_projected_quantity = position_context.projected_quantity
+            elif reverse_transition:
+                approved_projected_quantity = (
+                    -opening_quantity
+                    if position_context.existing_quantity > 0
+                    else opening_quantity
+                )
+            else:
+                delta_sign = 1.0 if position_context.projected_quantity > 0 else -1.0
+                approved_projected_quantity = (
+                    position_context.existing_quantity
+                    + delta_sign * opening_quantity
+                )
+        else:
+            requested_projected_quantity = None
+            approved_projected_quantity = (
+                quantity if direction is StrategyDirection.LONG else -quantity
             )
 
         decision = RiskDecision(
@@ -634,6 +853,15 @@ class RiskEngine:
                 else RiskReasonCode.APPROVED
             ),
             resized=resized,
+            approved_quantity=quantity,
+            approved_notional=entry * quantity,
+            position_transition=(
+                position_context.transition
+                if position_context is not None
+                else None
+            ),
+            requested_projected_quantity=requested_projected_quantity,
+            approved_projected_quantity=approved_projected_quantity,
         )
 
         return RiskAssessment(
@@ -648,6 +876,11 @@ class RiskEngine:
             gross_exposure_after=gross_after,
             daily_pnl=daily_pnl,
             volatility_factor=vol_factor,
+            closing_quantity=(transition_sizing.closing_quantity if transition_sizing else None),
+            opening_quantity=(opening_quantity if transition_sizing else None),
+            opening_position_size=(opening_quantity if reverse_transition else None),
+            requested_projected_quantity=requested_projected_quantity,
+            approved_projected_quantity=approved_projected_quantity,
         )
 
     def _reject(

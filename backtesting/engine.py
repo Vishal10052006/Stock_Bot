@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import timedelta
+import math
 
 import pandas as pd
 
@@ -58,6 +59,16 @@ class BacktestConfig:
     def __post_init__(self) -> None:
         if not self.price_column:
             raise ValueError("price_column must not be empty")
+        numeric_fields = (
+            ("quantity", self.quantity),
+            ("max_holding_minutes", self.max_holding_minutes),
+            ("starting_equity", self.starting_equity),
+            ("target_reward_risk", self.target_reward_risk),
+            ("partial_exit_fraction", self.partial_exit_fraction),
+            ("quantity_step", self.quantity_step),
+        )
+        if any(not math.isfinite(float(value)) for _, value in numeric_fields):
+            raise ValueError("backtest configuration values must be finite")
         if self.quantity <= 0:
             raise ValueError("quantity must be positive")
         if self.max_holding_minutes <= 0:
@@ -555,6 +566,7 @@ class HistoricalBacktestEngine:
             quantity=quantity,
             exit_fees=exit_fees,
             exit_slippage_cost=fill.slippage_cost,
+            reference_price=price,
         )
 
     def _close_expired_trade(
@@ -639,6 +651,7 @@ class HistoricalBacktestEngine:
             price=fill.fill_price,
             exit_fees=exit_fees,
             exit_slippage_cost=fill.slippage_cost,
+            reference_price=price,
         )
 
     def _open_trade(self, symbol: str) -> PaperOrder | None:

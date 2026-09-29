@@ -7,6 +7,7 @@ It does not introduce a second fill, fee, or position-accounting model.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
 
 from execution.trading_execution import ExecutionAuthorization
 from paper.runtime import (
@@ -25,6 +26,8 @@ class BrokerSimulatorConfig:
     fee_bps: float = 2.0
 
     def __post_init__(self) -> None:
+        if not math.isfinite(float(self.slippage_bps)) or not math.isfinite(float(self.fee_bps)):
+            raise ValueError("slippage_bps and fee_bps must be finite")
         if self.slippage_bps < 0 or self.fee_bps < 0:
             raise ValueError(
                 "slippage_bps and fee_bps must be non-negative"

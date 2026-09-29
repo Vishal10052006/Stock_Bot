@@ -24,11 +24,11 @@ class BrokerPosition:
     def __post_init__(self) -> None:
         if not self.symbol.strip():
             raise ValueError("symbol must not be empty")
-        # Signed quantity: positive=LONG, negative=SHORT.
-        if not math.isfinite(float(self.quantity)):
-            raise ValueError("quantity must be finite")
-        if not math.isfinite(float(self.average_price)) or self.average_price < 0:
-            raise ValueError("average_price must be non-negative and finite")
+        if not math.isfinite(self.quantity) or self.quantity == 0.0:
+            raise ValueError("quantity must be finite and non-zero")
+        if not math.isfinite(self.average_price) or self.average_price <= 0.0:
+            raise ValueError("average_price must be positive and finite")
+        object.__setattr__(self, "symbol", self.symbol.strip().upper())
 
 
 @dataclass(frozen=True, slots=True)
@@ -54,12 +54,7 @@ class BrokerReconciler:
         self,
         local: tuple[BrokerPosition, ...] | None,
         broker: tuple[BrokerPosition, ...] | None,
-        *,
-        quantity_tolerance: float = 1e-12,
-        price_tolerance: float = 1e-12,
     ) -> ReconciliationReport:
-        if quantity_tolerance < 0 or price_tolerance < 0:
-            raise ValueError("reconciliation tolerances must be non-negative")
         if local is None or broker is None:
             return ReconciliationReport(
                 status=ReconciliationStatus.BLOCKED,
@@ -74,6 +69,8 @@ class BrokerReconciler:
         for symbol in symbols:
             left = local_map.get(symbol, (0.0, 0.0))
             right = broker_map.get(symbol, (0.0, 0.0))
+            quantity_tolerance = 1e-12
+            price_tolerance = 1e-12
             if (
                 abs(left[0] - right[0]) > quantity_tolerance
                 or abs(left[1] - right[1]) > price_tolerance

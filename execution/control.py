@@ -19,7 +19,7 @@ from trading.risk.gate import RiskDecision
 def authorize_execution(
     risk_decision: RiskDecision,
     *,
-    approved_quantity: float = 0.0,
+    approved_quantity: float | None = None,
     approved_notional: float | None = None,
     risk_decision_id: str = "",
     restrictions: tuple[str, ...] = (),
@@ -57,6 +57,8 @@ def authorize_execution(
                 f"safety_block:{safety_decision.block.value}",
             ),
             execution_version=authorization.execution_version,
+            position_transition=authorization.position_transition,
+            approved_projected_quantity=authorization.approved_projected_quantity,
         )
 
     return authorization

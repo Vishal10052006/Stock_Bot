@@ -13,6 +13,7 @@ from enum import Enum
 import pandas as pd
 
 from trading.risk.gate import RiskDecision, RiskDecisionStatus
+from trading.risk.contracts import RiskPositionTransition
 from trading.strategy.models import StrategyDirection
 
 
@@ -38,6 +39,8 @@ class ExecutionAuthorization:
     risk_decision_id: str = ""
     restrictions: tuple[str, ...] = ()
     execution_version: str = "risk-aware-v2.0"
+    position_transition: RiskPositionTransition | None = None
+    approved_projected_quantity: float | None = None
 
     def __post_init__(self) -> None:
         if pd.Timestamp(self.timestamp).tzinfo is None:
@@ -51,7 +54,7 @@ class ExecutionAuthorization:
 def authorize_risk_decision(
     risk_decision: RiskDecision,
     *,
-    approved_quantity: float = 0.0,
+    approved_quantity: float | None = None,
     approved_notional: float | None = None,
     risk_decision_id: str = "",
     restrictions: tuple[str, ...] = (),
@@ -63,18 +66,24 @@ def authorize_risk_decision(
     """
     if not isinstance(risk_decision, RiskDecision):
         raise TypeError("risk_decision must be a RiskDecision")
-    if approved_quantity < 0:
-        raise ValueError("approved_quantity must be non-negative")
-    if approved_notional is not None and approved_notional < 0:
-        raise ValueError("approved_notional must be non-negative")
-
     blocked = risk_decision.status is not RiskDecisionStatus.APPROVED
-    quantity = 0.0 if blocked else float(approved_quantity)
-    notional = 0.0 if blocked else (
-        float(approved_notional)
-        if approved_notional is not None
-        else 0.0
-    )
+
+    if blocked:
+        quantity = 0.0
+        notional = 0.0
+    else:
+        if risk_decision.approved_quantity <= 0:
+            raise ValueError("approved RiskDecision must carry a positive quantity")
+        if approved_quantity is not None and (
+            float(approved_quantity) != risk_decision.approved_quantity
+        ):
+            raise ValueError("execution quantity must exactly equal RiskDecision approved quantity")
+        if approved_notional is not None and (
+            float(approved_notional) != risk_decision.approved_notional
+        ):
+            raise ValueError("execution notional must exactly equal RiskDecision approved notional")
+        quantity = risk_decision.approved_quantity
+        notional = risk_decision.approved_notional
 
     return ExecutionAuthorization(
         timestamp=risk_decision.timestamp,
@@ -95,4 +104,6 @@ def authorize_risk_decision(
         approved_notional=notional,
         risk_decision_id=risk_decision_id,
         restrictions=restrictions,
+        position_transition=risk_decision.position_transition,
+        approved_projected_quantity=risk_decision.approved_projected_quantity,
     )

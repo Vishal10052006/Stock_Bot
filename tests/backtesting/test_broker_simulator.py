@@ -56,3 +56,12 @@ def test_broker_simulator_rejects_ambiguous_configuration() -> None:
             config=BrokerSimulatorConfig(),
             runtime=PaperTradingRuntime(),
         )
+
+
+@pytest.mark.parametrize("field", ["slippage_bps", "fee_bps"])
+def test_broker_simulator_rejects_non_finite_costs(field: str) -> None:
+    value = float("nan")
+    kwargs = {"slippage_bps": 5.0, "fee_bps": 2.0}
+    kwargs[field] = value
+    with pytest.raises(ValueError, match="finite"):
+        BrokerSimulatorConfig(**kwargs)

@@ -15,7 +15,7 @@ import pandas as pd
 
 from trading.strategy.models import StrategyDecision, StrategyDirection
 
-from .contracts import RiskAction, RiskReasonCode
+from .contracts import RiskAction, RiskReasonCode, RiskPositionTransition
 
 
 class RiskDecisionStatus(str, Enum):
@@ -37,6 +37,11 @@ class RiskDecision:
     risk_version: str = "RISK-v1.0"
     reason_code: RiskReasonCode | None = None
     resized: bool = False
+    approved_quantity: float = 0.0
+    approved_notional: float = 0.0
+    position_transition: RiskPositionTransition | None = None
+    requested_projected_quantity: float | None = None
+    approved_projected_quantity: float | None = None
 
     def __post_init__(self) -> None:
         timestamp = pd.Timestamp(self.timestamp)
@@ -48,6 +53,12 @@ class RiskDecision:
             raise ValueError("risk reason must not be empty")
         if not self.risk_version.strip():
             raise ValueError("risk_version must not be empty")
+        if self.approved_quantity < 0 or self.approved_notional < 0:
+            raise ValueError("approved exposure must be non-negative")
+        if self.status is RiskDecisionStatus.REJECTED and (
+            self.approved_quantity != 0.0 or self.approved_notional != 0.0
+        ):
+            raise ValueError("rejected risk decisions cannot carry approved exposure")
 
         object.__setattr__(self, "timestamp", timestamp)
         object.__setattr__(self, "symbol", self.symbol.strip().upper())
@@ -74,6 +85,8 @@ def evaluate_strategy_risk(
     decision: StrategyDecision,
     *,
     risk_enabled: bool = True,
+    approved_quantity: float = 1.0,
+    approved_notional: float = 0.0,
 ) -> RiskDecision:
     """Apply the legacy deterministic pre-trade gate."""
     if not isinstance(decision, StrategyDecision):
@@ -83,14 +96,20 @@ def evaluate_strategy_risk(
         status = RiskDecisionStatus.REJECTED
         reason = "Strategy produced NO_TRADE; risk gate blocks execution."
         reason_code = RiskReasonCode.GENERIC_REJECT
+        final_qty = 0.0
+        final_notional = 0.0
     elif not risk_enabled:
         status = RiskDecisionStatus.REJECTED
         reason = "Global risk gate is disabled."
         reason_code = RiskReasonCode.SYSTEM_NOT_READY
+        final_qty = 0.0
+        final_notional = 0.0
     else:
         status = RiskDecisionStatus.APPROVED
         reason = "Strategy direction passed the deterministic pre-trade risk gate."
         reason_code = RiskReasonCode.APPROVED
+        final_qty = max(1.0, float(approved_quantity))
+        final_notional = float(approved_notional)
 
     return RiskDecision(
         timestamp=decision.timestamp,
@@ -99,7 +118,10 @@ def evaluate_strategy_risk(
         strategy_direction=decision.direction,
         reason=reason,
         reason_code=reason_code,
+        approved_quantity=final_qty,
+        approved_notional=final_notional,
     )
+
 
 
 __all__ = [

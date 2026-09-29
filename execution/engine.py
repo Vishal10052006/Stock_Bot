@@ -328,7 +328,11 @@ class OrderStateMachine:
         # after a terminal broker response. Never treat this as permission
         # to resubmit; UNKNOWN is resolved only from broker truth.
         OrderStatus.FILLED: {OrderStatus.UNKNOWN},
-        OrderStatus.CANCELLED: {OrderStatus.UNKNOWN},
+        # A cancellation response is not necessarily final broker truth.
+        # A broker race can produce FILLED after local cancellation; refresh()
+        # must accept the authoritative broker state and rebuild downstream
+        # position state from that final snapshot.
+        OrderStatus.CANCELLED: {OrderStatus.FILLED, OrderStatus.UNKNOWN},
         OrderStatus.EXPIRED: {OrderStatus.UNKNOWN},
         OrderStatus.REJECTED_BROKER: {OrderStatus.UNKNOWN},
         OrderStatus.FAILED: {OrderStatus.UNKNOWN},
