@@ -14,6 +14,9 @@ def test_ops_dashboard_assets_are_present_and_safe():
     assert "LIVE: LOCKED" in html
     assert "NO ORDER AUTHORITY" in html
     assert "MONITORINGRUNTIME.DASHBOARD()" in html
+    assert "START PAPER" in html
+    assert "KILL SWITCH" in html
+    assert "/api/control/" in html
 
     assert snapshot["mode"] == "research_paper_demo"
     assert snapshot["metrics"]["execution.fill_count"] == 0
