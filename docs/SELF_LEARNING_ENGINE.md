@@ -100,10 +100,9 @@ human-controlled.
 
 ## Current verification state
 
-The architecture and contracts have been implemented on this branch. Full
-pytest execution still requires a repository execution environment; the
-GitHub connector provides source/repository operations but not arbitrary shell
-execution.
+The architecture and contracts have been implemented and integrated on `main`.
+Runtime verification is performed by the repository GitHub Actions workflows;
+local execution is not assumed by this document.
 
 
 ## SL-23 — Controlled Candidate Retraining
