@@ -34,6 +34,11 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         default=Path("paper/live_predictions.jsonl"),
     )
+    parser.add_argument(
+        "--snapshot",
+        type=Path,
+        default=Path("paper/live_model_snapshot.json"),
+    )
     return parser
 
 
@@ -78,7 +83,11 @@ def main() -> int:
             f"p_no_edge={row['NO_EDGE']:.4f}"
         )
 
+    args.snapshot.parent.mkdir(parents=True, exist_ok=True)
+    args.snapshot.write_text(json.dumps(snapshot, indent=2, default=str), encoding="utf-8")
+
     print("-" * 72)
+    print(f"Dashboard snapshot  : {args.snapshot}")
     print(json.dumps(snapshot, indent=2, default=str))
     print("=" * 72)
     return 0
