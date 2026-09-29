@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import gzip
 import json
 import os
 from dataclasses import dataclass
+from pathlib import Path
 
 
 @dataclass(frozen=True, slots=True)
@@ -63,6 +65,46 @@ class UpstoxInstrumentMapper:
         self._mapping = normalized
 
     @classmethod
+    def from_local_master(
+        cls,
+        path: str | os.PathLike[str] = "data/reference/upstox/NSE.json.gz",
+    ) -> "UpstoxInstrumentMapper":
+        """Build a symbol mapper from the canonical local Upstox NSE master.
+
+        The master is treated as runtime reference data, not as model input.
+        Ambiguous equity symbols fail closed instead of choosing arbitrarily.
+        NIFTY50 is handled as the verified NSE index identity.
+        """
+        source = Path(path)
+        if not source.is_file():
+            raise FileNotFoundError(f"Upstox instrument master not found: {source}")
+
+        opener = gzip.open if source.suffix == ".gz" else open
+        with opener(source, "rt", encoding="utf-8") as handle:
+            payload = json.load(handle)
+        if not isinstance(payload, list):
+            raise ValueError("Upstox instrument master must contain a JSON list")
+
+        mapping: dict[str, str] = {"NIFTY50": "NSE_INDEX|Nifty 50"}
+        for item in payload:
+            if not isinstance(item, dict):
+                continue
+            if item.get("segment") != "NSE_EQ" or item.get("instrument_type") != "EQ":
+                continue
+            symbol = str(item.get("trading_symbol", item.get("symbol", ""))).strip().upper()
+            key = str(item.get("instrument_key", "")).strip()
+            if not symbol or not key:
+                continue
+            previous = mapping.get(symbol)
+            if previous is not None and previous != key:
+                raise ValueError(f"ambiguous Upstox symbol mapping: {symbol}")
+            mapping[symbol] = key
+
+        if len(mapping) <= 1:
+            raise ValueError("Upstox instrument master contained no NSE equities")
+        return cls(mapping)
+
+    @classmethod
     def from_env(
         cls,
         env_var: str = "UPSTOX_INSTRUMENT_MAP",
@@ -116,12 +158,16 @@ class UpstoxInstrumentMapper:
 
         parts = instrument_key.split("|", 1)
 
-        if len(parts) != 2 or parts[0] != "NSE_EQ" or not parts[1].strip():
-            raise ValueError(
-                "NSE equity instrument key must have the format "
-                "NSE_EQ|<ISIN>"
+        if len(parts) != 2 or not parts[1].strip():
+            raise ValueError("NSE equity instrument key must have the format NSE_EQ|<ISIN>")
+        if parts[0] == "NSE_INDEX" and normalized_symbol == "NIFTY50":
+            return UpstoxInstrumentIdentity(
+                symbol=normalized_symbol,
+                instrument_key=instrument_key,
+                isin=parts[1].strip().upper(),
             )
-
+        if parts[0] != "NSE_EQ":
+            raise ValueError("NSE equity instrument key must use the NSE_EQ segment")
         return UpstoxInstrumentIdentity(
             symbol=normalized_symbol,
             instrument_key=instrument_key,
