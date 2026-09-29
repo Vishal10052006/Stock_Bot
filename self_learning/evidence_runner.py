@@ -1,8 +1,8 @@
 """Fail-closed evidence-cycle bundle runner.
 
-This module does not execute trading, retraining, backtests, OOS, or paper
-engines itself. It binds already-produced immutable artifacts to one candidate
-and refuses to manufacture missing evidence.
+This module binds already-produced immutable artifacts to one candidate and
+refuses to manufacture missing evidence. It intentionally does not execute
+trading, retraining, backtests, OOS, walk-forward, or paper engines.
 """
 
 from __future__ import annotations
@@ -14,7 +14,6 @@ from .contracts import ModelCandidate, PromotionDecision, ValidationSummary
 
 if TYPE_CHECKING:
     from .validation_orchestrator import ValidationRun
-
 
 
 REQUIRED_STAGES = (
@@ -48,7 +47,9 @@ class EvidenceBundle:
         if not self.dataset_version.strip():
             raise ValueError("dataset_version must not be empty")
         if tuple(stage.stage for stage in self.stages) != REQUIRED_STAGES:
-            raise ValueError("stages must contain all required evidence in canonical order")
+            raise ValueError(
+                "stages must contain all required evidence in canonical order"
+            )
 
     @property
     def fingerprint(self) -> str:
@@ -106,8 +107,12 @@ def build_evidence_bundle(
     """
     if not isinstance(candidate, ModelCandidate):
         raise TypeError("candidate must be a ModelCandidate")
-    if not hasattr(validation_run, "candidate_fingerprint") or not hasattr(validation_run, "stage_map"):
-        raise TypeError("validation_run must satisfy the ValidationRun contract")
+    if not hasattr(validation_run, "candidate_fingerprint") or not hasattr(
+        validation_run, "stage_map"
+    ):
+        raise TypeError(
+            "validation_run must satisfy the ValidationRun contract"
+        )
     if not isinstance(promotion_review, PromotionDecision):
         raise TypeError("promotion_review must be a PromotionDecision")
 
@@ -115,15 +120,13 @@ def build_evidence_bundle(
         raise ValueError("validation run does not match candidate")
     if promotion_review.candidate_fingerprint != candidate.fingerprint:
         raise ValueError("promotion review does not match candidate")
-    if promotion_review.state.value not in {"ELIGIBLE", "BLOCKED"}:
-        raise ValueError(
-            "promotion review must be an ELIGIBLE or BLOCKED review decision"
-        )
 
     stage_map: Mapping[str, ValidationSummary] = validation_run.stage_map
     missing = [stage for stage in REQUIRED_STAGES if stage not in stage_map]
     if missing:
-        raise ValueError(f"missing required evidence stages: {','.join(missing)}")
+        raise ValueError(
+            f"missing required evidence stages:{','.join(missing)}"
+        )
 
     invalid = [
         stage
@@ -135,8 +138,10 @@ def build_evidence_bundle(
             "cannot build complete evidence bundle from invalid stages: "
             + ",".join(invalid)
         )
+
     if not validation_run.gate.valid:
         raise ValueError("validation run gate is invalid")
+
     if promotion_review.state.value != "ELIGIBLE":
         raise ValueError("promotion review is blocked")
 
@@ -147,7 +152,9 @@ def build_evidence_bundle(
         for fingerprint in result.artifact_fingerprints
     }
     if candidate.artifact_fingerprint not in fingerprints:
-        raise ValueError("candidate artifact fingerprint is absent from validation evidence")
+        raise ValueError(
+            "candidate artifact fingerprint is absent from validation evidence"
+        )
 
     return EvidenceBundle(
         candidate_fingerprint=candidate.fingerprint,
@@ -159,4 +166,8 @@ def build_evidence_bundle(
     )
 
 
-__all__ = ["EvidenceBundle", "REQUIRED_STAGES", "build_evidence_bundle"]
+__all__ = [
+    "EvidenceBundle",
+    "REQUIRED_STAGES",
+    "build_evidence_bundle",
+]
