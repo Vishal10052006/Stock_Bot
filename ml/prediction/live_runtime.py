@@ -82,6 +82,7 @@ class LiveModelRuntime:
         self.target_history = pd.DataFrame()
         self.benchmark_history = pd.DataFrame()
         self.predictions = 0
+        self.last_prediction = None
 
     @classmethod
     def from_env(cls, config: LiveModelRuntimeConfig) -> "LiveModelRuntime":
@@ -216,6 +217,7 @@ class LiveModelRuntime:
             model_version=self.config.model_version or self.bundle.provenance.model_version,
         )
         self.predictions += 1
+        self.last_prediction = prediction
         return prediction
 
     def run(self) -> tuple[object, ...]:
@@ -237,8 +239,31 @@ class LiveModelRuntime:
         return tuple(predictions)
 
     def dashboard(self) -> dict:
-        """Return the shared monitoring snapshot for the dashboard."""
-        return self.runtime.report()
+        """Return monitoring plus the latest model-only prediction."""
+        snapshot = dict(self.runtime.report())
+        if self.last_prediction is not None:
+            probabilities = self.last_prediction.probabilities.iloc[0].to_dict()
+            snapshot["live_model"] = {
+                "symbol": self.last_prediction.symbol,
+                "timestamp": self.last_prediction.timestamp,
+                "predicted_class": self.last_prediction.predicted_class,
+                "model_version": self.last_prediction.model_version,
+                "feature_version": self.last_prediction.feature_version,
+                "p_long": float(probabilities["LONG_SUCCESS"]),
+                "p_short": float(probabilities["SHORT_SUCCESS"]),
+                "p_no_edge": float(probabilities["NO_EDGE"]),
+                "predictions_generated": self.predictions,
+                "broker_orders": 0,
+                "trading_authority": "NONE",
+            }
+        else:
+            snapshot["live_model"] = {
+                "predictions_generated": self.predictions,
+                "broker_orders": 0,
+                "trading_authority": "NONE",
+                "status": "WARMUP_OR_WAITING_FOR_COMPLETED_CANDLE",
+            }
+        return snapshot
 
 
 __all__ = ["LiveModelRuntime", "LiveModelRuntimeConfig"]
