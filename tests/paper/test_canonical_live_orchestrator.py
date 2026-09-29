@@ -1,6 +1,4 @@
-"""Tests for the canonical live-paper integration boundary."""
-
-from datetime import datetime, timezone
+"""Tests for the canonical live-paper prediction integration seam."""
 
 import pandas as pd
 import pytest
@@ -12,7 +10,6 @@ from market.data.realtime_pipeline import RealtimeMarketDataPipeline
 from ml.models.logistic import LogisticOutcomeModel
 from ml.preprocessing.pipeline import FeaturePreprocessor
 from trading.paper.canonical_live_orchestrator import (
-    CanonicalLivePaperConfig,
     CanonicalLivePaperError,
     CanonicalLivePaperOrchestrator,
 )
@@ -20,7 +17,7 @@ from trading.paper.live_loop import LivePaperEngine, LivePaperSessionConfig
 
 
 def _fitted_components():
-    """Build the same small fitted Phase-9 components used by adapter tests."""
+    """Build small fitted Phase-9 components for integration testing."""
     from tests.test_analysis_prediction_integration import _training_frame
 
     x_train, y_train = _training_frame()
@@ -32,8 +29,8 @@ def _fitted_components():
     return model, preprocessor
 
 
-def _candle():
-    """Return one valid completed 5-minute candle."""
+def _candle() -> Candle:
+    """Return a valid completed 5-minute candle."""
     return Candle(
         symbol="RELIANCE",
         exchange="NSE",
@@ -47,14 +44,14 @@ def _candle():
     )
 
 
-def _market_context():
-    """Create a minimal causal MarketContext for constructor validation."""
-    ts = pd.Timestamp("2026-09-29T09:20:00Z").to_pydatetime()
+def _market_context() -> MarketContext:
+    """Return a causal MarketContext for the integration fixture."""
+    timestamp = pd.Timestamp("2026-09-29T09:20:00Z").to_pydatetime()
     return MarketContext(
-        timestamp=ts,
+        timestamp=timestamp,
         benchmark="NIFTY",
         state=MarketState(
-            timestamp=ts,
+            timestamp=timestamp,
             benchmark="NIFTY",
         ),
         metadata=MarketContextMetadata(
@@ -64,17 +61,18 @@ def _market_context():
     )
 
 
-def _orchestrator():
-    """Construct an orchestrator with test doubles for network dependencies."""
+def _orchestrator(
+    downstream_handler=None,
+) -> CanonicalLivePaperOrchestrator:
+    """Construct the seam without opening any network connection."""
     model, preprocessor = _fitted_components()
-    paper = LivePaperEngine(
+    paper_engine = LivePaperEngine(
         LivePaperSessionConfig(
             symbol="RELIANCE",
             target_trades=10,
         )
     )
 
-    # Constructor only checks the concrete feed type; no connection is opened.
     market_data = RealtimeMarketDataPipeline.__new__(
         RealtimeMarketDataPipeline
     )
@@ -84,12 +82,10 @@ def _orchestrator():
         market_bot=MarketBot(MarketBotConfig(benchmark="NIFTY")),
         model=model,
         preprocessor=preprocessor,
-        paper_engine=paper,
+        paper_engine=paper_engine,
         benchmark_history_provider=lambda _: pd.DataFrame(
             {
-                "timestamp": pd.to_datetime(
-                    ["2026-09-29T09:20:00Z"]
-                ),
+                "timestamp": pd.to_datetime(["2026-09-29T09:20:00Z"]),
                 "close": [25_000.0],
                 "market_return_3": [0.001],
                 "market_return_12": [0.002],
@@ -97,15 +93,12 @@ def _orchestrator():
             }
         ),
         benchmark_context_provider=lambda _, __: _market_context(),
-        config=CanonicalLivePaperConfig(
-            symbol="RELIANCE",
-            target_trades=10,
-        ),
+        downstream_handler=downstream_handler,
     )
 
 
-def test_canonical_orchestrator_builds_prediction():
-    """Verify the real Market -> Analysis -> Prediction contract is connected."""
+def test_canonical_seam_produces_model_prediction():
+    """Verify completed candles reach canonical model inference."""
     prediction = _orchestrator().process_candle(_candle())
 
     assert prediction.symbol == "RELIANCE"
@@ -119,32 +112,25 @@ def test_canonical_orchestrator_builds_prediction():
 
 
 def test_future_market_context_is_rejected():
-    """The live-paper boundary must reject a future MarketContext."""
+    """Future MarketContext must fail closed before prediction."""
     orchestrator = _orchestrator()
+    future = MarketContext(
+        timestamp=pd.Timestamp("2026-09-29T09:25:00Z").to_pydatetime(),
+        benchmark="NIFTY",
+        state=MarketState(
+            timestamp=pd.Timestamp("2026-09-29T09:25:00Z").to_pydatetime(),
+            benchmark="NIFTY",
+        ),
+        metadata=MarketContextMetadata(
+            data_version="test-data",
+            feature_version="v1.0",
+        ),
+    )
 
-    original_provider = orchestrator.benchmark_context_provider
     object.__setattr__(
         orchestrator,
         "benchmark_context_provider",
-        lambda _, __: MarketContext(
-            timestamp=datetime(2026, 9, 29, 9, 25, tzinfo=timezone.utc),
-            benchmark="NIFTY",
-            state=MarketState(
-                timestamp=datetime(
-                    2026,
-                    9,
-                    29,
-                    9,
-                    25,
-                    tzinfo=timezone.utc,
-                ),
-                benchmark="NIFTY",
-            ),
-            metadata=MarketContextMetadata(
-                data_version="test-data",
-                feature_version="v1.0",
-            ),
-        ),
+        lambda _, __: future,
     )
 
     with pytest.raises(
@@ -153,8 +139,22 @@ def test_future_market_context_is_rejected():
     ):
         orchestrator.process_candle(_candle())
 
-    object.__setattr__(
-        orchestrator,
-        "benchmark_context_provider",
-        original_provider,
+
+def test_downstream_callback_receives_canonical_prediction():
+    """The orchestrator exposes prediction/analysis without adding broker logic."""
+    captured = {}
+
+    def downstream(prediction, analysis, candle, paper_engine):
+        captured["prediction"] = prediction
+        captured["analysis"] = analysis
+        captured["candle"] = candle
+        captured["paper_engine"] = paper_engine
+
+    prediction = _orchestrator(downstream_handler=downstream).process_candle(
+        _candle()
     )
+
+    assert captured["prediction"] == prediction
+    assert captured["candle"] == _candle()
+    assert isinstance(captured["analysis"].feature_vector, dict)
+    assert captured["paper_engine"].config.symbol == "RELIANCE"
