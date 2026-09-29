@@ -11,6 +11,7 @@ import json
 from pathlib import Path
 from typing import Any, Iterable
 
+from .evidence_runner import EvidenceBundle
 from .contracts import (
     DatasetVersion,
     ExperienceBundle,
