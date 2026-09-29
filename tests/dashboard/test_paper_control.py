@@ -37,7 +37,6 @@ class FakeRuntime:
         self.predictions += 1
         while not self.stopped and not self.killed:
             time.sleep(0.01)
-            break
         return ()
 
     def dashboard(self):
