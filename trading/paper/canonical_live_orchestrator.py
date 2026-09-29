@@ -21,6 +21,7 @@ from ml.models.logistic import LogisticOutcomeModel
 from ml.preprocessing.pipeline import FeaturePreprocessor
 from trading.market_bot_pipeline import build_market_analysis_from_market_bot
 from trading.paper.live_loop import LivePaperEngine, LivePaperSessionResult
+from trading.paper.canonical_paper_callback import execute_prediction_to_paper
 
 
 class CanonicalLivePaperError(RuntimeError):
@@ -195,8 +196,12 @@ class CanonicalLivePaperOrchestrator:
 
         # The callback is the only downstream handoff. No direct broker access
         # or alternate Strategy/Risk implementation exists in this module.
-        if self.downstream_handler is not None:
-            self.downstream_handler(
+        handler = self.downstream_handler
+        if handler is not None:
+            handler(prediction, analysis, candle, self.paper_engine)
+        else:
+            # Default to the canonical Strategy -> Risk -> Paper boundary.
+            execute_prediction_to_paper(
                 prediction,
                 analysis,
                 candle,
