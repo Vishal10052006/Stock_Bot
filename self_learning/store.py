@@ -86,6 +86,13 @@ class LearningStore:
     def add_cycle_report(self, record: LearningCycleReport) -> None:
         self._append("cycle", record)
 
+
+    def add_evidence_bundle(self, record: Any) -> None:
+        """Persist one complete evidence bundle as an append-only artifact."""
+        if not hasattr(record, "fingerprint"):
+            raise TypeError("evidence bundle must expose a fingerprint")
+        self._append("evidence_bundle", record)
+
     def _read_raw(self) -> tuple[tuple[str, dict[str, Any]], ...]:
         if not self.path.exists():
             return ()
