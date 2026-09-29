@@ -158,12 +158,16 @@ class UpstoxInstrumentMapper:
 
         parts = instrument_key.split("|", 1)
 
-        if len(parts) != 2 or parts[0] != "NSE_EQ" or not parts[1].strip():
-            raise ValueError(
-                "NSE equity instrument key must have the format "
-                "NSE_EQ|<ISIN>"
+        if len(parts) != 2 or not parts[1].strip():
+            raise ValueError("Upstox instrument key must contain a provider segment and identity")
+        if parts[0] == "NSE_INDEX" and normalized_symbol == "NIFTY50":
+            return UpstoxInstrumentIdentity(
+                symbol=normalized_symbol,
+                instrument_key=instrument_key,
+                isin=parts[1].strip().upper(),
             )
-
+        if parts[0] != "NSE_EQ":
+            raise ValueError("NSE equity instrument key must use the NSE_EQ segment")
         return UpstoxInstrumentIdentity(
             symbol=normalized_symbol,
             instrument_key=instrument_key,
