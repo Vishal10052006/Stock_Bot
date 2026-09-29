@@ -1,8 +1,8 @@
 """Canonical real-market paper integration boundary.
 
-This adapter replaces the legacy live-paper entry feature shortcut with the
-existing Market Bot -> Analysis -> Prediction -> Strategy -> Risk contract
-chain. The execution target remains the existing paper engine only.
+Connects completed market candles to the existing Market Bot -> Analysis ->
+Prediction chain. A downstream Strategy/Risk/Paper callback is injectable so
+this layer coordinates existing authorities without duplicating them.
 """
 
 from __future__ import annotations
@@ -12,7 +12,7 @@ from typing import Any, Callable, Iterable
 
 import pandas as pd
 
-from market.bot.contracts import MarketContext, MarketContextMetadata, MarketState
+from market.bot.contracts import MarketContext
 from market.bot.orchestrator import MarketBot
 from market.candles.models import Candle
 from market.data.realtime_pipeline import RealtimeMarketDataPipeline
@@ -20,18 +20,11 @@ from ml.integration.analysis_prediction import PredictionContext, predict_from_a
 from ml.models.logistic import LogisticOutcomeModel
 from ml.preprocessing.pipeline import FeaturePreprocessor
 from trading.market_bot_pipeline import build_market_analysis_from_market_bot
-from trading.paper.live_loop import (
-    LivePaperEngine,
-    LivePaperSessionConfig,
-    LivePaperSessionResult,
-)
-from trading.strategy.models import StrategyDirection, StrategyInput
-from trading.risk.gate import evaluate_strategy_risk, RiskDecisionStatus
-from execution.trading_execution import authorize_risk_decision, ExecutionAuthorizationStatus
+from trading.paper.live_loop import LivePaperEngine, LivePaperSessionResult
 
 
 class CanonicalLivePaperError(RuntimeError):
-    """Raised when the causal live-paper composition cannot proceed safely."""
+    """Raised when the causal paper composition cannot proceed safely."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -45,7 +38,7 @@ class CanonicalLivePaperConfig:
     target_trades: int = 10
 
     def __post_init__(self) -> None:
-        """Validate configuration at construction time."""
+        """Validate the runtime configuration."""
         if not self.symbol.strip():
             raise ValueError("symbol must not be empty")
         if not self.model_version.strip():
@@ -60,10 +53,11 @@ class CanonicalLivePaperConfig:
 
 @dataclass(frozen=True, slots=True)
 class CanonicalLivePaperOrchestrator:
-    """Connect completed candles to the authoritative paper-trading boundary.
+    """Coordinate live candles through the canonical upstream pipeline.
 
-    This class owns orchestration only. Market Bot, Analysis Bot, Prediction,
-    Strategy, Risk, and Paper Execution remain the authorities for their jobs.
+    The downstream callback is intentionally dependency-injected. This keeps
+    Strategy and Risk authority in their existing engines and prevents this
+    orchestration module from inventing a second trading policy.
     """
 
     market_data: RealtimeMarketDataPipeline
@@ -72,13 +66,12 @@ class CanonicalLivePaperOrchestrator:
     preprocessor: FeaturePreprocessor
     paper_engine: LivePaperEngine
     benchmark_history_provider: Callable[[pd.Timestamp], pd.DataFrame]
-    benchmark_context_provider: Callable[
-        [pd.Timestamp, pd.DataFrame], MarketContext
-    ]
+    benchmark_context_provider: Callable[[pd.Timestamp, pd.DataFrame], MarketContext]
+    downstream_handler: Callable[[PredictionContext, Any, Candle, LivePaperEngine], None] | None = None
     config: CanonicalLivePaperConfig = CanonicalLivePaperConfig()
 
     def __post_init__(self) -> None:
-        """Reject incompatible dependencies before a session can start."""
+        """Reject incompatible dependencies before any network activity."""
         if not isinstance(self.market_data, RealtimeMarketDataPipeline):
             raise TypeError("market_data must be RealtimeMarketDataPipeline")
         if not isinstance(self.market_bot, MarketBot):
@@ -99,9 +92,12 @@ class CanonicalLivePaperOrchestrator:
             raise CanonicalLivePaperError(
                 "model/preprocessor feature counts do not match"
             )
+
         expected_symbol = self.config.symbol.strip().upper()
         if self.paper_engine.config.symbol != expected_symbol:
-            raise CanonicalLivePaperError("paper engine symbol must match orchestrator")
+            raise CanonicalLivePaperError(
+                "paper engine symbol must match orchestrator"
+            )
         if self.paper_engine.config.target_trades != self.config.target_trades:
             raise CanonicalLivePaperError(
                 "paper engine target_trades must match orchestrator"
@@ -109,7 +105,7 @@ class CanonicalLivePaperOrchestrator:
 
     @staticmethod
     def _candle_frame(candle: Candle) -> pd.DataFrame:
-        """Convert one canonical candle to the DataFrame boundary."""
+        """Convert one canonical candle into the AB-30 input frame."""
         return pd.DataFrame(
             [
                 {
@@ -124,68 +120,25 @@ class CanonicalLivePaperOrchestrator:
             ]
         )
 
-    @staticmethod
-    def _market_context_to_history(
-        market_context: MarketContext,
-    ) -> pd.DataFrame:
-        """Create the minimal benchmark history accepted by AB-30.
-
-        The exact market-state values are point-in-time observations already
-        produced by Market Bot. Missing history is rejected rather than
-        fabricated.
-        """
-        state = market_context.state
-        timestamp = pd.Timestamp(market_context.timestamp)
-        values = {
-            "timestamp": timestamp,
-            "close": float(getattr(state, "benchmark_close", 0.0) or 0.0),
-            "market_return_3": getattr(state, "market_return_3", None),
-            "market_return_12": getattr(state, "market_return_12", None),
-            "market_volatility_20": getattr(
-                state,
-                "market_volatility_20",
-                None,
-            ),
-        }
-        if values["close"] <= 0.0:
-            raise CanonicalLivePaperError(
-                "benchmark context does not expose a usable causal benchmark price"
-            )
-        if any(values[key] is None for key in (
-            "market_return_3",
-            "market_return_12",
-            "market_volatility_20",
-        )):
-            raise CanonicalLivePaperError(
-                "benchmark history must provide causal market return/volatility fields"
-            )
-        return pd.DataFrame([values])
-
-    def process_candle(self, candle: Candle) -> PredictionContext:
-        """Run one candle through Market -> Analysis -> Prediction.
-
-        Strategy/Risk/Paper execution is intentionally kept in the existing
-        LivePaperEngine until its entry contract can consume the canonical
-        PredictionContext directly. No simplified feature fallback is allowed.
-        """
+    def build_prediction(self, candle: Candle) -> tuple[PredictionContext, Any]:
+        """Build one causal Market -> Analysis -> Prediction result."""
         if not isinstance(candle, Candle):
             raise TypeError("candle must be a Candle")
 
-        symbol = candle.symbol.strip().upper()
-        if symbol != self.config.symbol.strip().upper():
+        expected_symbol = self.config.symbol.strip().upper()
+        if candle.symbol.strip().upper() != expected_symbol:
             raise CanonicalLivePaperError(
-                f"unexpected symbol {symbol}; expected {self.config.symbol}"
+                f"unexpected symbol {candle.symbol}; expected {expected_symbol}"
             )
 
         cutoff = pd.Timestamp(candle.timestamp)
         if cutoff.tzinfo is None:
-            raise CanonicalLivePaperError("candle timestamp must be timezone-aware")
+            raise CanonicalLivePaperError(
+                "candle timestamp must be timezone-aware"
+            )
 
         benchmark_history = self.benchmark_history_provider(cutoff)
-        if (
-            not isinstance(benchmark_history, pd.DataFrame)
-            or benchmark_history.empty
-        ):
+        if not isinstance(benchmark_history, pd.DataFrame) or benchmark_history.empty:
             raise CanonicalLivePaperError(
                 "benchmark history provider returned no causal benchmark history"
             )
@@ -198,15 +151,20 @@ class CanonicalLivePaperOrchestrator:
             raise CanonicalLivePaperError(
                 "benchmark context provider must return MarketContext"
             )
-        if pd.Timestamp(market_context.timestamp) > cutoff:
+
+        context_timestamp = pd.Timestamp(market_context.timestamp)
+        if context_timestamp.tzinfo is None:
+            raise CanonicalLivePaperError(
+                "MarketContext timestamp must be timezone-aware"
+            )
+        if context_timestamp > cutoff:
             raise CanonicalLivePaperError(
                 "MarketContext cannot be newer than the candle decision time"
             )
 
-        candles = self._candle_frame(candle)
         result = build_market_analysis_from_market_bot(
-            candles,
-            symbol=symbol,
+            self._candle_frame(candle),
+            symbol=expected_symbol,
             benchmark_history=benchmark_history,
             market_context=market_context,
             data_version=self.config.data_version,
@@ -224,16 +182,31 @@ class CanonicalLivePaperOrchestrator:
             raise CanonicalLivePaperError(
                 "prediction timestamp must exactly match candle decision time"
             )
-
-        if prediction.symbol != symbol:
+        if prediction.symbol != expected_symbol:
             raise CanonicalLivePaperError(
                 "prediction symbol must exactly match candle symbol"
+            )
+
+        return prediction, result.analysis
+
+    def process_candle(self, candle: Candle) -> PredictionContext:
+        """Run one completed candle through the canonical prediction boundary."""
+        prediction, analysis = self.build_prediction(candle)
+
+        # The callback is the only downstream handoff. No direct broker access
+        # or alternate Strategy/Risk implementation exists in this module.
+        if self.downstream_handler is not None:
+            self.downstream_handler(
+                prediction,
+                analysis,
+                candle,
+                self.paper_engine,
             )
 
         return prediction
 
     def run(self, symbols: Iterable[str]) -> LivePaperSessionResult:
-        """Consume the realtime feed and fail closed on composition errors."""
+        """Consume the realtime candle stream and finalize the paper session."""
         requested = tuple(
             symbol.strip().upper()
             for symbol in symbols
@@ -242,7 +215,7 @@ class CanonicalLivePaperOrchestrator:
         expected = (self.config.symbol.strip().upper(),)
         if requested != expected:
             raise CanonicalLivePaperError(
-                "canonical live-paper currently requires exactly one configured symbol"
+                "canonical live-paper requires exactly one configured symbol"
             )
 
         self.market_data.start(requested)
