@@ -53,6 +53,43 @@ class EvidenceBundle:
 
         return _fingerprint(self)
 
+    def to_dict(self) -> dict[str, object]:
+        """Serialize the evidence bundle for append-only ledger storage."""
+        return {
+            "candidate_fingerprint": self.candidate_fingerprint,
+            "dataset_version": self.dataset_version,
+            "artifact_fingerprint": self.artifact_fingerprint,
+            "validation_run_fingerprint": self.validation_run_fingerprint,
+            "stages": [
+                {
+                    "stage": stage.stage,
+                    "valid": stage.valid,
+                    "observations": stage.observations,
+                    "metrics": dict(stage.metrics),
+                    "limitations": list(stage.limitations),
+                    "issues": list(stage.issues),
+                    "artifact_fingerprints": list(stage.artifact_fingerprints),
+                    "fingerprint": stage.fingerprint,
+                }
+                for stage in self.stages
+            ],
+            "promotion_review": {
+                "candidate_id": self.promotion_review.candidate_id,
+                "candidate_fingerprint": self.promotion_review.candidate_fingerprint,
+                "champion_version": self.promotion_review.champion_version,
+                "challenger_version": self.promotion_review.challenger_version,
+                "state": self.promotion_review.state.value,
+                "reasons": list(self.promotion_review.reasons),
+                "validation_fingerprints": list(
+                    self.promotion_review.validation_fingerprints
+                ),
+                "approval_reference": self.promotion_review.approval_reference,
+                "created_at": self.promotion_review.created_at,
+                "fingerprint": self.promotion_review.fingerprint,
+            },
+            "fingerprint": self.fingerprint,
+        }
+
 
 def build_evidence_bundle(
     candidate: ModelCandidate,
