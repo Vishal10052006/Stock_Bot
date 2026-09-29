@@ -11,6 +11,7 @@ import json
 from pathlib import Path
 from typing import Any, Iterable
 
+from .evidence_runner import EvidenceBundle
 from .contracts import (
     DatasetVersion,
     ExperienceBundle,
@@ -85,6 +86,12 @@ class LearningStore:
 
     def add_cycle_report(self, record: LearningCycleReport) -> None:
         self._append("cycle", record)
+
+    def add_evidence_bundle(self, record: Any) -> None:
+        """Persist one complete evidence bundle as an append-only artifact."""
+        if not hasattr(record, "fingerprint") or not hasattr(record, "to_dict"):
+            raise TypeError("evidence bundle must expose fingerprint and to_dict")
+        self._append("evidence_bundle", record)
 
     def _read_raw(self) -> tuple[tuple[str, dict[str, Any]], ...]:
         if not self.path.exists():

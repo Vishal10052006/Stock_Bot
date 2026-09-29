@@ -8,10 +8,13 @@ and refuses to manufacture missing evidence.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Mapping
+from typing import TYPE_CHECKING, Mapping
 
 from .contracts import ModelCandidate, PromotionDecision, ValidationSummary
-from .validation_orchestrator import ValidationRun
+
+if TYPE_CHECKING:
+    from .validation_orchestrator import ValidationRun
+
 
 
 REQUIRED_STAGES = (
@@ -53,10 +56,47 @@ class EvidenceBundle:
 
         return _fingerprint(self)
 
+    def to_dict(self) -> dict[str, object]:
+        """Serialize the evidence bundle for append-only ledger storage."""
+        return {
+            "candidate_fingerprint": self.candidate_fingerprint,
+            "dataset_version": self.dataset_version,
+            "artifact_fingerprint": self.artifact_fingerprint,
+            "validation_run_fingerprint": self.validation_run_fingerprint,
+            "stages": [
+                {
+                    "stage": stage.stage,
+                    "valid": stage.valid,
+                    "observations": stage.observations,
+                    "metrics": dict(stage.metrics),
+                    "limitations": list(stage.limitations),
+                    "issues": list(stage.issues),
+                    "artifact_fingerprints": list(stage.artifact_fingerprints),
+                    "fingerprint": stage.fingerprint,
+                }
+                for stage in self.stages
+            ],
+            "promotion_review": {
+                "candidate_id": self.promotion_review.candidate_id,
+                "candidate_fingerprint": self.promotion_review.candidate_fingerprint,
+                "champion_version": self.promotion_review.champion_version,
+                "challenger_version": self.promotion_review.challenger_version,
+                "state": self.promotion_review.state.value,
+                "reasons": list(self.promotion_review.reasons),
+                "validation_fingerprints": list(
+                    self.promotion_review.validation_fingerprints
+                ),
+                "approval_reference": self.promotion_review.approval_reference,
+                "created_at": self.promotion_review.created_at,
+                "fingerprint": self.promotion_review.fingerprint,
+            },
+            "fingerprint": self.fingerprint,
+        }
+
 
 def build_evidence_bundle(
     candidate: ModelCandidate,
-    validation_run: ValidationRun,
+    validation_run: "ValidationRun",
     promotion_review: PromotionDecision,
 ) -> EvidenceBundle:
     """Bind exact candidate, validation run and review evidence.
@@ -66,8 +106,8 @@ def build_evidence_bundle(
     """
     if not isinstance(candidate, ModelCandidate):
         raise TypeError("candidate must be a ModelCandidate")
-    if not isinstance(validation_run, ValidationRun):
-        raise TypeError("validation_run must be a ValidationRun")
+    if not hasattr(validation_run, "candidate_fingerprint") or not hasattr(validation_run, "stage_map"):
+        raise TypeError("validation_run must satisfy the ValidationRun contract")
     if not isinstance(promotion_review, PromotionDecision):
         raise TypeError("promotion_review must be a PromotionDecision")
 
