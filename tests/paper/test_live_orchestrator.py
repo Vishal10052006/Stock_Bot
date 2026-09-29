@@ -75,7 +75,7 @@ def test_orchestrator_rejects_legacy_fallback():
             'timestamp': pd.to_datetime(['2026-09-29T09:20:00Z']),
             'close': [25000.0],
         }),
-        benchmark_context_provider=lambda _, __: object(),
+        benchmark_context_provider=lambda _, __: type('FakeContext', (), {'timestamp': pd.Timestamp('2026-09-29T09:20:00Z')})(),
         config=LivePaperOrchestratorConfig(symbol='RELIANCE', target_trades=10),
     )
 
