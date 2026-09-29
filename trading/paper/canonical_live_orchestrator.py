@@ -70,6 +70,7 @@ class CanonicalLivePaperOrchestrator:
     benchmark_history_provider: Callable[[pd.Timestamp], pd.DataFrame]
     benchmark_context_provider: Callable[[pd.Timestamp, pd.DataFrame], MarketContext]
     downstream_handler: Callable[[PredictionContext, Any, Candle, LivePaperEngine], None] | None = None
+    history: CausalCandleHistory | None = None
     config: CanonicalLivePaperConfig = CanonicalLivePaperConfig()
 
     def __post_init__(self) -> None:
