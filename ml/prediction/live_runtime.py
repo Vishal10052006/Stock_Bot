@@ -28,7 +28,8 @@ from market.data.metrics import DataQualityMetrics
 from market.data.realtime_pipeline import RealtimeMarketDataPipeline
 from market.data.validation import MarketEventValidator
 from ml.prediction.live_bundle import LivePredictionBundle, load_live_prediction_bundle
-from ml.prediction.storage import PredictionStore
+from ml.prediction.storage import PredictionRecord, PredictionStore
+from trading.paper.live_loop import LivePaperEngine, LivePaperSessionConfig
 from monitoring.runtime import MonitoringRuntime
 from trading.runtime_pipeline import TradingResearchRuntime
 
@@ -71,6 +72,7 @@ class LiveModelRuntime:
         market_bot: MarketBot,
         runtime: TradingResearchRuntime,
         store: PredictionStore | None,
+        paper_engine: LivePaperEngine,
     ) -> None:
         self.config = config
         self.bundle = bundle
@@ -79,6 +81,7 @@ class LiveModelRuntime:
         self.market_bot = market_bot
         self.runtime = runtime
         self.store = store
+        self.paper_engine = paper_engine
         self.target_history = pd.DataFrame()
         self.benchmark_history = pd.DataFrame()
         self.predictions = 0
@@ -123,6 +126,13 @@ class LiveModelRuntime:
             )
         )
         store = PredictionStore(config.prediction_store)
+        paper_engine = LivePaperEngine(
+            LivePaperSessionConfig(
+                symbol=config.symbol,
+                model_version=bundle.provenance.model_version,
+                output_dir=Path('paper/sessions'),
+            )
+        )
         return cls(
             config=config,
             bundle=bundle,
@@ -131,6 +141,7 @@ class LiveModelRuntime:
             market_bot=market_bot,
             runtime=runtime,
             store=store,
+            paper_engine=paper_engine,
         )
 
     @staticmethod
@@ -205,7 +216,7 @@ class LiveModelRuntime:
             provenance={"source": "upstox_live_market"},
             monitoring=self.runtime.monitoring,
         )
-        _, prediction = self.runtime.market_analysis_and_prediction(
+        analysis_result, prediction = self.runtime.market_analysis_and_prediction(
             self.target_history,
             symbol=self.config.symbol,
             benchmark_history=benchmark[["timestamp", "close"]],
@@ -218,6 +229,35 @@ class LiveModelRuntime:
         )
         self.predictions += 1
         self.last_prediction = prediction
+
+        if self.store is not None:
+            probabilities = prediction.probabilities.iloc[0]
+            self.store.append(
+                PredictionRecord(
+                    timestamp=prediction.timestamp,
+                    symbol=prediction.symbol,
+                    model_version=prediction.model_version,
+                    dataset_version=analysis_result.analysis.data_version,
+                    feature_version=prediction.feature_version,
+                    generated_at=pd.Timestamp.now(tz="UTC"),
+                    prediction_type="phase9",
+                    payload={
+                        "predicted_class": prediction.predicted_class,
+                        "LONG_SUCCESS": float(probabilities["LONG_SUCCESS"]),
+                        "SHORT_SUCCESS": float(probabilities["SHORT_SUCCESS"]),
+                        "NO_EDGE": float(probabilities["NO_EDGE"]),
+                    },
+                )
+            )
+
+        regime_row = analysis_result.regime.iloc[-1]
+        self.paper_engine.on_candle_with_context(
+            candle,
+            analysis=analysis_result.analysis,
+            prediction=prediction,
+            regime=str(regime_row["regime"]),
+            regime_probability=float(regime_row["regime_probability"]),
+        )
         return prediction
 
     def run(self) -> tuple[object, ...]:
