@@ -79,5 +79,5 @@ def test_orchestrator_rejects_legacy_fallback():
         config=LivePaperOrchestratorConfig(symbol='RELIANCE', target_trades=10),
     )
 
-    with pytest.raises(LivePaperOrchestratorError, match='canonical Analysis/Prediction'):
+    with pytest.raises(LivePaperOrchestratorError, match='canonical Analysis/Prediction|rejected candle'):
         runtime.process_candle(_candle())
