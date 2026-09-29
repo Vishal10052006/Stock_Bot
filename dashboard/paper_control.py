@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
-from threading import Lock, Thread
+from threading import RLock, Thread
 from typing import Callable, Any
 
 
@@ -48,7 +48,7 @@ class PaperControlPlane:
             raise ValueError("target_trades must be positive")
         self._runtime_factory = runtime_factory
         self._target_trades = target_trades
-        self._lock = Lock()
+        self._lock = RLock()
         self._runtime: Any | None = None
         self._thread: Thread | None = None
         self._state = PaperControlState.STOPPED
@@ -147,7 +147,7 @@ class PaperControlPlane:
 
     def dashboard(self) -> dict[str, Any]:
         """Return control state plus the runtime dashboard when initialized."""
-        payload = {"paper_control": self.snapshot().__dict__ if False else None}
+        payload: dict[str, Any] = {}
         snapshot = self.snapshot()
         payload["paper_control"] = {
             "state": snapshot.state,
