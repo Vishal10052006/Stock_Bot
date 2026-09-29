@@ -95,6 +95,10 @@ class LiveModelRuntime:
         self._pause_event.set()
         self._stop_requested = Event()
         self._kill_requested = Event()
+        self.lifecycle_state = "CREATED"
+        self.lifecycle_error: str | None = None
+        self.benchmark_candles = 0
+        self.target_candles = 0
 
     @classmethod
     def from_env(cls, config: LiveModelRuntimeConfig) -> "LiveModelRuntime":
@@ -173,6 +177,8 @@ class LiveModelRuntime:
 
     def warmup(self) -> None:
         """Fetch causal historical candles before subscribing to live data."""
+        self.lifecycle_state = "WARMUP_STARTED"
+        self.lifecycle_error = None
         end = datetime.now(timezone.utc)
         start = end - timedelta(days=self.config.warmup_days)
 
@@ -206,6 +212,7 @@ class LiveModelRuntime:
             raise RuntimeError(
                 f"insufficient benchmark warmup: {len(self.benchmark_history)} bars; need at least 60"
             )
+        self.lifecycle_state = "WARMUP_COMPLETED"
 
     def _append(self, frame: pd.DataFrame, candle: Candle) -> pd.DataFrame:
         row = self._frame([candle])
@@ -297,38 +304,71 @@ class LiveModelRuntime:
 
     def run(self) -> tuple[object, ...]:
         """Run until target completion, operator stop, or prediction safety cap."""
-        self.warmup()
         predictions = []
-        self.feed.start([self.config.symbol, self.config.benchmark])
         try:
+            self.warmup()
+            self.feed.start([self.config.symbol, self.config.benchmark])
+            self.lifecycle_state = "FEED_STARTED"
+            saw_target_candle = False
+            self.lifecycle_state = "WAITING_FOR_CANDLE"
             for candle in self.feed.run():
                 if self._stop_requested.is_set():
                     break
 
                 if candle.symbol == self.config.benchmark:
+                    self.benchmark_candles += 1
                     self.benchmark_history = self._append(self.benchmark_history, candle)
+                    if self.lifecycle_state == "WAITING_FOR_CANDLE":
+                        self.lifecycle_state = "BENCHMARK_CANDLE_RECEIVED"
                     continue
 
+                saw_target_candle = True
+                self.target_candles += 1
                 self._pause_event.wait()
                 if self._stop_requested.is_set():
                     break
 
+                if self.predictions == 0:
+                    self.lifecycle_state = "FIRST_TARGET_CANDLE"
                 prediction = self._predict(candle)
                 if prediction is not None:
+                    if self.predictions == 1:
+                        self.lifecycle_state = "FIRST_PREDICTION"
                     predictions.append(prediction)
                     if self.paper_engine.session_completed:
                         break
                     if self.predictions >= self.config.max_predictions:
                         break
+
+            if (
+                not saw_target_candle
+                and not self._stop_requested.is_set()
+                and not self._kill_requested.is_set()
+            ):
+                self.lifecycle_error = "FEED_ENDED_BEFORE_FIRST_TARGET_CANDLE"
+                raise RuntimeError(self.lifecycle_error)
+        except Exception as exc:
+            if self.lifecycle_error is None:
+                self.lifecycle_error = f"{type(exc).__name__}: {exc}"
+            self.lifecycle_state = "FAILED"
+            raise
         finally:
             self.feed.stop()
 
         self.paper_result = self.paper_engine.finalize_session()
+        self.lifecycle_state = "STOP_REQUESTED" if self._stop_requested.is_set() else "COMPLETED"
         return tuple(predictions)
 
     def dashboard(self) -> dict:
         """Return monitoring plus the latest model-only prediction."""
         snapshot = dict(self.runtime.report())
+        snapshot["live_runtime"] = {
+            "lifecycle_state": self.lifecycle_state,
+            "lifecycle_error": self.lifecycle_error,
+            "benchmark_candles": self.benchmark_candles,
+            "target_candles": self.target_candles,
+            "predictions_generated": self.predictions,
+        }
         if self.last_prediction is not None:
             probabilities = self.last_prediction.probabilities.iloc[0].to_dict()
             snapshot["live_model"] = {
