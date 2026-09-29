@@ -8,10 +8,13 @@ and refuses to manufacture missing evidence.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Mapping
+from typing import TYPE_CHECKING, Mapping
 
 from .contracts import ModelCandidate, PromotionDecision, ValidationSummary
-from .validation_orchestrator import ValidationRun
+
+if TYPE_CHECKING:
+    from .validation_orchestrator import ValidationRun
+
 
 
 REQUIRED_STAGES = (
@@ -93,7 +96,7 @@ class EvidenceBundle:
 
 def build_evidence_bundle(
     candidate: ModelCandidate,
-    validation_run: ValidationRun,
+    validation_run: "ValidationRun",
     promotion_review: PromotionDecision,
 ) -> EvidenceBundle:
     """Bind exact candidate, validation run and review evidence.
@@ -103,8 +106,8 @@ def build_evidence_bundle(
     """
     if not isinstance(candidate, ModelCandidate):
         raise TypeError("candidate must be a ModelCandidate")
-    if not isinstance(validation_run, ValidationRun):
-        raise TypeError("validation_run must be a ValidationRun")
+    if not hasattr(validation_run, "candidate_fingerprint") or not hasattr(validation_run, "stage_map"):
+        raise TypeError("validation_run must satisfy the ValidationRun contract")
     if not isinstance(promotion_review, PromotionDecision):
         raise TypeError("promotion_review must be a PromotionDecision")
 
