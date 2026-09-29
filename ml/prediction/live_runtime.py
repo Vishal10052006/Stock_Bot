@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Callable
+from threading import Event
 
 import pandas as pd
 
@@ -90,6 +91,10 @@ class LiveModelRuntime:
         self.predictions = 0
         self.last_prediction = None
         self.paper_result = None
+        self._pause_event = Event()
+        self._pause_event.set()
+        self._stop_requested = Event()
+        self._kill_requested = Event()
 
     @classmethod
     def from_env(cls, config: LiveModelRuntimeConfig) -> "LiveModelRuntime":
@@ -265,21 +270,56 @@ class LiveModelRuntime:
         )
         return prediction
 
+    def pause(self) -> None:
+        """Pause prediction processing without authorizing or submitting orders."""
+        self._pause_event.clear()
+
+    def resume(self) -> None:
+        """Resume prediction processing."""
+        self._pause_event.set()
+
+    def request_stop(self) -> None:
+        """Request a controlled stop and interrupt the market feed."""
+        self._stop_requested.set()
+        self._pause_event.set()
+        self.feed.stop()
+
+    def request_kill(self) -> None:
+        """Emergency-stop the paper session and keep broker authority at NONE."""
+        self._kill_requested.set()
+        self._stop_requested.set()
+        self._pause_event.set()
+        self.feed.stop()
+
+    @property
+    def kill_requested(self) -> bool:
+        return self._kill_requested.is_set()
+
     def run(self) -> tuple[object, ...]:
-        """Run until max_predictions are produced or the feed terminates."""
+        """Run until target completion, operator stop, or prediction safety cap."""
         self.warmup()
         predictions = []
         self.feed.start([self.config.symbol, self.config.benchmark])
         try:
             for candle in self.feed.run():
-                if candle.symbol != self.config.benchmark:
-                    prediction = self._predict(candle)
-                    if prediction is not None:
-                        predictions.append(prediction)
-                        if self.paper_engine.session_completed:
-                            break
-                        if self.predictions >= self.config.max_predictions:
-                            break
+                if self._stop_requested.is_set():
+                    break
+
+                if candle.symbol == self.config.benchmark:
+                    self.benchmark_history = self._append(self.benchmark_history, candle)
+                    continue
+
+                self._pause_event.wait()
+                if self._stop_requested.is_set():
+                    break
+
+                prediction = self._predict(candle)
+                if prediction is not None:
+                    predictions.append(prediction)
+                    if self.paper_engine.session_completed:
+                        break
+                    if self.predictions >= self.config.max_predictions:
+                        break
         finally:
             self.feed.stop()
 
