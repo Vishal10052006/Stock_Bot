@@ -42,7 +42,8 @@ class LiveModelRuntimeConfig:
     benchmark: str = "NIFTY50"
     timeframe_minutes: int = 5
     warmup_days: int = 15
-    max_predictions: int = 1
+    target_trades: int = 10
+    max_predictions: int = 500
     model_artifact: Path = Path("data/models/live_prediction_bundle.pkl")
     instrument_master: Path = Path("data/reference/upstox/NSE.json.gz")
     prediction_store: Path = Path("paper/live_predictions.jsonl")
@@ -57,6 +58,8 @@ class LiveModelRuntimeConfig:
             raise ValueError("warmup_days must be positive")
         if self.max_predictions < 1:
             raise ValueError("max_predictions must be positive")
+        if self.target_trades < 1:
+            raise ValueError("target_trades must be positive")
 
 
 class LiveModelRuntime:
@@ -86,6 +89,7 @@ class LiveModelRuntime:
         self.benchmark_history = pd.DataFrame()
         self.predictions = 0
         self.last_prediction = None
+        self.paper_result = None
 
     @classmethod
     def from_env(cls, config: LiveModelRuntimeConfig) -> "LiveModelRuntime":
@@ -129,6 +133,7 @@ class LiveModelRuntime:
         paper_engine = LivePaperEngine(
             LivePaperSessionConfig(
                 symbol=config.symbol,
+                target_trades=config.target_trades,
                 model_version=bundle.provenance.model_version,
                 output_dir=Path('paper/sessions'),
             )
@@ -271,11 +276,14 @@ class LiveModelRuntime:
                     prediction = self._predict(candle)
                     if prediction is not None:
                         predictions.append(prediction)
+                        if self.paper_engine.session_completed:
+                            break
                         if self.predictions >= self.config.max_predictions:
                             break
         finally:
             self.feed.stop()
 
+        self.paper_result = self.paper_engine.finalize_session()
         return tuple(predictions)
 
     def dashboard(self) -> dict:
@@ -293,6 +301,11 @@ class LiveModelRuntime:
                 "p_short": float(probabilities["SHORT_SUCCESS"]),
                 "p_no_edge": float(probabilities["NO_EDGE"]),
                 "predictions_generated": self.predictions,
+                "paper_trades": self.paper_engine.completed_count,
+                "paper_target_trades": self.paper_engine.config.target_trades,
+                "paper_target_reached": self.paper_engine.completed_count >= self.paper_engine.config.target_trades,
+                "paper_net_pnl": float(self.paper_result.metrics.net_pnl) if self.paper_result is not None else None,
+                "paper_session_fingerprint": self.paper_result.session_fingerprint if self.paper_result is not None else None,
                 "broker_orders": 0,
                 "trading_authority": "NONE",
             }
