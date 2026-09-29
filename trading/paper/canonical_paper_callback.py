@@ -49,10 +49,10 @@ def execute_prediction_to_paper(
 ) -> CanonicalPaperDecision:
     """Evaluate canonical Prediction -> Strategy -> Risk -> Paper.
 
-    The handler adapts the AnalysisContext feature vector into the Strategy
-    contract, materializes a TradeCandidate only for actionable directions,
-    sizes it through the authoritative RiskEngine, then authorizes only the
-    exact approved quantity before submitting to the paper runtime.
+    The handler adapts the AnalysisContext feature vector into StrategyInput,
+    materializes a TradeCandidate for actionable decisions, passes that
+    candidate through the authoritative RiskEngine, and submits only the exact
+    risk-approved quantity to the existing paper runtime.
     """
     if not isinstance(prediction, PredictionContext):
         raise TypeError("prediction must be PredictionContext")
@@ -62,19 +62,16 @@ def execute_prediction_to_paper(
     timestamp = pd.Timestamp(prediction.timestamp)
     symbol = prediction.symbol
     features = dict(analysis.feature_vector)
-    row = pd.Series(features)
-    row["timestamp"] = timestamp
-    row["symbol"] = symbol
 
-    # The canonical AnalysisContext carries regime evidence in its feature
-    # vector only when the upstream dataset exposes these fields.
+    market_context = getattr(analysis, "market_context", {})
     regime = str(
-        getattr(analysis, "market_context", {}).get("regime")
+        market_context.get("regime")
         or getattr(analysis, "analytical_direction", "UNKNOWN")
     )
     regime_probability = float(
-        getattr(analysis, "market_context", {}).get("regime_probability")
-        or 0.0
+        market_context.get("regime_probability")
+        if market_context.get("regime_probability") is not None
+        else 0.0
     )
 
     strategy_input = StrategyInput(
@@ -83,17 +80,18 @@ def execute_prediction_to_paper(
         decision_features=features,
         prediction=prediction,
         analysis_context=analysis,
+        market_context=market_context,
+        research_context=getattr(analysis, "research_context", None),
         regime=regime,
         regime_probability=regime_probability,
-        market_context=getattr(analysis, "market_context", None),
-        research_context=getattr(analysis, "research_context", None),
         versions={
             "analysis": getattr(analysis, "analysis_version", "v1.0"),
             "feature": getattr(analysis, "feature_version", "v1.0"),
             "data": getattr(analysis, "data_version", "unknown"),
             "model": prediction.model_version,
             "market": (
-                getattr(analysis, "provenance", {}).get("market_bot", {})
+                getattr(analysis, "provenance", {})
+                .get("market_bot", {})
                 .get("market_version", "market-bot-v1.0")
             ),
         },
@@ -107,21 +105,33 @@ def execute_prediction_to_paper(
             prediction=prediction,
             strategy=strategy_decision,
             risk_status="NOT_ENTERED",
-            risk_reason="Strategy produced NO_TRADE.",
+            risk_reason=strategy_decision.rationale,
             paper_order_status=None,
             trade_id=None,
         )
 
-    # Keep account state decision-time and sourced from the existing paper
-    # runtime. No synthetic position state is inserted.
-    mark_prices = {symbol: float(candle.close)}
-    equity, realized_pnl, unrealized_pnl, gross_exposure = (
-        paper_engine.runtime.account_snapshot(mark_prices)
-    )
-    open_positions = len(paper_engine.runtime.positions)
-    symbol_open = paper_engine.exit_engine.has_open_position(symbol)
+    row = pd.Series(features)
+    row["timestamp"] = timestamp
+    row["symbol"] = symbol
 
+    # Candidate validation happens before any paper order is submitted.
+    try:
+        candidate = build_candidate_from_strategy(strategy_decision, row)
+    except (TypeError, ValueError) as exc:
+        return CanonicalPaperDecision(
+            prediction=prediction,
+            strategy=strategy_decision,
+            risk_status="CANDIDATE_REJECTED",
+            risk_reason=str(exc),
+            paper_order_status=None,
+            trade_id=None,
+        )
+
+    equity, realized_pnl, unrealized_pnl, gross_exposure = (
+        paper_engine.runtime.account_snapshot({symbol: float(candle.close)})
+    )
     risk_engine = risk_engine or RiskEngine()
+
     assessment = evaluate_strategy_candidate_risk(
         strategy_decision,
         row,
@@ -130,16 +140,16 @@ def execute_prediction_to_paper(
         day_start_equity=paper_engine.config.initial_equity,
         realized_pnl=realized_pnl,
         unrealized_pnl=unrealized_pnl,
-        open_positions=open_positions,
+        open_positions=len(paper_engine.runtime.positions),
         trades_today=len(paper_engine._submitted_orders),
         gross_exposure=gross_exposure,
-        symbol_already_open=symbol_open,
+        symbol_already_open=paper_engine.exit_engine.has_open_position(symbol),
         liquidity_available=True,
         kill_switch_active=False,
     )
 
     risk_decision = assessment.decision
-    if risk_decision.status.name != "APPROVED":
+    if risk_decision.status is not RiskDecisionStatus.APPROVED:
         return CanonicalPaperDecision(
             prediction=prediction,
             strategy=strategy_decision,
@@ -151,7 +161,9 @@ def execute_prediction_to_paper(
 
     authorization = authorize_risk_decision(
         risk_decision,
-        risk_decision_id=f"{timestamp.isoformat()}:{symbol}:{risk_decision.risk_version}",
+        risk_decision_id=(
+            f"{timestamp.isoformat()}:{symbol}:{risk_decision.risk_version}"
+        ),
     )
 
     if authorization.status is not ExecutionAuthorizationStatus.AUTHORIZED:
@@ -180,28 +192,16 @@ def execute_prediction_to_paper(
             trade_id=None,
         )
 
-    try:
-        candidate = build_candidate_from_strategy(strategy_decision, row)
-    except (TypeError, ValueError) as exc:
-        return CanonicalPaperDecision(
-            prediction=prediction,
-            strategy=strategy_decision,
-            risk_status="CANDIDATE_REJECTED",
-            risk_reason=str(exc),
-            paper_order_status=None,
-            trade_id=None,
-        )
-
-    # Build the paper position using the authoritative Strategy -> Candidate
-    # stop and Risk-approved entry. Target uses the existing Risk multiple.
-    direction = candidate.direction
-    stop = candidate.stop_price
+    # The risk candidate owns the initial stop. Risk owns the target multiple.
     target_multiple = risk_engine.config.target_multiple_r
-    target = (
-        candidate.entry_price + candidate.stop_distance * target_multiple
-        if direction.value == "LONG"
-        else candidate.entry_price - candidate.stop_distance * target_multiple
-    )
+    if candidate.direction.value == "LONG":
+        target_price = candidate.entry_price + (
+            candidate.stop_distance * target_multiple
+        )
+    else:
+        target_price = candidate.entry_price - (
+            candidate.stop_distance * target_multiple
+        )
 
     trade_id = (
         f"TR-{paper_engine.config.experiment_id}-"
@@ -210,8 +210,8 @@ def execute_prediction_to_paper(
 
     paper_engine.exit_engine.open_position(
         order,
-        stop_price=stop,
-        target_price=target,
+        stop_price=candidate.stop_price,
+        target_price=target_price,
         trade_id=trade_id,
         strategy_version=strategy_decision.strategy_version,
         model_version=prediction.model_version,
@@ -228,7 +228,6 @@ def execute_prediction_to_paper(
         paper_order_status=order.status.value,
         trade_id=trade_id,
     )
-
 
 __all__ = [
     "CanonicalPaperDecision",
