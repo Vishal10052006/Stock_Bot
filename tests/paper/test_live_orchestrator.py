@@ -5,6 +5,7 @@ import pytest
 
 from market.candles.models import Candle
 from market.data.realtime_pipeline import RealtimeMarketDataPipeline
+from market.bot.contracts import MarketContext, MarketContextMetadata, MarketState
 from market.bot.orchestrator import MarketBot, MarketBotConfig
 from ml.models.logistic import LogisticOutcomeModel
 from ml.preprocessing.pipeline import FeaturePreprocessor
@@ -75,7 +76,18 @@ def test_orchestrator_rejects_legacy_fallback():
             'timestamp': pd.to_datetime(['2026-09-29T09:20:00Z']),
             'close': [25000.0],
         }),
-        benchmark_context_provider=lambda _, __: type('FakeContext', (), {'timestamp': pd.Timestamp('2026-09-29T09:20:00Z')})(),
+        benchmark_context_provider=lambda _, __: MarketContext(
+            timestamp=pd.Timestamp('2026-09-29T09:20:00Z').to_pydatetime(),
+            benchmark='NIFTY',
+            state=MarketState(
+                timestamp=pd.Timestamp('2026-09-29T09:20:00Z').to_pydatetime(),
+                benchmark='NIFTY',
+            ),
+            metadata=MarketContextMetadata(
+                data_version='test',
+                feature_version='v1.0',
+            ),
+        ),
         config=LivePaperOrchestratorConfig(symbol='RELIANCE', target_trades=10),
     )
 
