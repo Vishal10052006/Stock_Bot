@@ -94,12 +94,7 @@ def _benchmark_history(cutoff: pd.Timestamp) -> pd.DataFrame:
     close = 25_000.0 * np.cumprod(
         1.0 + np.full(len(timestamps), 0.001)
     )
-    return pd.DataFrame(
-        {
-            "timestamp": timestamps,
-            "close": close,
-        }
-    )
+    return pd.DataFrame({"timestamp": timestamps, "close": close})
 
 
 def _orchestrator(
@@ -236,7 +231,7 @@ def test_benchmark_history_must_reach_decision_timestamp():
 def test_history_provider_rejects_future_seed():
     future_bar = _candles()[-1]
     orchestrator = _orchestrator(
-        history_provider=lambda _: (future_bar,)
+        history_provider=lambda _: (future_bar,),
     )
 
     with pytest.raises(CanonicalLivePaperError, match="at or after"):
