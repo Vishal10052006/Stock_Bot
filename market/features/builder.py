@@ -96,6 +96,23 @@ IDENTIFIER_COLUMNS: tuple[str, ...] = (
     "symbol",
 )
 
+# Features whose values can be legitimately unavailable at decision time.
+# Missingness must remain explicit in the raw dataset and is resolved by the
+# leakage-safe ML preprocessing pipeline using training-only statistics.
+CONDITIONALLY_MISSING_FEATURE_COLUMNS: frozenset[str] = frozenset(
+    {
+        "opening_range_high_distance_pct",
+        "opening_range_low_distance_pct",
+        "opening_range_width_normalized",
+        "retest_distance_pct",
+        "sector_return_1",
+        "sector_return_3",
+        "sector_return_12",
+        "sector_volatility_20",
+        "stock_vs_sector_return_1",
+    }
+)
+
 
 def _validate_input(data: pd.DataFrame) -> None:
     """Validate the minimum Phase 4 feature-engineering schema."""
