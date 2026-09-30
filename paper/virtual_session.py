@@ -9,6 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import hashlib
 import json
+import math
 from pathlib import Path
 from typing import Iterable
 
@@ -31,8 +32,10 @@ class VirtualAccountSnapshot:
     open_positions: int
 
     def __post_init__(self) -> None:
-        if self.timestamp.tzinfo is None:
+        timestamp = pd.Timestamp(self.timestamp)
+        if timestamp.tzinfo is None:
             raise ValueError("snapshot timestamp must be timezone-aware")
+
         for name in (
             "equity",
             "realized_pnl",
@@ -40,10 +43,13 @@ class VirtualAccountSnapshot:
             "gross_exposure",
         ):
             value = float(getattr(self, name))
-            if not pd.api.types.is_number(value) or not pd.isna(value) is False:
+            if not math.isfinite(value):
                 raise ValueError(f"{name} must be finite")
+
         if self.gross_exposure < 0 or self.open_positions < 0:
             raise ValueError("account exposure and positions must be non-negative")
+
+        object.__setattr__(self, "timestamp", timestamp)
 
 
 @dataclass(frozen=True, slots=True)
@@ -55,8 +61,8 @@ class VirtualIntradaySessionConfig:
     session_id: str = "VIRTUAL-INTRADAY-001"
 
     def __post_init__(self) -> None:
-        if self.initial_equity <= 0:
-            raise ValueError("initial_equity must be positive")
+        if not math.isfinite(float(self.initial_equity)) or self.initial_equity <= 0:
+            raise ValueError("initial_equity must be positive and finite")
         if not self.session_id.strip():
             raise ValueError("session_id must not be empty")
 
@@ -64,9 +70,9 @@ class VirtualIntradaySessionConfig:
 class VirtualIntradaySession:
     """Run the canonical trading pipeline against a virtual account.
 
-    The session deliberately delegates all trading decisions and paper fills
-    to the existing canonical orchestrator and LivePaperEngine. This class
-    only adds account snapshots and full-session reporting.
+    All trading decisions and paper fills remain owned by the existing
+    canonical orchestrator and LivePaperEngine. This class only adds
+    full-session account snapshots and an auditable account ledger.
     """
 
     def __init__(
@@ -84,8 +90,6 @@ class VirtualIntradaySession:
                 "virtual session initial_equity must match paper engine initial_equity"
             )
 
-        # Full-session mode must not terminate merely because a trade-count
-        # experiment target was reached.
         if orchestrator.paper_engine.config.stop_on_target_trades:
             raise ValueError(
                 "paper engine must use stop_on_target_trades=False for a full intraday session"
@@ -102,10 +106,11 @@ class VirtualIntradaySession:
         """Process one completed candle and record the account mark."""
         prediction = self.orchestrator.process_candle(candle)
 
+        symbol = candle.symbol.strip().upper()
         price = float(candle.close)
         engine = self.orchestrator.paper_engine
         equity, realized, unrealized, gross = engine.runtime.account_snapshot(
-            {candle.symbol.strip().upper(): price}
+            {symbol: price}
         )
 
         self._snapshots.append(
@@ -175,8 +180,9 @@ class VirtualIntradaySession:
         }
 
         canonical = json.dumps(summary, sort_keys=True, separators=(",", ":"))
-        fingerprint = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
-        summary["fingerprint"] = fingerprint
+        summary["fingerprint"] = hashlib.sha256(
+            canonical.encode("utf-8")
+        ).hexdigest()
 
         (output_path / "account_summary.json").write_text(
             json.dumps(summary, indent=2, sort_keys=True),
