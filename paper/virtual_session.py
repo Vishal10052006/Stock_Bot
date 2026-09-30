@@ -16,6 +16,7 @@ import json
 import math
 from pathlib import Path
 from typing import Iterable
+import re
 
 import pandas as pd
 
@@ -79,12 +80,8 @@ class VirtualIntradaySessionConfig:
             ("session_open", self.session_open),
             ("session_close", self.session_close),
         ):
-            try:
-                hour, minute = (int(part) for part in value.split(":"))
-                if not (0 <= hour <= 23 and 0 <= minute <= 59):
-                    raise ValueError
-            except (TypeError, ValueError):
-                raise ValueError(f"{name} must use HH:MM format") from None
+            if re.fullmatch(r"(?:[01]\\d|2[0-3]):[0-5]\\d", value) is None:
+                raise ValueError(f"{name} must use HH:MM format")
 
 
 class VirtualIntradaySession:
@@ -116,6 +113,7 @@ class VirtualIntradaySession:
             )
 
         self._snapshots: list[VirtualAccountSnapshot] = []
+        self._session_date: pd.Timestamp | None = None
 
     @property
     def snapshots(self) -> tuple[VirtualAccountSnapshot, ...]:
@@ -185,6 +183,28 @@ class VirtualIntradaySession:
         timestamp = pd.Timestamp(candle.timestamp)
         if timestamp.tzinfo is None:
             raise ValueError("session candles must be timezone-aware")
+
+        local_timestamp = timestamp.tz_convert(self.config.market_timezone)
+        session_open = pd.Timestamp(
+            f"{local_timestamp.date()} {self.config.session_open}",
+            tz=self.config.market_timezone,
+        )
+        session_close = pd.Timestamp(
+            f"{local_timestamp.date()} {self.config.session_close}",
+            tz=self.config.market_timezone,
+        )
+
+        if not (session_open <= local_timestamp <= session_close):
+            raise ValueError(
+                f"candle timestamp {timestamp.isoformat()} is outside the configured "
+                f"session window {self.config.session_open}-{self.config.session_close} "
+                f"{self.config.market_timezone}"
+            )
+
+        if self._session_date is None:
+            self._session_date = local_timestamp.normalize()
+        elif local_timestamp.normalize() != self._session_date:
+            raise ValueError("virtual session cannot span multiple trading dates")
 
         prediction = self.orchestrator.process_candle(candle)
 
