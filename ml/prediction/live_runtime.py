@@ -160,7 +160,7 @@ class LiveModelRuntime:
 
     @staticmethod
     def _frame(bars: tuple[Candle, ...] | list[Candle]) -> pd.DataFrame:
-        return pd.DataFrame(
+        frame = pd.DataFrame(
             [
                 {
                     "timestamp": pd.Timestamp(bar.timestamp),
@@ -174,6 +174,19 @@ class LiveModelRuntime:
                 for bar in bars
             ]
         )
+        if not frame.empty:
+            # Historical and live candles can carry different timezone
+            # objects (for example IST and UTC). Pandas may otherwise infer
+            # object dtype for the mixed column, which violates the canonical
+            # timezone-aware timestamp contract downstream. Converting the
+            # complete column to UTC preserves each instant and guarantees a
+            # single timezone-aware datetime dtype.
+            frame["timestamp"] = pd.to_datetime(
+                frame["timestamp"],
+                utc=True,
+                errors="raise",
+            )
+        return frame
 
     def warmup(self) -> None:
         """Fetch causal historical candles before subscribing to live data."""
