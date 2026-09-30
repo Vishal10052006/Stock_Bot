@@ -57,3 +57,17 @@ def test_frame_normalizes_mixed_timezone_candles_to_utc() -> None:
         pd.Timestamp("2026-09-30 03:45:00+00:00"),
         pd.Timestamp("2026-09-30 03:50:00+00:00"),
     ]
+
+
+def test_paper_engine_exposes_initial_decision_diagnostics() -> None:
+    from trading.paper.live_loop import LivePaperEngine
+
+    diagnostics = LivePaperEngine().last_diagnostics
+
+    assert diagnostics == {
+        "strategy_direction": "NOT_EVALUATED",
+        "strategy_reason": "NOT_EVALUATED",
+        "risk_status": "NOT_EVALUATED",
+        "safety_status": "NOT_EVALUATED",
+        "paper_order_status": "NONE",
+    }
