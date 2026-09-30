@@ -1,6 +1,9 @@
 import pandas as pd
 
-from backtesting.leakage_audit import audit_future_perturbation_invariance, audit_training_dataset
+from backtesting.leakage_audit import (
+    audit_future_perturbation_invariance,
+    audit_training_dataset,
+)
 
 def _dataset() -> pd.DataFrame:
     return pd.DataFrame({
@@ -40,3 +43,54 @@ def test_future_perturbation_detects_changed_prior_output() -> None:
     perturbed.loc[1, "feature_a"] = 999.0
     check = audit_future_perturbation_invariance(baseline, perturbed, cutoff_timestamp="2026-01-01 09:20:00+05:30", compare_columns=("feature_a", "feature_b"))
     assert not check.passed
+
+def test_semantic_missing_feature_is_allowed_when_explicitly_declared() -> None:
+    data = _dataset()
+    data["optional_feature"] = [1.0, float("nan"), 3.0]
+
+    report = audit_training_dataset(
+        data,
+        feature_columns=("feature_a", "optional_feature"),
+        allowed_missing_features=frozenset({"optional_feature"}),
+    )
+
+    assert report.passed
+    assert report.failed_checks == ()
+
+
+def test_unexpected_missing_feature_is_rejected() -> None:
+    data = _dataset()
+    data["feature_a"] = [1.0, float("nan"), 3.0]
+
+    report = audit_training_dataset(
+        data,
+        feature_columns=("feature_a", "feature_b"),
+    )
+
+    assert not report.passed
+    assert "numeric_finite_features" in report.failed_checks
+
+
+def test_infinite_value_is_rejected_even_when_missingness_is_allowed() -> None:
+    data = _dataset()
+    data["optional_feature"] = [1.0, float("inf"), 3.0]
+
+    report = audit_training_dataset(
+        data,
+        feature_columns=("feature_a", "optional_feature"),
+        allowed_missing_features=frozenset({"optional_feature"}),
+    )
+
+    assert not report.passed
+    assert "numeric_finite_features" in report.failed_checks
+
+
+def test_unknown_allowed_missing_feature_is_rejected() -> None:
+    report = audit_training_dataset(
+        _dataset(),
+        feature_columns=("feature_a", "feature_b"),
+        allowed_missing_features=frozenset({"not_a_feature"}),
+    )
+
+    assert not report.passed
+    assert "allowed_missing_feature_schema" in report.failed_checks
