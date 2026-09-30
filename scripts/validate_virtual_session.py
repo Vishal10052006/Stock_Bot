@@ -118,14 +118,15 @@ def validate_session(session_dir: Path) -> dict[str, object]:
             "final equity does not reconcile to initial equity + P&L"
         )
 
-    for field in (
-        "final_equity",
-        "realized_pnl",
-        "unrealized_pnl",
-        "gross_exposure",
-        "open_positions",
-    ):
-        if float(final[field]) != float(summary[field]):
+    ledger_summary_fields = {
+        "final_equity": "equity",
+        "realized_pnl": "realized_pnl",
+        "unrealized_pnl": "unrealized_pnl",
+        "gross_exposure": "gross_exposure",
+        "open_positions": "open_positions",
+    }
+    for summary_field, ledger_field in ledger_summary_fields.items():
+        if float(final[ledger_field]) != float(summary[summary_field]):
             raise ValueError(
                 f"summary/{field} does not match final ledger snapshot"
             )
