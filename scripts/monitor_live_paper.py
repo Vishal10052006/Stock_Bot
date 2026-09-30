@@ -41,6 +41,20 @@ def _value(data: dict, *path: str, default=None):
     return current
 
 
+def _health_component(health: object, component: str) -> dict:
+    """Return one health component from the dashboard's list or mapping shape."""
+    if isinstance(health, dict):
+        value = health.get(component)
+        return value if isinstance(value, dict) else {}
+
+    if isinstance(health, list):
+        for item in health:
+            if isinstance(item, dict) and item.get("component") == component:
+                return item
+
+    return {}
+
+
 def print_status(payload: dict, *, previous: tuple | None = None) -> tuple:
     paper = payload.get("paper_control") or {}
     runtime = payload.get("runtime") or {}
@@ -59,7 +73,7 @@ def print_status(payload: dict, *, previous: tuple | None = None) -> tuple:
     predicted_class = live_model.get("predicted_class", "-")
     timestamp = live_model.get("timestamp") or runtime.get("timestamp") or "-"
 
-    analysis = health.get("analysis_bot") or {}
+    analysis = _health_component(health, "analysis_bot")
     analysis_status = analysis.get("status", "-")
     completeness = analysis.get("completeness")
 
