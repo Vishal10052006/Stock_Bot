@@ -96,5 +96,5 @@ def test_observe_candle_updates_lifecycle_without_evaluating_entry() -> None:
 
     assert outcomes == []
     assert len(engine._candle_history) == 1
-    assert engine._last_time == pd.Timestamp(candle.timestamp)
+    assert engine._last_time == pd.Timestamp(candle["timestamp"])
     assert engine.submitted_order_count == 0
