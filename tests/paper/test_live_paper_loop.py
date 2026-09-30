@@ -80,3 +80,21 @@ def test_session_evidence_bundle_persistence(tmp_path: Path):
     fingerprint_file = session_dir / "session_fingerprint.sha256"
     assert fingerprint_file.exists()
     assert fingerprint_file.read_text(encoding="utf-8").strip() == result.session_fingerprint
+
+
+def test_observe_candle_updates_lifecycle_without_evaluating_entry() -> None:
+    config = LivePaperSessionConfig(
+        experiment_id="PAPER-OBSERVE-TEST",
+        symbol="RELIANCE",
+        stop_on_target_trades=False,
+    )
+    engine = LivePaperEngine(config)
+
+    candle = generate_synthetic_stream("RELIANCE", count=1)[0]
+
+    outcomes = engine.observe_candle(candle)
+
+    assert outcomes == []
+    assert len(engine._candle_history) == 1
+    assert engine._last_time == pd.Timestamp(candle["timestamp"])
+    assert engine.submitted_order_count == 0

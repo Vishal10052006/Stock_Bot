@@ -8,6 +8,7 @@ The repository exposes real runtime modes through `main.py`.
 python main.py --mode ceo-demo
 python main.py --mode shadow
 python main.py --mode paper
+python main.py --mode live-paper
 python main.py --mode readiness
 python main.py --mode live --confirm-live
 ```
@@ -105,7 +106,71 @@ python scripts/trading/run_empirical_paper.py \
   --output data/paper/empirical_paper_report.json
 ```
 
-## 5. Live mode
+## 5. Real-market virtual-paper mode
+
+The live-paper mode connects the realtime Upstox feed to the canonical
+Market -> Analysis -> Prediction -> Strategy -> Risk -> Safety -> Paper
+pipeline while keeping all capital virtual.
+
+Required runtime configuration:
+
+```text
+UPSTOX_ACCESS_TOKEN
+UPSTOX_INSTRUMENT_MAP
+```
+
+The instrument map must contain both the traded symbol and the benchmark.
+
+A verified Phase-9 Logistic artifact is also required. It must contain a
+fitted LogisticOutcomeModel and fitted FeaturePreprocessor, and its SHA-256
+must be supplied explicitly.
+
+Startup smoke run:
+
+```bash
+python main.py \
+  --mode live-paper \
+  --symbol RELIANCE \
+  --benchmark-symbol NIFTY50 \
+  --model-artifact <artifact.pkl> \
+  --model-sha256 <64-char-sha256> \
+  --model-version phase9-logistic-v1 \
+  --session-id PAPER-SMOKE-001 \
+  --max-candles 1
+```
+
+Full-session run:
+
+```bash
+python main.py \
+  --mode live-paper \
+  --symbol RELIANCE \
+  --benchmark-symbol NIFTY50 \
+  --model-artifact <artifact.pkl> \
+  --model-sha256 <64-char-sha256> \
+  --model-version phase9-logistic-v1 \
+  --session-id PAPER-YYYYMMDD
+```
+
+The runtime seeds causal stock and benchmark history from the Upstox Historical
+Candle V3 API, then consumes completed five-minute candles from the Upstox
+realtime feed. History is strictly truncated before each live decision
+timestamp.
+
+The account defaults to ₹100,000 virtual capital and the session boundary is
+09:15–15:30 IST. live_broker_orders remains 0.
+
+After the session:
+
+```bash
+python scripts/validate_virtual_session.py \
+  paper/virtual_sessions/<session-id>
+```
+
+A passing validator establishes account/ledger integrity only. It is not
+profitability or live-trading readiness evidence.
+
+## 6. Live mode
 
 Current behavior:
 
@@ -120,7 +185,7 @@ requires provider-readiness evidence, position reconciliation, operational
 controls, and current broker/exchange/compliance verification before activation.
 The Upstox execution adapter is also disabled by default.
 
-## 6. Remaining runtime work
+## 7. Remaining runtime work
 
 The CLI is now mode-aware, but actual end-to-end live execution is not enabled.
 The remaining runtime boundary is to connect the existing real market feed and
@@ -128,14 +193,14 @@ Phase 21 live-signal path to a verified model artifact, then route approved
 signals through Risk -> Independent Safety -> live readiness -> Upstox execution,
 with durable reconciliation and operational controls.
 
-The current repository does not contain a safe artifact loader that turns a
-registry record into the fitted `LogisticOutcomeModel` and fitted
-`FeaturePreprocessor` required by the existing prediction adapter.
+The repository now contains a hash-verified loader for the explicit Phase-9
+Logistic artifact used by live-paper. Model registry approval remains a
+separate governance step and does not itself authorize trading.
 
 The current repository also does not contain `evaluate_live_predictions.py`
 on `main`; that earlier validation implementation was on a separate branch.
 
-## 7. Intended future sequence
+## 8. Intended future sequence
 
 ```text
 readiness

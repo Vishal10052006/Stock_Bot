@@ -16,6 +16,8 @@ import pickle
 from typing import Any
 
 from ml.prediction.contracts import PredictionProvenance
+from ml.models.logistic import LogisticOutcomeModel
+from ml.preprocessing.pipeline import FeaturePreprocessor
 
 
 @dataclass(frozen=True, slots=True)
@@ -100,3 +102,27 @@ def load_prediction_artifact(
 
     model = pickle.loads(payload)
     return model, manifest
+
+def load_phase9_logistic_bundle(
+    path: str | Path,
+    *,
+    expected_sha256: str | None = None,
+) -> tuple[LogisticOutcomeModel, FeaturePreprocessor, PredictionArtifactManifest]:
+    """Load a hash-verified Phase-9 Logistic model/preprocessor bundle."""
+    model, manifest = load_prediction_artifact(
+        path,
+        expected_sha256=expected_sha256,
+    )
+    if not isinstance(model, dict):
+        raise TypeError("Phase-9 artifact payload must be a mapping")
+    fitted_model = model.get("model")
+    fitted_preprocessor = model.get("preprocessor")
+    if not isinstance(fitted_model, LogisticOutcomeModel):
+        raise TypeError("Phase-9 artifact model must be LogisticOutcomeModel")
+    if not isinstance(fitted_preprocessor, FeaturePreprocessor):
+        raise TypeError("Phase-9 artifact preprocessor must be FeaturePreprocessor")
+    if not fitted_model.is_fitted or not fitted_preprocessor.is_fitted:
+        raise ValueError("Phase-9 model and preprocessor must both be fitted")
+    if fitted_model.feature_count != len(fitted_preprocessor.get_feature_names_out()):
+        raise ValueError("Phase-9 model/preprocessor feature counts do not match")
+    return fitted_model, fitted_preprocessor, manifest

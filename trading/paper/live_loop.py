@@ -160,6 +160,29 @@ class LivePaperEngine:
             raise ValueError("only FILLED paper orders may be registered")
         self._submitted_orders.append(order)
 
+    def observe_candle(self, candle: Any) -> list[TradeOutcome]:
+        """Record one completed candle and process existing positions only."""
+        raw_symbol = getattr(candle, "symbol", None) or candle["symbol"]
+        symbol = str(raw_symbol).strip().upper()
+        if symbol != self.config.symbol:
+            return []
+        raw_ts = getattr(candle, "timestamp", None) or candle["timestamp"]
+        timestamp = pd.Timestamp(raw_ts)
+        candle_dict = {
+            "timestamp": timestamp,
+            "symbol": symbol,
+            "open": float(getattr(candle, "open", None) if hasattr(candle, "open") else candle["open"]),
+            "high": float(getattr(candle, "high", None) if hasattr(candle, "high") else candle["high"]),
+            "low": float(getattr(candle, "low", None) if hasattr(candle, "low") else candle["low"]),
+            "close": float(getattr(candle, "close", None) if hasattr(candle, "close") else candle["close"]),
+            "volume": float(getattr(candle, "volume", None) if hasattr(candle, "volume") else candle.get("volume", 1000.0)),
+        }
+        if self._start_time is None:
+            self._start_time = timestamp
+        self._last_time = timestamp
+        self._candle_history.append(candle_dict)
+        return self.exit_engine.process_candle(candle_dict)
+
     def on_candle(self, candle: Any) -> list[TradeOutcome]:
         """Process one closed 5-minute candle through the complete trading loop."""
         raw_symbol = getattr(candle, "symbol", None) or candle["symbol"]
