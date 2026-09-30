@@ -9,6 +9,7 @@ from __future__ import annotations
 from collections.abc import Iterable, Iterator
 from datetime import datetime
 import importlib
+from threading import Event
 import json
 import time
 import uuid
@@ -44,6 +45,7 @@ class UpstoxMarketFeed(MarketFeed):
         self._websocket = websocket_module
         self._ws = None
         self._subscribed_symbols: set[str] = set()
+        self._stop_requested = Event()
         self.event_validator = event_validator
         self.metrics = metrics
 
@@ -160,6 +162,7 @@ class UpstoxMarketFeed(MarketFeed):
 
     def connect(self) -> None:
         """Authorize and open the provider WebSocket connection."""
+        self._stop_requested.clear()
         self._open_connection()
 
     def subscribe(self, symbols: Iterable[str]) -> None:
@@ -202,12 +205,15 @@ class UpstoxMarketFeed(MarketFeed):
         from .decoder import decode_feed_message, epoch_millis_to_datetime
         from .proto_adapter import extract_ltpc
 
-        while True:
+        while not self._stop_requested.is_set():
             received_timestamp = datetime.now().astimezone()
 
             try:
                 raw_message = self._ws.recv()
             except Exception as exc:
+                if self._stop_requested.is_set():
+                    break
+
                 # Determine whether the exception represents a connection
                 # failure that can safely trigger the reconnect policy.
                 websocket = self._load_websocket_module()
@@ -268,6 +274,9 @@ class UpstoxMarketFeed(MarketFeed):
                 # confirming that this is a genuine connection-related error.
                 if self.metrics is not None:
                     self.metrics.record_connection_failure()
+
+                if self._stop_requested.is_set():
+                    break
 
                 if not self._reconnect():
                     raise RuntimeError(
@@ -343,6 +352,7 @@ class UpstoxMarketFeed(MarketFeed):
 
     def disconnect(self) -> None:
         """Close the active provider connection safely."""
+        self._stop_requested.set()
         if self._ws is not None:
             self._ws.close()
         self._ws = None

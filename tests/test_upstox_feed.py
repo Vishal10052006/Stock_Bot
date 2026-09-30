@@ -529,6 +529,56 @@ def test_events_records_timeout_as_missing_data_gap(monkeypatch):
     assert snapshot.connection_failures == 0
     assert snapshot.reconnect_attempts == 0
 
+def test_events_exit_without_reconnect_when_stop_requested(monkeypatch):
+    """A stop request must terminate event iteration without reconnecting."""
+
+    websocket = FakeWebSocket()
+    websocket_module = FakeWebSocketModule(websocket)
+    feed = make_feed(websocket_module)
+
+    feed._ws = websocket
+    feed._protobuf_module = object()
+
+    def raise_connection_error():
+        """Simulate the socket raising while shutdown is requested."""
+        raise ConnectionError("simulated connection close")
+
+    monkeypatch.setattr(websocket, "recv", raise_connection_error)
+
+    reconnect_calls = {"count": 0}
+
+    def should_not_reconnect():
+        """Reconnect must never run after a stop request."""
+        reconnect_calls["count"] += 1
+        return True
+
+    monkeypatch.setattr(feed, "_reconnect", should_not_reconnect)
+    feed._stop_requested.set()
+
+    assert list(feed.events()) == []
+    assert reconnect_calls["count"] == 0
+
+
+def test_connect_clears_previous_stop_request(monkeypatch):
+    """A fresh connection must clear a previous stop request."""
+
+    websocket = FakeWebSocket()
+    websocket_module = FakeWebSocketModule(websocket)
+
+    monkeypatch.setattr(
+        "market.data.ingestion.providers.upstox.feed.get_authorized_websocket_uri",
+        lambda access_token, timeout_seconds: "wss://example.test/feed",
+    )
+
+    feed = make_feed(websocket_module)
+    feed._stop_requested.set()
+
+    feed.connect()
+
+    assert feed.connected is True
+    assert feed._stop_requested.is_set() is False
+
+
 def test_events_records_connection_failure_before_reconnect(monkeypatch):
     """Connection failures should be recorded before reconnecting."""
 
