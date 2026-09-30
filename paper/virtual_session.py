@@ -206,6 +206,10 @@ class VirtualIntradaySession:
         elif local_timestamp.normalize() != self._session_date:
             raise ValueError("virtual session cannot span multiple trading dates")
 
+        # Keep the paper lifecycle engine synchronized without invoking its
+        # legacy entry strategy. Canonical Strategy/Risk decisions remain owned
+        # by CanonicalLivePaperOrchestrator.
+        self.orchestrator.paper_engine.observe_candle(candle)
         prediction = self.orchestrator.process_candle(candle)
 
         symbol = candle.symbol.strip().upper()
