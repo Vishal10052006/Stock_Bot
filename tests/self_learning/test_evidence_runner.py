@@ -20,9 +20,10 @@ from tests.self_learning.test_candidate_lifecycle import _candidate
 def _validations(candidate):
     result = {}
     for stage in REQUIRED_STAGES:
-        artifacts = [candidate.artifact_fingerprint]
-        if stage == "OOS":
-            artifacts.append(candidate.evaluation_fingerprint)
+        artifacts = [
+            candidate.artifact_fingerprint,
+            candidate.evaluation_fingerprint,
+        ]
         result[stage] = ValidationSummary(
             stage=stage,
             valid=True,
