@@ -136,6 +136,13 @@ class LivePaperEngine:
         self._decisions: list[dict[str, Any]] = []
         self._submitted_orders: list[PaperOrder] = []
         self._session_completed = False
+        self._last_diagnostics: dict[str, Any] = {
+            "strategy_direction": "NOT_EVALUATED",
+            "strategy_reason": "NOT_EVALUATED",
+            "risk_status": "NOT_EVALUATED",
+            "safety_status": "NOT_EVALUATED",
+            "paper_order_status": "NONE",
+        }
         self._start_time: pd.Timestamp | None = None
         self._last_time: pd.Timestamp | None = None
 
@@ -306,6 +313,13 @@ class LivePaperEngine:
             },
         )
         strategy_decision, _trace = self.strategy_engine.decide(strategy_input)
+        self._last_diagnostics = {
+            "strategy_direction": strategy_decision.direction.value,
+            "strategy_reason": strategy_decision.primary_reason.value if strategy_decision.primary_reason else "TRADE_ALLOWED",
+            "risk_status": "NOT_EVALUATED",
+            "safety_status": "NOT_EVALUATED",
+            "paper_order_status": "NONE",
+        }
         if strategy_decision.direction is StrategyDirection.NO_TRADE:
             self._record_decision(strategy_decision, None, None)
             return
@@ -316,11 +330,13 @@ class LivePaperEngine:
             approved_quantity=10.0,
             approved_notional=close_p * 10.0,
         )
+        self._last_diagnostics["risk_status"] = risk_decision.status.value
         if risk_decision.status is not RiskDecisionStatus.APPROVED:
             self._record_decision(strategy_decision, risk_decision, None)
             return
 
         safety_eval = self.safety_gate.evaluate(SafetyState(live_execution_enabled=False))
+        self._last_diagnostics["safety_status"] = safety_eval.block.value
         if safety_eval.block not in (SafetyBlock.NONE, SafetyBlock.LIVE_LOCKED):
             self._record_decision(strategy_decision, risk_decision, None)
             return
@@ -340,11 +356,14 @@ class LivePaperEngine:
             risk_decision,
             risk_decision_id=f"{timestamp.isoformat()}:{symbol}:{risk_version}",
         )
+        self._last_diagnostics["safety_status"] = f"AUTHORIZED:{auth.status.value}"
         if auth.status is not ExecutionAuthorizationStatus.AUTHORIZED:
+            self._last_diagnostics["paper_order_status"] = "AUTHORIZATION_BLOCKED"
             self._record_decision(strategy_decision, risk_decision, None)
             return
 
         order = self.runtime.submit(auth, price=close_p, quantity=risk_decision.approved_quantity)
+        self._last_diagnostics["paper_order_status"] = order.status.value
         if order.status is PaperOrderStatus.FILLED:
             self._submitted_orders.append(order)
             self.exit_engine.open_position(
@@ -513,6 +532,11 @@ class LivePaperEngine:
         }
 
         return features, regime, regime_prob
+
+    @property
+    def last_diagnostics(self) -> dict[str, Any]:
+        """Return the latest Strategy -> Risk -> Safety -> Paper diagnostics."""
+        return dict(self._last_diagnostics)
 
     def _record_decision(
         self,
