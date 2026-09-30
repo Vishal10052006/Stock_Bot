@@ -90,7 +90,7 @@ def test_observe_candle_updates_lifecycle_without_evaluating_entry() -> None:
     )
     engine = LivePaperEngine(config)
 
-    candle = next(generate_synthetic_stream("RELIANCE", count=1))
+    candle = generate_synthetic_stream("RELIANCE", count=1)[0]
 
     outcomes = engine.observe_candle(candle)
 
