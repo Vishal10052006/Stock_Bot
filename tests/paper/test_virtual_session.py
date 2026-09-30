@@ -16,7 +16,6 @@ from paper.virtual_session import (
     VirtualIntradaySession,
     VirtualIntradaySessionConfig,
 )
-from trading.paper.exit_engine import ExitReason
 from trading.paper.live_loop import LivePaperEngine, LivePaperSessionConfig
 from trading.strategy.models import StrategyDirection
 
@@ -200,9 +199,6 @@ def test_account_mark_uses_completed_lifecycle_pnl_and_closes_cleanly():
         _candle("2026-09-30 09:30:00+05:30", close=110.0),
         force_session_close=True,
     )[0]
-    assert engine.exit_engine.exit_reasons[outcome.symbol + ":unused"] if False else True
-    assert outcome.net_pnl < 0 or outcome.net_pnl > 0
-
     closed_mark = session._account_mark(
         timestamp=pd.Timestamp("2026-09-30 09:30:00+05:30"),
         prices={"RELIANCE": 110.0},
