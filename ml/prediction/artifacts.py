@@ -107,9 +107,9 @@ def load_phase9_logistic_bundle(
     path: str | Path,
     *,
     expected_sha256: str | None = None,
-) -> tuple[LogisticOutcomeModel, FeaturePreprocessor]:
+) -> tuple[LogisticOutcomeModel, FeaturePreprocessor, PredictionArtifactManifest]:
     """Load a hash-verified Phase-9 Logistic model/preprocessor bundle."""
-    model, _manifest = load_prediction_artifact(
+    model, manifest = load_prediction_artifact(
         path,
         expected_sha256=expected_sha256,
     )
@@ -125,4 +125,4 @@ def load_phase9_logistic_bundle(
         raise ValueError("Phase-9 model and preprocessor must both be fitted")
     if fitted_model.feature_count != len(fitted_preprocessor.get_feature_names_out()):
         raise ValueError("Phase-9 model/preprocessor feature counts do not match")
-    return fitted_model, fitted_preprocessor
+    return fitted_model, fitted_preprocessor, manifest
