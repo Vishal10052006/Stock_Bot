@@ -235,8 +235,15 @@ class VirtualIntradaySession:
 
         return self.finalize()
 
-    def run(self, symbols: Iterable[str] | None = None) -> LivePaperSessionResult:
+    def run(
+        self,
+        symbols: Iterable[str] | None = None,
+        *,
+        max_candles: int | None = None,
+    ) -> LivePaperSessionResult:
         """Consume the configured realtime candle stream for one virtual session."""
+        if max_candles is not None and max_candles <= 0:
+            raise ValueError("max_candles must be positive when provided")
         expected = (self.orchestrator.config.symbol.strip().upper(),)
         source_symbols = expected if symbols is None else symbols
         requested = tuple(
@@ -250,9 +257,13 @@ class VirtualIntradaySession:
             )
 
         self.orchestrator.market_data.start(requested)
+        produced = 0
         try:
             for candle in self.orchestrator.market_data.run():
                 self.process_candle(candle)
+                produced += 1
+                if max_candles is not None and produced >= max_candles:
+                    break
         finally:
             self.orchestrator.market_data.stop()
 
