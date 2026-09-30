@@ -133,7 +133,13 @@ def test_virtual_session_uses_existing_paper_runtime():
         approved_quantity=10.0,
         approved_notional=1000.0,
     )
-    runtime.submit(authorization, price=100.0)
+    order = runtime.submit(authorization, price=100.0)
+    engine.exit_engine.open_position(
+        order,
+        stop_price=90.0,
+        target_price=120.0,
+        trade_id="TR-TEST-RUNTIME",
+    )
 
     session = VirtualIntradaySession(
         SimpleNamespace(
@@ -222,6 +228,21 @@ def test_virtual_session_config_defaults_to_nse_session_window():
 def test_virtual_session_config_rejects_invalid_session_clock():
     with pytest.raises(ValueError, match="HH:MM"):
         VirtualIntradaySessionConfig(session_open="9:15")
+
+
+def test_process_candle_rejects_outside_session_window():
+    session = VirtualIntradaySession(_orchestrator())
+
+    with pytest.raises(ValueError, match="outside the configured session window"):
+        session.process_candle(_candle("2026-09-30 08:55:00+05:30"))
+
+
+def test_process_candle_rejects_cross_day_stream():
+    session = VirtualIntradaySession(_orchestrator())
+    session.process_candle(_candle("2026-09-30 09:15:00+05:30"))
+
+    with pytest.raises(ValueError, match="multiple trading dates"):
+        session.process_candle(_candle("2026-10-01 09:15:00+05:30"))
 
 
 def test_finalize_replaces_pre_close_mark_with_final_closed_account(tmp_path):
