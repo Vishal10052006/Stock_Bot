@@ -80,7 +80,7 @@ class VirtualIntradaySessionConfig:
             ("session_open", self.session_open),
             ("session_close", self.session_close),
         ):
-            if re.fullmatch(r"(?:[01]\\d|2[0-3]):[0-5]\\d", value) is None:
+            if re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d", value) is None:
                 raise ValueError(f"{name} must use HH:MM format")
 
 
