@@ -72,6 +72,12 @@ def print_status(payload: dict, *, previous: tuple | None = None) -> tuple:
     lifecycle = _value(runtime, "live_runtime", "lifecycle_state", default="-")
     predicted_class = live_model.get("predicted_class", "-")
     timestamp = live_model.get("timestamp") or runtime.get("timestamp") or "-"
+    diagnostics = live_model.get("decision_diagnostics") or {}
+    strategy_direction = diagnostics.get("strategy_direction", "-")
+    strategy_reason = diagnostics.get("strategy_reason", "-")
+    risk_status = diagnostics.get("risk_status", "-")
+    safety_status = diagnostics.get("safety_status", "-")
+    paper_order_status = diagnostics.get("paper_order_status", "-")
 
     analysis = _health_component(health, "analysis_bot")
     analysis_status = analysis.get("status", "-")
@@ -87,6 +93,11 @@ def print_status(payload: dict, *, previous: tuple | None = None) -> tuple:
         timestamp,
         predicted_class,
         lifecycle,
+        strategy_direction,
+        strategy_reason,
+        risk_status,
+        safety_status,
+        paper_order_status,
         analysis_status,
         completeness,
     )
@@ -106,6 +117,10 @@ def print_status(payload: dict, *, previous: tuple | None = None) -> tuple:
         f"pnl={pnl_text} | class={predicted_class} | "
         f"analysis={analysis_status} ({completeness_text}) | "
         f"lifecycle={lifecycle}"
+    )
+    print(
+        f"           strategy={strategy_direction} ({strategy_reason}) | "
+        f"risk={risk_status} | safety={safety_status} | paper_order={paper_order_status}"
     )
     print(
         f"           model_ts={timestamp} | "
