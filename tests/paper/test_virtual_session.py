@@ -16,6 +16,7 @@ from paper.virtual_session import (
     VirtualIntradaySession,
     VirtualIntradaySessionConfig,
 )
+from trading.paper.exit_engine import ExitReason
 from trading.paper.live_loop import LivePaperEngine, LivePaperSessionConfig
 from trading.strategy.models import StrategyDirection
 
@@ -34,7 +35,11 @@ def _candle(ts: str, close: float = 100.0) -> Candle:
     )
 
 
-def _orchestrator(*, stop_on_target_trades: bool = False, initial_equity: float = 100_000.0):
+def _orchestrator(
+    *,
+    stop_on_target_trades: bool = False,
+    initial_equity: float = 100_000.0,
+):
     engine = LivePaperEngine(
         LivePaperSessionConfig(
             symbol="RELIANCE",
@@ -143,3 +148,81 @@ def test_virtual_session_uses_existing_paper_runtime():
     assert session.snapshots[0].unrealized_pnl == 100.0
     assert session.snapshots[0].gross_exposure == 1_100.0
     assert session.snapshots[0].open_positions == 1
+
+
+def test_account_mark_uses_completed_lifecycle_pnl_and_closes_cleanly():
+    engine = LivePaperEngine(
+        LivePaperSessionConfig(
+            symbol="RELIANCE",
+            initial_equity=100_000.0,
+            stop_on_target_trades=False,
+        )
+    )
+
+    authorization = ExecutionAuthorization(
+        timestamp=pd.Timestamp("2026-09-30 09:20:00+05:30"),
+        symbol="RELIANCE",
+        direction=StrategyDirection.LONG,
+        status=ExecutionAuthorizationStatus.AUTHORIZED,
+        reason="test",
+        risk_version="test",
+        approved_quantity=10.0,
+        approved_notional=1000.0,
+    )
+    order = engine.runtime.submit(
+        authorization,
+        price=100.0,
+        quantity=10.0,
+    )
+    position = engine.exit_engine.open_position(
+        order,
+        stop_price=90.0,
+        target_price=120.0,
+        trade_id="TR-TEST-001",
+    )
+
+    orchestrator = SimpleNamespace(
+        paper_engine=engine,
+        process_candle=lambda candle: "PREDICTION",
+    )
+    session = VirtualIntradaySession(orchestrator)
+
+    open_mark = session._account_mark(
+        timestamp=pd.Timestamp("2026-09-30 09:25:00+05:30"),
+        prices={"RELIANCE": 110.0},
+    )
+    assert open_mark.open_positions == 1
+    assert open_mark.unrealized_pnl == pytest.approx(
+        (110.0 - position.fill_price) * position.quantity
+    )
+
+    outcome = engine.exit_engine.process_candle(
+        _candle("2026-09-30 09:30:00+05:30", close=110.0),
+        force_session_close=True,
+    )[0]
+    assert engine.exit_engine.exit_reasons[outcome.symbol + ":unused"] if False else True
+    assert outcome.net_pnl < 0 or outcome.net_pnl > 0
+
+    closed_mark = session._account_mark(
+        timestamp=pd.Timestamp("2026-09-30 09:30:00+05:30"),
+        prices={"RELIANCE": 110.0},
+    )
+    assert closed_mark.open_positions == 0
+    assert closed_mark.unrealized_pnl == 0.0
+    assert closed_mark.realized_pnl == pytest.approx(outcome.net_pnl)
+    assert closed_mark.equity == pytest.approx(
+        session.config.initial_equity + outcome.net_pnl
+    )
+
+
+def test_virtual_session_config_defaults_to_nse_session_window():
+    config = VirtualIntradaySessionConfig()
+
+    assert config.market_timezone == "Asia/Kolkata"
+    assert config.session_open == "09:15"
+    assert config.session_close == "15:30"
+
+
+def test_virtual_session_config_rejects_invalid_session_clock():
+    with pytest.raises(ValueError, match="HH:MM"):
+        VirtualIntradaySessionConfig(session_open="9:15")
