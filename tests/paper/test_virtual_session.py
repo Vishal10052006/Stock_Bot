@@ -222,3 +222,91 @@ def test_virtual_session_config_defaults_to_nse_session_window():
 def test_virtual_session_config_rejects_invalid_session_clock():
     with pytest.raises(ValueError, match="HH:MM"):
         VirtualIntradaySessionConfig(session_open="9:15")
+
+
+def test_finalize_replaces_pre_close_mark_with_final_closed_account(tmp_path):
+    engine = LivePaperEngine(
+        LivePaperSessionConfig(
+            symbol="RELIANCE",
+            initial_equity=100_000.0,
+            stop_on_target_trades=False,
+        )
+    )
+
+    authorization = ExecutionAuthorization(
+        timestamp=pd.Timestamp("2026-09-30 09:20:00+05:30"),
+        symbol="RELIANCE",
+        direction=StrategyDirection.LONG,
+        status=ExecutionAuthorizationStatus.AUTHORIZED,
+        reason="test",
+        risk_version="test",
+        approved_quantity=10.0,
+        approved_notional=1000.0,
+    )
+    order = engine.runtime.submit(
+        authorization,
+        price=100.0,
+        quantity=10.0,
+    )
+    engine.exit_engine.open_position(
+        order,
+        stop_price=90.0,
+        target_price=120.0,
+        trade_id="TR-TEST-FINAL",
+    )
+
+    close_timestamp = pd.Timestamp("2026-09-30 15:30:00+05:30")
+    engine._last_time = close_timestamp
+    engine._candle_history = [{
+        "timestamp": close_timestamp,
+        "symbol": "RELIANCE",
+        "open": 110.0,
+        "high": 111.0,
+        "low": 109.0,
+        "close": 110.0,
+        "volume": 1000.0,
+    }]
+
+    history = SimpleNamespace(
+        frame=lambda: pd.DataFrame(
+            [{"timestamp": close_timestamp, "close": 110.0}]
+        )
+    )
+    orchestrator = SimpleNamespace(
+        paper_engine=engine,
+        history=history,
+        process_candle=lambda candle: "PREDICTION",
+    )
+    session = VirtualIntradaySession(
+        orchestrator,
+        config=VirtualIntradaySessionConfig(
+            output_dir=tmp_path,
+            session_id="FINALIZE-TEST",
+        ),
+    )
+
+    session._snapshots.append(
+        VirtualAccountSnapshot(
+            timestamp=close_timestamp,
+            equity=100_100.0,
+            realized_pnl=0.0,
+            unrealized_pnl=100.0,
+            gross_exposure=1_100.0,
+            open_positions=1,
+        )
+    )
+
+    result = session.finalize()
+
+    assert result.completed_trades == 1
+    assert session.snapshots[-1].open_positions == 0
+    assert session.snapshots[-1].unrealized_pnl == 0.0
+    assert session.snapshots[-1].realized_pnl == pytest.approx(
+        result.outcomes[0].net_pnl
+    )
+    assert session.snapshots[-1].equity == pytest.approx(
+        100_000.0 + result.outcomes[0].net_pnl
+    )
+
+    summary = (tmp_path / "FINALIZE-TEST" / "account_summary.json").read_text()
+    assert '"open_positions": 0' in summary
