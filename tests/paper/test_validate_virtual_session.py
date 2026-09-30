@@ -111,7 +111,8 @@ def test_validate_virtual_session_rejects_fingerprint_mismatch(tmp_path):
     session_dir = _write_session(tmp_path)
     summary_path = session_dir / "account_summary.json"
     summary = json.loads(summary_path.read_text(encoding="utf-8"))
-    summary["final_equity"] = 100051.0
+    summary["final_equity"] = 100050.0
+    summary["fingerprint"] = "0" * 64
     summary_path.write_text(json.dumps(summary), encoding="utf-8")
 
     with pytest.raises(ValueError, match="fingerprint mismatch"):
