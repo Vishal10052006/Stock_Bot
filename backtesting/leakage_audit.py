@@ -36,8 +36,15 @@ def audit_training_dataset(
     timestamp_column: str = "timestamp",
     symbol_column: str = "symbol",
     available_at_column: str | None = None,
+    allowed_missing_features: frozenset[str] = frozenset(),
 ) -> LeakageAuditReport:
-    """Audit the frozen supervised dataset before OOS/model evaluation."""
+    """Audit the frozen supervised dataset before OOS/model evaluation.
+
+    Raw feature missingness is rejected by default. Callers may explicitly
+    allow conditionally available features whose missingness is part of the
+    frozen feature contract; those values must still be resolved by the
+    leakage-safe preprocessing pipeline before model fitting/evaluation.
+    """
     checks: list[LeakageAuditCheck] = []
     checks.append(LeakageAuditCheck("dataframe", isinstance(data, pd.DataFrame), "Input must be a pandas DataFrame."))
     if not isinstance(data, pd.DataFrame):
@@ -73,16 +80,41 @@ def audit_training_dataset(
     ]
     checks.append(LeakageAuditCheck("dataset_future_field_screen", not suspicious_dataset_columns, f"Forbidden future-looking dataset fields: {suspicious_dataset_columns}"))
 
+    unknown_allowed_missing = sorted(
+        set(allowed_missing_features).difference(feature_columns)
+    )
+    checks.append(
+        LeakageAuditCheck(
+            "allowed_missing_feature_schema",
+            not unknown_allowed_missing,
+            "Allowed missing features must be members of feature_columns: "
+            f"{unknown_allowed_missing}",
+        )
+    )
+
     numeric = True
-    non_finite: list[str] = []
+    invalid_features: list[str] = []
     for column in feature_columns:
         if not pd.api.types.is_numeric_dtype(data[column]):
             numeric = False
+            invalid_features.append(column)
             continue
+
         series = pd.to_numeric(data[column], errors="coerce")
-        if not series.notna().all() or series.isin([float("inf"), float("-inf")]).any():
-            non_finite.append(column)
-    checks.append(LeakageAuditCheck("numeric_finite_features", numeric and not non_finite, f"Non-numeric or non-finite features: {non_finite}"))
+        has_infinite = series.isin([float("inf"), float("-inf")]).any()
+        has_missing = series.isna().any()
+
+        if has_infinite or (has_missing and column not in allowed_missing_features):
+            invalid_features.append(column)
+
+    checks.append(
+        LeakageAuditCheck(
+            "numeric_finite_features",
+            numeric and not invalid_features,
+            "Non-numeric, infinite, or unexpected-missing features: "
+            f"{invalid_features}",
+        )
+    )
 
     checks.append(LeakageAuditCheck("label_excluded_from_features", label_column not in feature_columns, "The research label must never be a model feature."))
 
