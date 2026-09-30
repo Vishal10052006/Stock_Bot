@@ -399,6 +399,7 @@ class LiveModelRuntime:
                 "paper_target_reached": self.paper_engine.completed_count >= self.paper_engine.config.target_trades,
                 "paper_net_pnl": float(self.paper_result.metrics.net_pnl) if self.paper_result is not None else None,
                 "paper_session_fingerprint": self.paper_result.session_fingerprint if self.paper_result is not None else None,
+                "decision_diagnostics": self.paper_engine.last_diagnostics,
                 "broker_orders": 0,
                 "trading_authority": "NONE",
             }
