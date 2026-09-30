@@ -231,6 +231,28 @@ class VirtualIntradaySession:
 
         return self.finalize()
 
+    def run(self, symbols: Iterable[str] | None = None) -> LivePaperSessionResult:
+        """Consume the configured realtime candle stream for one virtual session."""
+        requested = tuple(
+            symbol.strip().upper()
+            for symbol in (symbols or (self.config.session_id and self.orchestrator.config.symbol,))
+            if symbol and symbol.strip()
+        )
+        expected = (self.orchestrator.config.symbol.strip().upper(),)
+        if requested != expected:
+            raise ValueError(
+                "virtual session requires exactly the orchestrator's configured symbol"
+            )
+
+        self.orchestrator.market_data.start(requested)
+        try:
+            for candle in self.orchestrator.market_data.run():
+                self.process_candle(candle)
+        finally:
+            self.orchestrator.market_data.stop()
+
+        return self.finalize()
+
     def finalize(self) -> LivePaperSessionResult:
         """Finalize the paper engine and persist the final account state."""
         result = self.orchestrator.paper_engine.finalize_session()
