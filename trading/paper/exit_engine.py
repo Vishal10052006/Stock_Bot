@@ -17,7 +17,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 import math
-from typing import Any, Callable
+from typing import Any, Callable, Mapping
 
 import pandas as pd
 
