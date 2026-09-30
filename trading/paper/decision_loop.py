@@ -20,7 +20,7 @@ from execution.trading_execution import (
     authorize_risk_decision,
 )
 from paper.runtime import PaperOrder, PaperTradingRuntime
-from trading.risk.engine import RiskEngine
+from trading.risk.engine import RiskAssessment, RiskEngine
 from trading.risk.gate import RiskDecision, RiskDecisionStatus
 from trading.risk.pipeline import evaluate_strategy_candidate_risk
 from trading.strategy.engine import StrategyEngine
@@ -41,6 +41,8 @@ class PaperDecisionStep:
     risk: RiskDecision
     authorization: ExecutionAuthorization
     order: PaperOrder | None
+    risk_assessment: RiskAssessment
+    equity: float
 
 
 @dataclass(frozen=True, slots=True)
@@ -60,6 +62,11 @@ class PaperDecisionRun:
     def orders(self) -> tuple[PaperOrder, ...]:
         """Return only paper orders generated during the run."""
         return tuple(step.order for step in self.steps if step.order is not None)
+
+    @property
+    def equity_observations(self) -> tuple[float, ...]:
+        """Return one authoritative paper-account equity observation per step."""
+        return tuple(step.equity for step in self.steps)
 
 
 class PaperDecisionLoop:
@@ -270,12 +277,18 @@ class PaperDecisionLoop:
                     )
                 )
 
+            # Record authoritative paper-account equity after this decision.
+            # Only prices observed at or before this row are used.
+            equity_after, _, _, _ = self.runtime.account_snapshot(last_prices)
+
             steps.append(
                 PaperDecisionStep(
                     strategy=strategy,
                     risk=risk,
                     authorization=authorization,
                     order=order,
+                    risk_assessment=assessment,
+                    equity=float(equity_after),
                 )
             )
 

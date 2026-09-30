@@ -66,8 +66,8 @@ class LivePaperSessionConfig:
     initial_equity: float = 100_000.0
     fee_bps: float = 5.0
     slippage_bps: float = 2.0
-    stop_loss_pct: float = 0.010       # 1.0% stop loss
-    take_profit_pct: float = 0.020     # 2.0% take profit (1:2 R:R)
+    stop_loss_pct: float = 0.010
+    take_profit_pct: float = 0.020
     max_open_positions: int = 1
     session_cutoff_time: str = "15:15"
     output_dir: Path = Path("paper/sessions")
@@ -148,6 +148,19 @@ class LivePaperEngine:
     def completed_count(self) -> int:
         """Number of closed trades produced so far."""
         return len(self.exit_engine.completed_outcomes)
+
+    @property
+    def submitted_order_count(self) -> int:
+        """Number of filled paper entry orders submitted in this session."""
+        return len(self._submitted_orders)
+
+    def register_submitted_order(self, order: Any) -> None:
+        """Register one filled paper order with the session controller."""
+        if not isinstance(order, PaperOrder):
+            raise TypeError("order must be a PaperOrder")
+        if order.status is not PaperOrderStatus.FILLED:
+            raise ValueError("only FILLED paper orders may be registered")
+        self._submitted_orders.append(order)
 
     def on_candle(self, candle: Any) -> list[TradeOutcome]:
         """Process one closed 5-minute candle through the complete trading loop."""
@@ -365,7 +378,6 @@ class LivePaperEngine:
         symbol = candle["symbol"]
         close_p = candle["close"]
 
-        # Compute causal rolling indicators from candle history
         features, regime, regime_prob = self._compute_causal_features(candle)
 
         strategy_input = StrategyInput(
@@ -385,7 +397,6 @@ class LivePaperEngine:
             self._record_decision(strategy_decision, None, None)
             return
 
-        # Risk Engine evaluation
         risk_decision = evaluate_strategy_risk(
             strategy_decision,
             risk_enabled=True,
@@ -397,13 +408,13 @@ class LivePaperEngine:
             self._record_decision(strategy_decision, risk_decision, None)
             return
 
-        # Independent Safety Gate check: verify fail-closed live lock and kill switch
-        safety_eval = self.safety_gate.evaluate(SafetyState(live_execution_enabled=False))
+        safety_eval = self.safety_gate.evaluate(
+            SafetyState(live_execution_enabled=False)
+        )
         if safety_eval.block not in (SafetyBlock.NONE, SafetyBlock.LIVE_LOCKED):
             self._record_decision(strategy_decision, risk_decision, None)
             return
 
-        # Calculate Stop Loss and Take Profit
         direction = strategy_decision.direction
         if direction is StrategyDirection.LONG:
             stop_price = close_p * (1.0 - self.config.stop_loss_pct)
@@ -412,7 +423,6 @@ class LivePaperEngine:
             stop_price = close_p * (1.0 + self.config.stop_loss_pct)
             target_price = close_p * (1.0 - self.config.take_profit_pct)
 
-        # Submit paper order (pure simulation)
         trade_index = len(self._submitted_orders) + 1
         trade_id = f"TR-{self.config.experiment_id}-{trade_index:03d}"
         risk_version = getattr(risk_decision, "risk_version", "v1.0") or "v1.0"
@@ -433,7 +443,7 @@ class LivePaperEngine:
         )
 
         if order.status is PaperOrderStatus.FILLED:
-            self._submitted_orders.append(order)
+            self.register_submitted_order(order)
             self.exit_engine.open_position(
                 order,
                 stop_price=stop_price,
@@ -455,25 +465,21 @@ class LivePaperEngine:
         closes = [c["close"] for c in self._candle_history]
         volumes = [c["volume"] for c in self._candle_history]
 
-        # RVOL (relative volume vs 20-bar average)
         recent_vols = volumes[-20:] if n >= 20 else volumes
         avg_vol = sum(recent_vols) / len(recent_vols) if recent_vols else 1.0
         rvol = (current_candle["volume"] / avg_vol) if avg_vol > 0 else 1.2
 
-        # Cumulative VWAP
         typical_prices = [(c["high"] + c["low"] + c["close"]) / 3.0 for c in self._candle_history]
         sum_pv = sum(tp * vol for tp, vol in zip(typical_prices, volumes))
         sum_v = sum(volumes)
         vwap = (sum_pv / sum_v) if sum_v > 0 else current_candle["close"]
         vwap_dist_pct = ((current_candle["close"] - vwap) / vwap) * 100.0
 
-        # Swing levels
         highs = [c["high"] for c in self._candle_history[-20:]]
         lows = [c["low"] for c in self._candle_history[-20:]]
         swing_high = max(highs) if highs else current_candle["high"]
         swing_low = min(lows) if lows else current_candle["low"]
 
-        # Simple trend determination
         if n >= 5:
             sma_short = sum(closes[-5:]) / 5.0
             sma_long = sum(closes[-15:]) / len(closes[-15:]) if n >= 15 else sma_short
@@ -539,7 +545,6 @@ class LivePaperEngine:
 
     def finalize_session(self) -> LivePaperSessionResult:
         """Close remaining positions, compute metrics, and write immutable session evidence."""
-        # Close any lingering open position at the final observed price
         if self._last_time is not None and self.exit_engine.has_open_position(self.config.symbol):
             last_close = self._candle_history[-1]["close"] if self._candle_history else 100.0
             self.exit_engine.close_all(
@@ -571,7 +576,6 @@ class LivePaperEngine:
             live_broker_orders=0,
         )
 
-        # Deterministic SHA-256 session evidence fingerprint
         fingerprint_dict = {
             "experiment_id": self.config.experiment_id,
             "symbol": self.config.symbol,
@@ -586,13 +590,11 @@ class LivePaperEngine:
         canonical_bytes = json.dumps(fingerprint_dict, sort_keys=True).encode("utf-8")
         session_fingerprint = hashlib.sha256(canonical_bytes).hexdigest()
 
-        # Persist session evidence bundle
         session_path: Path | None = None
         if self.config.output_dir:
             session_path = Path(self.config.output_dir) / self.config.experiment_id
             session_path.mkdir(parents=True, exist_ok=True)
 
-            # 1. session.json
             session_meta = {
                 "config": {
                     "experiment_id": self.config.experiment_id,
@@ -612,14 +614,9 @@ class LivePaperEngine:
                 "live_broker_orders": 0,
             }
             (session_path / "session.json").write_text(json.dumps(session_meta, indent=2), encoding="utf-8")
-
-            # 2. metrics.json
             (session_path / "metrics.json").write_text(json.dumps(metrics.to_dict(), indent=2), encoding="utf-8")
-
-            # 3. report.txt
             (session_path / "report.txt").write_text(report_text, encoding="utf-8")
 
-            # 4. outcomes.jsonl
             with (session_path / "outcomes.jsonl").open("w", encoding="utf-8") as f:
                 for o in outcomes:
                     line = {
@@ -640,8 +637,10 @@ class LivePaperEngine:
                     }
                     f.write(json.dumps(line) + "\n")
 
-            # 5. session_fingerprint.sha256
-            (session_path / "session_fingerprint.sha256").write_text(f"{session_fingerprint}\n", encoding="utf-8")
+            (session_path / "session_fingerprint.sha256").write_text(
+                f"{session_fingerprint}\n",
+                encoding="utf-8",
+            )
 
         return LivePaperSessionResult(
             experiment_id=self.config.experiment_id,
