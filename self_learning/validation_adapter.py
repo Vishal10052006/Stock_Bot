@@ -11,6 +11,7 @@ from typing import Any, Mapping
 import pandas as pd
 
 from backtesting.leakage_audit import LeakageAuditReport, audit_training_dataset
+from market.features.builder import CONDITIONALLY_MISSING_FEATURE_COLUMNS
 from .contracts import ValidationSummary
 
 
@@ -19,12 +20,14 @@ def validate_dataset_boundary(
     *,
     feature_columns: tuple[str, ...],
     label_column: str = "label",
+    allowed_missing_features: frozenset[str] = CONDITIONALLY_MISSING_FEATURE_COLUMNS,
 ) -> ValidationSummary:
     """Run the existing Phase-13 dataset leakage audit."""
     report: LeakageAuditReport = audit_training_dataset(
         data,
         feature_columns=feature_columns,
         label_column=label_column,
+        allowed_missing_features=allowed_missing_features,
     )
     return ValidationSummary(
         stage="LEAKAGE_AUDIT",
