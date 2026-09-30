@@ -233,12 +233,13 @@ class VirtualIntradaySession:
 
     def run(self, symbols: Iterable[str] | None = None) -> LivePaperSessionResult:
         """Consume the configured realtime candle stream for one virtual session."""
+        expected = (self.orchestrator.config.symbol.strip().upper(),)
+        source_symbols = expected if symbols is None else symbols
         requested = tuple(
             symbol.strip().upper()
-            for symbol in (symbols or (self.config.session_id and self.orchestrator.config.symbol,))
+            for symbol in source_symbols
             if symbol and symbol.strip()
         )
-        expected = (self.orchestrator.config.symbol.strip().upper(),)
         if requested != expected:
             raise ValueError(
                 "virtual session requires exactly the orchestrator's configured symbol"
