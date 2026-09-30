@@ -36,6 +36,10 @@ from market.data.metrics import DataQualityMetrics
 from market.data.realtime_pipeline import RealtimeMarketDataPipeline
 from market.data.validation import MarketEventValidator
 from trading.paper.decision_loop import PaperDecisionLoop
+from trading.paper.live_market_runtime import (
+    LiveMarketPaperConfig,
+    run_live_market_paper_session,
+)
 
 
 class RuntimeMode(str, Enum):
@@ -45,6 +49,7 @@ class RuntimeMode(str, Enum):
     SHADOW = "shadow"
     PAPER = "paper"
     READINESS = "readiness"
+    LIVE_PAPER = "live-paper"
     LIVE = "live"
 
 
@@ -59,6 +64,13 @@ class RuntimeConfig:
     quantity: float = 1.0
     price_column: str = "close"
     confirm_live: bool = False
+    model_artifact: Path | None = None
+    model_sha256: str | None = None
+    model_version: str = "phase9-logistic-v1"
+    benchmark_symbol: str = "NIFTY50"
+    session_id: str = "VIRTUAL-INTRADAY-001"
+    initial_equity: float = 100_000.0
+    max_candles: int | None = None
 
     def __post_init__(self) -> None:
         if not self.symbol.strip():
@@ -95,6 +107,40 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--quantity", type=float, default=1.0)
     parser.add_argument("--price-column", default="close")
     parser.add_argument(
+        "--model-artifact",
+        help="Verified Phase-9 Logistic artifact for live-paper mode.",
+    )
+    parser.add_argument(
+        "--model-sha256",
+        help="Expected SHA-256 identity of the model artifact.",
+    )
+    parser.add_argument(
+        "--model-version",
+        default="phase9-logistic-v1",
+        help="Model version expected in the artifact manifest.",
+    )
+    parser.add_argument(
+        "--benchmark-symbol",
+        default="NIFTY50",
+        help="Causal benchmark symbol mapped in UPSTOX_INSTRUMENT_MAP.",
+    )
+    parser.add_argument(
+        "--session-id",
+        default="VIRTUAL-INTRADAY-001",
+        help="Persistent virtual session identifier.",
+    )
+    parser.add_argument(
+        "--initial-equity",
+        type=float,
+        default=100_000.0,
+        help="Virtual starting equity.",
+    )
+    parser.add_argument(
+        "--max-candles",
+        type=int,
+        help="Optional bounded candle count for a startup smoke run.",
+    )
+    parser.add_argument(
         "--confirm-live",
         action="store_true",
         help="Request live mode; repository lock still applies.",
@@ -112,6 +158,13 @@ def _config_from_args(args: argparse.Namespace) -> RuntimeConfig:
         quantity=args.quantity,
         price_column=args.price_column,
         confirm_live=args.confirm_live,
+        model_artifact=Path(args.model_artifact) if args.model_artifact else None,
+        model_sha256=args.model_sha256,
+        model_version=args.model_version,
+        benchmark_symbol=args.benchmark_symbol.strip().upper(),
+        session_id=args.session_id.strip(),
+        initial_equity=args.initial_equity,
+        max_candles=args.max_candles,
     )
 
 
@@ -250,6 +303,26 @@ def run_paper(config: RuntimeConfig) -> int:
     return 0
 
 
+def run_live_paper(config: RuntimeConfig) -> int:
+    """Run the real Upstox market feed through the virtual paper account."""
+    if config.model_artifact is None:
+        raise ValueError("live-paper mode requires --model-artifact")
+    if not config.model_sha256:
+        raise ValueError("live-paper mode requires --model-sha256")
+    return run_live_market_paper_session(
+        LiveMarketPaperConfig(
+            symbol=config.symbol,
+            benchmark_symbol=config.benchmark_symbol,
+            model_artifact=config.model_artifact,
+            model_sha256=config.model_sha256,
+            model_version=config.model_version,
+            session_id=config.session_id,
+            initial_equity=config.initial_equity,
+            max_candles=config.max_candles,
+        )
+    )
+
+
 def run_readiness() -> int:
     """Print the current fail-closed live-readiness state."""
     gates = LiveReadinessInput(
@@ -312,6 +385,8 @@ def dispatch(config: RuntimeConfig) -> int:
         return run_shadow(config)
     if config.mode is RuntimeMode.PAPER:
         return run_paper(config)
+    if config.mode is RuntimeMode.LIVE_PAPER:
+        return run_live_paper(config)
     if config.mode is RuntimeMode.READINESS:
         return run_readiness()
     if config.mode is RuntimeMode.LIVE:
@@ -333,6 +408,8 @@ __all__ = [
     "main",
     "run_ceo_demo",
     "run_live",
+    "run_live_market_paper_session",
+    "run_live_paper",
     "run_paper",
     "run_readiness",
     "run_shadow",
