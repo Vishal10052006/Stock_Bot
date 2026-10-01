@@ -44,6 +44,7 @@ class UpstoxMarketFeed(MarketFeed):
         self._websocket = websocket_module
         self._ws = None
         self._subscribed_symbols: set[str] = set()
+        self._stopping = False
         self.event_validator = event_validator
         self.metrics = metrics
 
@@ -160,6 +161,7 @@ class UpstoxMarketFeed(MarketFeed):
 
     def connect(self) -> None:
         """Authorize and open the provider WebSocket connection."""
+        self._stopping = False
         self._open_connection()
 
     def subscribe(self, symbols: Iterable[str]) -> None:
@@ -208,6 +210,13 @@ class UpstoxMarketFeed(MarketFeed):
             try:
                 raw_message = self._ws.recv()
             except Exception as exc:
+                # An intentional session shutdown closes the socket from
+                # another thread. In that case events() must terminate
+                # instead of treating the close as a transient failure and
+                # reconnecting.
+                if self._stopping:
+                    return
+
                 # Determine whether the exception represents a connection
                 # failure that can safely trigger the reconnect policy.
                 websocket = self._load_websocket_module()
@@ -343,7 +352,10 @@ class UpstoxMarketFeed(MarketFeed):
 
     def disconnect(self) -> None:
         """Close the active provider connection safely."""
+        self._stopping = True
         if self._ws is not None:
-            self._ws.close()
-        self._ws = None
+            try:
+                self._ws.close()
+            finally:
+                self._ws = None
         self._subscribed_symbols.clear()

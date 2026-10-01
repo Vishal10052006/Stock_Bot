@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+
+import pandas as pd
 from typing import Iterable
 
 from market.bot.orchestrator import MarketBot, MarketBotConfig
@@ -101,7 +103,38 @@ def build_live_market_paper_session(
         return history.candles(config.symbol, cutoff)
 
     def benchmark_history_provider(cutoff):
-        return history.frame(config.benchmark_symbol, cutoff)
+        # Historical V3 supplies previous trading days while Intraday V3
+        # supplies the current trading day. Combine both sources and retain
+        # only candles available at the exact causal decision timestamp.
+        historical = history.frame(config.benchmark_symbol, cutoff)
+        intraday = history.intraday_frame(config.benchmark_symbol)
+
+        if intraday.empty:
+            combined = historical
+        else:
+            cutoff_utc = pd.Timestamp(cutoff).tz_convert("UTC")
+            intraday = intraday.loc[
+                intraday["timestamp"] <= cutoff_utc
+            ].copy()
+            combined = pd.concat(
+                [historical, intraday],
+                ignore_index=True,
+            )
+
+        if combined.empty:
+            return combined
+
+        combined["timestamp"] = pd.to_datetime(
+            combined["timestamp"],
+            utc=True,
+            errors="raise",
+        )
+        combined = combined.sort_values("timestamp", kind="stable")
+        combined = combined.drop_duplicates(
+            ["timestamp", "symbol"],
+            keep="last",
+        )
+        return combined.reset_index(drop=True)
 
     market_bot = MarketBot(
         MarketBotConfig(
@@ -114,7 +147,7 @@ def build_live_market_paper_session(
     def benchmark_context_provider(cutoff, benchmark_frame):
         return market_bot.build(
             benchmark_data=benchmark_frame,
-            provenance={"provider": "upstox-historical-v3"},
+            provenance={"provider": "upstox-historical-v3+intraday-v3"},
         )
 
     paper_engine = LivePaperEngine(

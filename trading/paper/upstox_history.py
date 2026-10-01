@@ -9,9 +9,8 @@ from __future__ import annotations
 
 from datetime import timedelta
 import os
-from typing import Iterable
 from urllib.parse import quote
-from urllib.request import Request, urlopen
+import requests
 
 import pandas as pd
 
@@ -62,17 +61,17 @@ class UpstoxHistoryProvider:
             "https://api.upstox.com/v3/historical-candle/"
             f"{encoded_key}/minutes/{self.interval_minutes}/{to_date}/{from_date}"
         )
-        request = Request(
+        response = requests.get(
             url,
             headers={
+                "Content-Type": "application/json",
                 "Accept": "application/json",
                 "Authorization": f"Bearer {self.access_token}",
             },
+            timeout=15,
         )
-        with urlopen(request, timeout=15) as response:
-            payload = response.read().decode("utf-8")
-        import json
-        body = json.loads(payload)
+        response.raise_for_status()
+        body = response.json()
         if body.get("status") != "success":
             raise RuntimeError("Upstox historical candle request was unsuccessful")
         return body.get("data", {}).get("candles", [])
@@ -126,6 +125,81 @@ class UpstoxHistoryProvider:
         frame = frame.loc[frame["timestamp"] < timestamp].copy()
         frame = frame.sort_values("timestamp", kind="stable")
         frame = frame.drop_duplicates(["timestamp", "symbol"], keep="last")
+        return frame.reset_index(drop=True)
+
+    def intraday_frame(self, symbol: str) -> pd.DataFrame:
+        """Return current trading-day 5-minute OHLCV from Upstox Intraday V3.
+
+        This endpoint is intentionally separate from ``frame()`` because
+        Historical Candle V3 does not reliably expose the current trading
+        day's candles while the market is open.
+        """
+        normalized = symbol.strip().upper()
+        instrument_key = self.instrument_mapper.instrument_key(normalized)
+        encoded_key = quote(instrument_key, safe="")
+
+        url = (
+            "https://api.upstox.com/v3/historical-candle/intraday/"
+            f"{encoded_key}/minutes/{self.interval_minutes}"
+        )
+
+        response = requests.get(
+            url,
+            headers={
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+                "Authorization": f"Bearer {self.access_token}",
+            },
+            timeout=15,
+        )
+        response.raise_for_status()
+
+        body = response.json()
+        if body.get("status") != "success":
+            raise RuntimeError("Upstox intraday candle request was unsuccessful")
+
+        rows = []
+        for raw in body.get("data", {}).get("candles", []):
+            if len(raw) < 6:
+                continue
+            rows.append(
+                {
+                    "timestamp": pd.Timestamp(raw[0]),
+                    "symbol": normalized,
+                    "open": float(raw[1]),
+                    "high": float(raw[2]),
+                    "low": float(raw[3]),
+                    "close": float(raw[4]),
+                    "volume": float(raw[5]),
+                }
+            )
+
+        frame = pd.DataFrame(
+            rows,
+            columns=[
+                "timestamp",
+                "symbol",
+                "open",
+                "high",
+                "low",
+                "close",
+                "volume",
+            ],
+        )
+
+        if frame.empty:
+            return frame
+
+        frame["timestamp"] = pd.to_datetime(
+            frame["timestamp"],
+            utc=True,
+            errors="raise",
+        )
+        frame = frame.sort_values("timestamp", kind="stable")
+        frame = frame.drop_duplicates(
+            ["timestamp", "symbol"],
+            keep="last",
+        )
         return frame.reset_index(drop=True)
 
     def candles(self, symbol: str, cutoff: pd.Timestamp) -> tuple[Candle, ...]:

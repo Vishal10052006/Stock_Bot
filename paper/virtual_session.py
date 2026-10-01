@@ -11,10 +11,12 @@ fills while the exit engine owns lifecycle closure and TradeOutcome P&L.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, time
 import hashlib
 import json
 import math
 from pathlib import Path
+from threading import Event, Thread
 from typing import Iterable
 import re
 
@@ -234,6 +236,12 @@ class VirtualIntradaySession:
 
         return self.finalize()
 
+    def _market_timezone(self):
+        """Return the configured market timezone."""
+        from zoneinfo import ZoneInfo
+
+        return ZoneInfo(self.config.market_timezone)
+
     def run(
         self,
         symbols: Iterable[str] | None = None,
@@ -257,13 +265,42 @@ class VirtualIntradaySession:
 
         self.orchestrator.market_data.start(requested)
         produced = 0
+
+        market_tz = self._market_timezone()
+        now = datetime.now(market_tz)
+        close_time = datetime.combine(
+            now.date(),
+            time.fromisoformat(self.config.session_close),
+            tzinfo=market_tz,
+        )
+
+        stop_event = Event()
+
+        def session_close_watchdog() -> None:
+            remaining = (close_time - datetime.now(market_tz)).total_seconds()
+
+            if remaining > 0:
+                stop_event.wait(remaining)
+
+            if not stop_event.is_set():
+                self.orchestrator.market_data.stop()
+
+        watchdog = Thread(
+            target=session_close_watchdog,
+            name="virtual-session-close-watchdog",
+            daemon=True,
+        )
+        watchdog.start()
+
         try:
             for candle in self.orchestrator.market_data.run():
                 self.process_candle(candle)
                 produced += 1
+
                 if max_candles is not None and produced >= max_candles:
                     break
         finally:
+            stop_event.set()
             self.orchestrator.market_data.stop()
 
         return self.finalize()

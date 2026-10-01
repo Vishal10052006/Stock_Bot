@@ -331,3 +331,61 @@ def test_finalize_replaces_pre_close_mark_with_final_closed_account(tmp_path):
 
     summary = (tmp_path / "FINALIZE-TEST" / "account_summary.json").read_text()
     assert '"open_positions": 0' in summary
+
+
+def test_run_stops_live_feed_at_session_close_and_finalizes(tmp_path):
+    """The session watchdog must stop a blocked live feed at session close."""
+    from threading import Event
+
+    class BlockingMarketData:
+        def __init__(self):
+            self.started = False
+            self.stop_calls = 0
+            self.stopped = Event()
+
+        def start(self, symbols):
+            self.started = True
+            assert tuple(symbols) == ("RELIANCE",)
+
+        def run(self):
+            """Simulate a feed blocked waiting for the next websocket event."""
+            self.stopped.wait(timeout=2.0)
+            if not self.stopped.is_set():
+                raise AssertionError(
+                    "session watchdog did not stop the blocked market feed"
+                )
+            return
+            yield  # Keep this method an iterator/generator.
+
+        def stop(self):
+            self.stop_calls += 1
+            self.stopped.set()
+
+    market_data = BlockingMarketData()
+
+    orchestrator = _orchestrator()
+    orchestrator.config = SimpleNamespace(symbol="RELIANCE")
+    orchestrator.market_data = market_data
+
+    session = VirtualIntradaySession(
+        orchestrator,
+        config=VirtualIntradaySessionConfig(
+            output_dir=tmp_path,
+            session_id="SESSION-CLOSE-WATCHDOG",
+            session_open="00:00",
+            session_close="00:01",
+        ),
+    )
+
+    result = session.run()
+
+    assert market_data.started is True
+    assert market_data.stop_calls >= 1
+    assert result.completed_trades == 0
+
+    summary_path = (
+        tmp_path
+        / "SESSION-CLOSE-WATCHDOG"
+        / "account_summary.json"
+    )
+    assert summary_path.exists()
