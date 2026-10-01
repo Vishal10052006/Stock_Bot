@@ -1,13 +1,18 @@
 """Causal Upstox V3 historical-candle provider for live paper startup.
 
 The provider uses the same Upstox access token as the realtime feed and
-returns only candles strictly before a requested decision timestamp for seed
-history. Live candles still come exclusively from the realtime feed.
+supports two explicit causal views:
+
+* strict history for seed data: timestamps < decision time
+* inclusive history for point-in-time benchmark context: timestamps <= decision time
+
+Live candles still come exclusively from the realtime feed.
 """
 
 from __future__ import annotations
 
 from datetime import timedelta
+import json
 import os
 from typing import Iterable
 from urllib.parse import quote
@@ -71,14 +76,13 @@ class UpstoxHistoryProvider:
         )
         with urlopen(request, timeout=15) as response:
             payload = response.read().decode("utf-8")
-        import json
         body = json.loads(payload)
         if body.get("status") != "success":
             raise RuntimeError("Upstox historical candle request was unsuccessful")
         return body.get("data", {}).get("candles", [])
 
-    def frame(self, symbol: str, cutoff: pd.Timestamp) -> pd.DataFrame:
-        """Return causal OHLCV history strictly before the decision time."""
+    def _frame(self, symbol: str, cutoff: pd.Timestamp, *, inclusive: bool) -> pd.DataFrame:
+        """Normalize raw candles and apply the requested causal cutoff."""
         timestamp = pd.Timestamp(cutoff)
         if timestamp.tzinfo is None:
             raise ValueError("cutoff must be timezone-aware")
@@ -123,10 +127,33 @@ class UpstoxHistoryProvider:
             utc=True,
             errors="raise",
         )
-        frame = frame.loc[frame["timestamp"] < timestamp].copy()
+
+        if inclusive:
+            frame = frame.loc[frame["timestamp"] <= timestamp].copy()
+        else:
+            frame = frame.loc[frame["timestamp"] < timestamp].copy()
+
         frame = frame.sort_values("timestamp", kind="stable")
         frame = frame.drop_duplicates(["timestamp", "symbol"], keep="last")
         return frame.reset_index(drop=True)
+
+    def frame(self, symbol: str, cutoff: pd.Timestamp) -> pd.DataFrame:
+        """Return causal OHLCV history strictly before the decision time.
+
+        This remains the default view for seed history so a live decision
+        candle is never duplicated into its own historical feature window.
+        """
+        return self._frame(symbol, cutoff, inclusive=False)
+
+    def frame_through(self, symbol: str, cutoff: pd.Timestamp) -> pd.DataFrame:
+        """Return point-in-time OHLCV history through the decision timestamp.
+
+        This view is intended for benchmark/MarketContext providers whose
+        contract requires the latest available observation to equal the
+        decision timestamp. It remains causal because it admits no row
+        strictly after the cutoff.
+        """
+        return self._frame(symbol, cutoff, inclusive=True)
 
     def candles(self, symbol: str, cutoff: pd.Timestamp) -> tuple[Candle, ...]:
         """Return causal Candle objects for canonical history seeding."""
