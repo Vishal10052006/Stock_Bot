@@ -98,10 +98,13 @@ def build_live_market_paper_session(
     history = UpstoxHistoryProvider.from_env(mapper)
 
     def stock_history_provider(cutoff):
+        # Seed feature history must remain strictly before the live decision.
         return history.candles(config.symbol, cutoff)
 
     def benchmark_history_provider(cutoff):
-        return history.frame(config.benchmark_symbol, cutoff)
+        # MarketContext requires the latest available benchmark bar at the
+        # decision timestamp while remaining causal (never after the cutoff).
+        return history.frame_through(config.benchmark_symbol, cutoff)
 
     market_bot = MarketBot(
         MarketBotConfig(
