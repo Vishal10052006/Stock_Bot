@@ -260,6 +260,7 @@ def build_live_market_paper_session(
         scanner_store.write_json(operator_snapshot_path)
 
     orchestrator = CanonicalLivePaperOrchestrator(
+        decision_observer=observe_decision,
         market_data=pipeline,
         market_bot=market_bot,
         model=model,
