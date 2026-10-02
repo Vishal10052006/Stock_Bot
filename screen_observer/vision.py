@@ -216,7 +216,7 @@ def _count_candle_candidates(mask) -> int:
         if (
             3 <= width <= 32
             and 6 <= height <= 140
-            and 0.04 <= fill_ratio <= 0.90
+            and 0.04 <= fill_ratio <= 0.99
             and aspect_ratio <= 18
             and area >= 8
         ):
