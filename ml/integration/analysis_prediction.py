@@ -12,6 +12,7 @@ from typing import Any
 import pandas as pd
 
 from intelligence.analysis.contracts import AnalysisContext
+from ml.models.calibration import IsotonicProbabilityCalibrator
 from ml.models.logistic import LogisticOutcomeModel, MODEL_CLASSES
 from ml.preprocessing.pipeline import FeaturePreprocessor
 from ml.prediction.monitoring import PredictionTelemetry
@@ -28,6 +29,8 @@ class PredictionContext:
     model_version: str
     feature_version: str
     analysis_version: str
+    target_version: str | None = None
+    calibration_version: str | None = None
 
     def __post_init__(self) -> None:
         if pd.Timestamp(self.timestamp).tzinfo is None:
@@ -53,7 +56,10 @@ def predict_from_analysis(
     *,
     model: LogisticOutcomeModel,
     preprocessor: FeaturePreprocessor,
+    calibrator: IsotonicProbabilityCalibrator | None = None,
     model_version: str = "phase9-logistic-v1",
+    target_version: str | None = None,
+    calibration_version: str | None = None,
     monitoring: Any | None = None,
 ) -> PredictionContext:
     """Generate Phase 9 probabilities from one validated AnalysisContext."""
@@ -70,11 +76,20 @@ def predict_from_analysis(
     if model.feature_count != len(preprocessor.get_feature_names_out()):
         raise ValueError("model/preprocessor feature counts do not match")
 
+    if calibrator is not None and not isinstance(calibrator, IsotonicProbabilityCalibrator):
+        raise TypeError("calibrator must be an IsotonicProbabilityCalibrator")
+    if calibrator is not None and not calibrator.is_fitted:
+        raise ValueError("calibrator must be fitted before inference")
+    if calibrator is None and calibration_version is not None:
+        raise ValueError("calibration_version requires a fitted calibrator")
+
     row = pd.DataFrame([dict(context.feature_vector)])
 
     # Use the same Phase 9 feature schema and train-fitted preprocessing.
     transformed = preprocessor.transform(row)
     probabilities = model.predict_proba(transformed)
+    if calibrator is not None:
+        probabilities = calibrator.transform(probabilities)
     predicted_class = str(probabilities.iloc[0].idxmax())
 
     prediction = PredictionContext(
@@ -85,6 +100,8 @@ def predict_from_analysis(
         model_version=model_version,
         feature_version=context.feature_version,
         analysis_version=context.analysis_version,
+        target_version=target_version,
+        calibration_version=calibration_version,
     )
     if monitoring is not None:
         monitoring.observe_prediction(
