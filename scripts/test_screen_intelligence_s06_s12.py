@@ -24,7 +24,8 @@ from screen_observer.indicators import detect_indicator_evidence
 from screen_observer.ocr import ocr_image
 from screen_observer.pipewire_capture import PipeWireFrameCapture
 from screen_observer.timeframe import detect_timeframe_evidence
-from screen_observer.validation import validate_screen_observation\nfrom screen_observer.wayland_portal import WaylandScreenCastPortal
+from screen_observer.validation import validate_screen_observation
+from screen_observer.wayland_portal import WaylandScreenCastPortal
 
 
 async def main() -> None:
@@ -66,7 +67,6 @@ async def main() -> None:
             window, image=frame.frame, ocr_result=ocr_result
         )
         print(f"Chart: {chart.detected} confidence={chart.confidence:.4f}")
-
         if not chart.detected:
             raise RuntimeError("S05 chart detection failed")
 
@@ -136,31 +136,52 @@ async def main() -> None:
         )
 
         print("\n[7/9] S09 context + S10 reconciliation + S11 confidence...")
-        decision_ts = frame.observed_at
         context = build_screen_analysis_context(
             observation,
             market_symbol=symbol or "UNKNOWN",
             market_timeframe=timeframe_value or "5m",
-            decision_timestamp=decision_ts,
+            decision_timestamp=frame.observed_at,
             max_age_seconds=30.0,
         )
         print(f"Confidence: {confidence.overall:.4f}")
         print(f"Reconciliation: {context.reconciliation_status}")
         print(f"Usable: {context.usable}")
 
-        print("\n[8/9] S13 evidence validation...")\n        validation = validate_screen_observation(\n            observation, require_chart=True, require_symbol=True, require_timeframe=True\n        )\n        print(f"Validation: {\"PASS\" if validation.valid else \"FAIL\"}")\n        if validation.reasons:\n            print(f"Validation reasons: {validation.reasons}")\n        if validation.warnings:\n            print(f"Validation warnings: {validation.warnings}")\n        if not validation.valid:\n            raise RuntimeError("S13 validation failed: " + ", ".join(validation.reasons))\n\n        print("\n[9/9] S12 screen-aware analysis context...")
+        print("\n[8/9] S13 evidence validation...")
+        validation = validate_screen_observation(
+            observation,
+            require_chart=True,
+            require_symbol=True,
+            require_timeframe=True,
+        )
+        print(f"Validation: {'PASS' if validation.valid else 'FAIL'}")
+        if validation.reasons:
+            print(f"Validation reasons: {validation.reasons}")
+        if validation.warnings:
+            print(f"Validation warnings: {validation.warnings}")
+        if not validation.valid:
+            raise RuntimeError(
+                "S13 validation failed: " + ", ".join(validation.reasons)
+            )
+
+        print("\n[9/9] S12 screen-aware analysis context...")
         print(f"Market symbol: {context.market_symbol}")
         print(f"Screen symbol: {context.screen_symbol}")
         print(f"Indicators: {context.indicators}")
         print(f"Authority: {context.provenance['authority']}")
 
-        if not context.reconciliation_status == "MATCH":
+        if context.reconciliation_status != "MATCH":
             raise RuntimeError(
                 "S10 reconciliation did not match. "
                 + ", ".join(context.reconciliation_reasons)
             )
+        if not context.usable:
+            raise RuntimeError(
+                "S12 analysis context is not usable: "
+                + ", ".join(context.reconciliation_reasons)
+            )
 
-        if not context.usable:\n            raise RuntimeError("S12 analysis context is not usable: " + ", ".join(context.reconciliation_reasons))\n\n        print("\nS06-S13 SCREEN INTELLIGENCE SMOKE TEST: SUCCESS")
+        print("\nS06-S13 SCREEN INTELLIGENCE SMOKE TEST: SUCCESS")
     finally:
         if capture is not None:
             capture.stop()
