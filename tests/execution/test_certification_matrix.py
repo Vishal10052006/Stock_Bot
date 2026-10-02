@@ -89,3 +89,31 @@ def test_production_gate_contains_all_certification_gate_fields():
     expected = {item.gate_field for item in CERTIFICATION_ITEMS}
     assert expected <= gate_fields
     assert "live_lock_validated" in gate_fields
+
+
+def test_pass_evidence_requires_explicit_evidence_record():
+    evidence = _all_pass()
+    evidence["CERT-01"] = CertificationEvidence(
+        "CERT-01",
+        CertificationStatus.PASS,
+    )
+    try:
+        build_certification_report(evidence)
+    except ValueError as exc:
+        assert "explicit evidence" in str(exc)
+    else:
+        raise AssertionError("PASS evidence without evidence payload was accepted")
+
+
+def test_provider_pass_requires_explicit_evidence_record():
+    evidence = _all_pass()
+    evidence["CERT-12"] = CertificationEvidence(
+        "CERT-12",
+        CertificationStatus.PASS,
+    )
+    try:
+        build_certification_report(evidence)
+    except ValueError as exc:
+        assert "explicit evidence" in str(exc)
+    else:
+        raise AssertionError("provider PASS without evidence was accepted")
