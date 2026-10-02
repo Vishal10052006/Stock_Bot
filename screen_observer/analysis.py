@@ -13,6 +13,7 @@ from .confidence import screen_is_usable
 from .contracts import ScreenObservation
 from .evidence import CandleVisualEvidence, ScreenAnalysisContext
 from .reconciliation import reconcile
+from .validation import validate_screen_observation
 
 
 def build_screen_analysis_context(
@@ -35,6 +36,14 @@ def build_screen_analysis_context(
         max_age_seconds=max_age_seconds,
     )
 
+    validation = validate_screen_observation(
+        observation,
+        require_chart=True,
+        require_symbol=True,
+        require_timeframe=True,
+        minimum_overall_confidence=minimum_confidence,
+    )
+
     candles = CandleVisualEvidence(
         bullish=observation.candles.bullish,
         bearish=observation.candles.bearish,
@@ -49,6 +58,7 @@ def build_screen_analysis_context(
 
     usable = (
         reconciliation.usable
+        and validation.usable
         and screen_is_usable(
             observation.confidence,
             minimum_overall=minimum_confidence,
@@ -64,8 +74,8 @@ def build_screen_analysis_context(
         indicators=observation.indicators,
         candles=candles,
         confidence=observation.confidence,
-        reconciliation_status=reconciliation.status,
-        reconciliation_reasons=reconciliation.reasons,
+        reconciliation_status=(reconciliation.status if validation.usable else "INVALID"),
+        reconciliation_reasons=tuple(reconciliation.reasons) + tuple(validation.reasons),
         usable=usable,
         provenance={
             "source": "desktop_screen",
