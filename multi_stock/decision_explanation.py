@@ -56,6 +56,28 @@ def _item(stage: str, obj: Any, timestamp: pd.Timestamp, source: str) -> Decisio
     if not str(reason).strip(): return None
     return DecisionExplanationItem(stage, ts, str(status), str(reason), source)
 
+def _enum_value(value: Any) -> str | None:
+    if value is None:
+        return None
+    return str(getattr(value, "value", value)).split(".")[-1].upper()
+
+def _execution_outcome(execution: Any) -> str | None:
+    status = _enum_value(_field(execution, "status", None))
+    if status is None:
+        return None
+    return {
+        "BLOCKED": "EXECUTION_BLOCKED",
+        "REJECTED": "EXECUTION_REJECTED",
+        "REJECTED_LOCAL": "EXECUTION_REJECTED",
+        "REJECTED_BROKER": "EXECUTION_REJECTED",
+        "FAILED": "EXECUTION_REJECTED",
+        "FILLED": "EXECUTION_FILLED",
+        "PARTIALLY_FILLED": "EXECUTION_PENDING",
+        "SUBMITTED": "EXECUTION_PENDING",
+        "ACKNOWLEDGED": "EXECUTION_PENDING",
+        "OPEN": "EXECUTION_PENDING",
+        "CANCEL_PENDING": "EXECUTION_PENDING",
+    }.get(status)
 def build_decision_explanation(
     timestamp: pd.Timestamp,
     symbol: str,
@@ -96,16 +118,22 @@ def build_decision_explanation(
         component_symbol = _field(component, "symbol", None)
         if component_symbol is not None and str(component_symbol).strip().upper() != str(symbol).strip().upper():
             raise ValueError("explanation symbol mismatch")
-    strategy_direction = _field(strategy, "direction", None)
-    risk_status = _field(risk, "status", None)
+    strategy_direction = _enum_value(_field(strategy, "direction", None))
+    risk_status = _enum_value(_field(risk, "status", None))
     safety_allowed = _field(safety, "allowed", None)
-    execution_status = _field(execution, "status", None)
-    if strategy_direction is not None and str(strategy_direction).split(".")[-1] == "NO_TRADE": outcome = "NO_TRADE"
-    elif execution_status is not None and str(execution_status).split(".")[-1] == "BLOCKED": outcome = "EXECUTION_BLOCKED"
-    elif risk_status is not None and str(risk_status).split(".")[-1] == "REJECTED": outcome = "RISK_REJECTED"
-    elif safety_allowed is False: outcome = "SAFETY_BLOCKED"
-    elif strategy_direction is not None: outcome = str(strategy_direction).split(".")[-1]
-    else: outcome = "OBSERVATION_ONLY"
+    execution_outcome = _execution_outcome(execution)
+    if strategy_direction == "NO_TRADE":
+        outcome = "NO_TRADE"
+    elif execution_outcome is not None:
+        outcome = execution_outcome
+    elif risk_status == "REJECTED":
+        outcome = "RISK_REJECTED"
+    elif safety_allowed is False:
+        outcome = "SAFETY_BLOCKED"
+    elif strategy_direction in {"LONG", "SHORT"}:
+        outcome = strategy_direction
+    else:
+        outcome = "OBSERVATION_ONLY"
     return DecisionExplanation(timestamp, symbol, outcome, tuple(items))
 
 __all__ = ["DecisionExplanationItem", "DecisionExplanation", "build_decision_explanation"]
