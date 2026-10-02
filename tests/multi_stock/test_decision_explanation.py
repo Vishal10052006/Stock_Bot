@@ -196,3 +196,19 @@ def test_concrete_pipeline_contracts_preserve_authoritative_reasons():
     assert result.items[1].reason.startswith("Strategy produced NO_TRADE")
     assert result.items[2].reason.startswith("LIVE_LOCKED:")
     assert result.items[3].status == "BLOCKED"
+
+
+def test_concrete_risk_enum_status_is_normalized_for_audit():
+    from trading.risk.gate import RiskDecision, RiskDecisionStatus
+    from trading.strategy.models import StrategyDirection
+
+    ts = pd.Timestamp("2026-10-02 10:00:00", tz="Asia/Kolkata")
+    risk = RiskDecision(
+        timestamp=ts,
+        symbol="RELIANCE.NS",
+        status=RiskDecisionStatus.REJECTED,
+        strategy_direction=StrategyDirection.NO_TRADE,
+        reason="risk rejected",
+    )
+    result = build_decision_explanation(ts, "RELIANCE.NS", risk=risk)
+    assert result.items[0].status == "REJECTED"
