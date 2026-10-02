@@ -1,4 +1,4 @@
-"""S06-S12 live Screen Intelligence smoke test.
+"""S06-S13 live Screen Intelligence smoke test.
 
 Validates the full observation-only chain on a real Wayland/TradingView capture.
 """
@@ -24,12 +24,12 @@ from screen_observer.indicators import detect_indicator_evidence
 from screen_observer.ocr import ocr_image
 from screen_observer.pipewire_capture import PipeWireFrameCapture
 from screen_observer.timeframe import detect_timeframe_evidence
-from screen_observer.wayland_portal import WaylandScreenCastPortal
+from screen_observer.validation import validate_screen_observation\nfrom screen_observer.wayland_portal import WaylandScreenCastPortal
 
 
 async def main() -> None:
     print("=" * 68)
-    print("STOCK BOT - S06-S12 SCREEN INTELLIGENCE SMOKE TEST")
+    print("STOCK BOT - S06-S13 SCREEN INTELLIGENCE SMOKE TEST")
     print("=" * 68)
 
     portal = WaylandScreenCastPortal()
@@ -135,7 +135,7 @@ async def main() -> None:
             timeframe_evidence=timeframe,
         )
 
-        print("\n[7/8] S09 context + S10 reconciliation + S11 confidence...")
+        print("\n[7/9] S09 context + S10 reconciliation + S11 confidence...")
         decision_ts = frame.observed_at
         context = build_screen_analysis_context(
             observation,
@@ -148,19 +148,19 @@ async def main() -> None:
         print(f"Reconciliation: {context.reconciliation_status}")
         print(f"Usable: {context.usable}")
 
-        print("\n[8/8] S12 screen-aware analysis context...")
+        print("\n[8/9] S12 screen-aware analysis context...")
         print(f"Market symbol: {context.market_symbol}")
         print(f"Screen symbol: {context.screen_symbol}")
         print(f"Indicators: {context.indicators}")
         print(f"Authority: {context.provenance['authority']}")
 
-        if not context.reconciliation_status == "MATCH":
+        print(f"Validation: {\"PASS\" if context.usable else \"FAIL\"}")\n        if context.reconciliation_reasons:\n            print(f"Validation/reconciliation reasons: {context.reconciliation_reasons}")\n\n        if not context.reconciliation_status == "MATCH":
             raise RuntimeError(
                 "S10 reconciliation did not match. "
                 + ", ".join(context.reconciliation_reasons)
             )
 
-        print("\nS06-S12 SCREEN INTELLIGENCE SMOKE TEST: SUCCESS")
+        if not context.usable:\n            raise RuntimeError("S13 validation failed: " + ", ".join(context.reconciliation_reasons))\n\n        print("\nS06-S13 SCREEN INTELLIGENCE SMOKE TEST: SUCCESS")
     finally:
         if capture is not None:
             capture.stop()
