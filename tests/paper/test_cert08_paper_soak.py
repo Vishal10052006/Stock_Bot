@@ -100,3 +100,48 @@ def test_cert08_rejects_nonzero_live_broker_orders(tmp_path: Path):
 
     with pytest.raises(ValueError, match="live broker orders"):
         build_cert08_evidence(session, required_hours=6)
+
+
+def test_cert08_aggregates_multiple_sessions_by_observed_duration(tmp_path):
+    """Multiple market sessions can satisfy a cumulative soak requirement."""
+    first = tmp_path / "first"
+    second = tmp_path / "second"
+    _write_session(
+        first,
+        start="2026-10-02T09:15:00+05:30",
+        end="2026-10-02T12:15:00+05:30",
+    )
+    _write_session(
+        second,
+        start="2026-10-05T09:15:00+05:30",
+        end="2026-10-05T12:15:00+05:30",
+    )
+
+    evidence = build_cert08_evidence(
+        [first, second],
+        required_hours=6,
+    )
+
+    assert evidence["status"] == "PASS"
+    assert evidence["session_count"] == 2
+    assert evidence["observed_duration_seconds"] == 21_600.0
+
+
+def test_cert08_records_cadence_violation_as_partial(tmp_path: Path):
+    """Optional gap validation never upgrades missing observations."""
+    session = tmp_path / "session"
+    _write_session(
+        session,
+        start="2026-10-02T09:15:00+05:30",
+        end="2026-10-02T15:15:00+05:30",
+    )
+
+    evidence = build_cert08_evidence(
+        session,
+        required_hours=6,
+        max_gap_minutes=10,
+    )
+
+    assert evidence["status"] == "PARTIAL"
+    assert evidence["cadence_status"] == "PARTIAL"
+    assert evidence["sessions"][0]["gap_violation"] is True
