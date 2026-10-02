@@ -190,6 +190,7 @@ def test_complete_rejects_gate_not_derived_from_collected_stages():
         valid=True,
         observations=run.gate.observations,
         metrics=run.gate.metrics,
+        issues=("forged",),
         artifact_fingerprints=run.gate.artifact_fingerprints,
     )
     forged = ValidationRun(
