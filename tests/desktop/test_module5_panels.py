@@ -7,6 +7,7 @@ import pytest
 from desktop.application import DesktopApplication
 from desktop.read_models import (
     ReplayState,
+    build_stock_scanner,
     build_explanation,
     build_market_dashboard,
     build_prediction_panel,
@@ -135,8 +136,95 @@ def test_d01_to_d10_application_snapshot_is_composed() -> None:
     app = DesktopApplication()
     snapshot = app.snapshot()
     assert tuple(snapshot.views) == (
-        "market", "prediction", "explanation", "research", "screen",
+        "scanner", "market", "prediction", "explanation", "research", "screen",
         "timeline", "telemetry", "risk", "paper", "replay"
     )
     assert snapshot.authority == "OBSERVATION_ONLY"
     assert snapshot.views["market"]["live_execution_state"] == "LOCKED"
+
+
+
+def test_d11_stock_scanner_is_read_only_and_deterministic() -> None:
+    """The operator scanner exposes prediction/strategy/risk state only."""
+    from multi_stock.scanner import StockScannerStore
+
+    class Prediction:
+        timestamp = datetime(2026, 10, 2, 10, tzinfo=timezone.utc)
+        symbol = "RELIANCE"
+        predicted_class = "LONG_SUCCESS"
+        model_version = "m1"
+        calibration_version = "cal-v1"
+        feature_version = "v1"
+        probabilities = __import__("pandas").DataFrame([{
+            "LONG_SUCCESS": 0.65,
+            "SHORT_SUCCESS": 0.15,
+            "NO_EDGE": 0.20,
+        }])
+        provenance = {"source": "test"}
+
+    class Strategy:
+        symbol = "RELIANCE"
+        direction = "LONG"
+        regime = "TREND_UP"
+        rationale = "test"
+        entry_reference = 100.0
+        stop_reference = 98.0
+        target_reference = 103.0
+
+    class Decision:
+        prediction = Prediction()
+        strategy = Strategy()
+        risk_status = "APPROVED"
+        risk_reason = "risk"
+        paper_order_status = "FILLED"
+        trade_id = "TR-001"
+
+    scanner = StockScannerStore()
+    row = scanner.observe(Decision(), price=100.0)
+    state = build_stock_scanner(scanner)
+
+    assert row.symbol == "RELIANCE"
+    assert row.strategy == "LONG"
+    assert state.status == "READY"
+    assert state.authority == "OBSERVATION_ONLY"
+    assert state.rows[0]["long_success"] == 0.65
+    assert state.rows[0]["risk_status"] == "APPROVED"
+
+
+def test_d12_stock_scanner_rejects_malformed_probabilities() -> None:
+    """Malformed prediction probabilities must fail closed."""
+    from multi_stock.scanner import StockScannerStore
+
+    prediction = {
+        "timestamp": datetime(2026, 10, 2, 10, tzinfo=timezone.utc),
+        "symbol": "ITC",
+        "predicted_class": "LONG_SUCCESS",
+        "probabilities": __import__("pandas").DataFrame([{
+            "LONG_SUCCESS": 0.6,
+            "SHORT_SUCCESS": 0.2,
+            "NO_EDGE": 0.3,
+        }]),
+    }
+    strategy = {
+        "symbol": "ITC",
+        "direction": "NO_TRADE",
+        "regime": "RANGE",
+        "rationale": "invalid test",
+    }
+    decision = {
+        "prediction": prediction,
+        "strategy": strategy,
+        "risk_status": "UNKNOWN",
+    }
+
+    with pytest.raises(ValueError, match="sum to 1"):
+        StockScannerStore().observe(decision)
+
+
+def test_d13_application_includes_scanner_view() -> None:
+    """Desktop composition exposes the scanner as its first operator view."""
+    app = DesktopApplication()
+    snapshot = app.snapshot()
+    assert tuple(snapshot.views)[0] == "scanner"
+    assert snapshot.views["scanner"]["status"] == "NO_DATA"
+    assert snapshot.views["scanner"]["authority"] == "OBSERVATION_ONLY"
