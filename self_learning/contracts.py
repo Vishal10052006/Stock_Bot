@@ -421,6 +421,10 @@ class PromotionDecision:
             raise ValueError("candidate_fingerprint must be SHA-256")
         if not self.champion_version.strip() or not self.challenger_version.strip():
             raise ValueError("champion/challenger versions are required")
+        if self.champion_version == self.challenger_version:
+            raise ValueError("champion and challenger versions must differ")
+        if not self.validation_fingerprints:
+            raise ValueError("validation_fingerprints must not be empty")
         if any(len(item) != 64 for item in self.validation_fingerprints):
             raise ValueError("validation_fingerprints must be SHA-256")
         if self.state is PromotionState.PROMOTED and not self.approval_reference.strip():
