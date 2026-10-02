@@ -14,3 +14,6 @@ from .cross_asset import CrossAssetContext, CrossAssetRow, build_cross_asset_con
 from .decision_explanation import DecisionExplanation, DecisionExplanationItem, build_decision_explanation
 
 __all__ += ["PortfolioContext", "build_portfolio_context", "CrossAssetContext", "CrossAssetRow", "build_cross_asset_context", "DecisionExplanation", "DecisionExplanationItem", "build_decision_explanation"]
+
+from .explanation_audit import ExplanationAuditResult, audit_decision_explanation
+__all__ += ["ExplanationAuditResult", "audit_decision_explanation"]
