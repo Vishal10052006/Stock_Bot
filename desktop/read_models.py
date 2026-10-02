@@ -552,6 +552,8 @@ def build_stock_scanner(scanner: Any = None) -> StockScannerPanelState:
     if scanner is None:
         return StockScannerPanelState(None, "NO_DATA", ())
     payload = scanner.as_dict() if hasattr(scanner, "as_dict") else _json(scanner)
+    if hasattr(payload, "as_dict"):
+        payload = payload.as_dict()
     if not isinstance(payload, Mapping):
         raise ValueError("stock scanner payload must be a mapping")
     rows = payload.get("rows", ())
