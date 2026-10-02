@@ -187,7 +187,7 @@ def ocr_image(
 
     try:
         data = pytesseract.image_to_data(
-            _prepare_image(image, cfg.scale),
+            image=_prepare_image(image, cfg.scale),
             lang=cfg.language,
             config=f"--psm {cfg.psm}",
             output_type=Output.DICT,
