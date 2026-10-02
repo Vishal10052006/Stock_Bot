@@ -66,12 +66,18 @@ def build_decision_explanation(
     execution: Any = None,
     research: Any = None,
     screen: Any = None,
+    market: Any = None,
+    analysis: Any = None,
+    prediction: Any = None,
 ) -> DecisionExplanation:
     """Compose explanations from existing evidence without inventing causes."""
     timestamp = pd.Timestamp(timestamp)
     if timestamp.tzinfo is None: raise ValueError("decision timestamp must be timezone-aware")
     items = []
     for stage, obj, source in (
+        ("Market", market, "market"),
+        ("Analysis", analysis, "analysis"),
+        ("Prediction", prediction, "prediction"),
         ("Research", research, "research"),
         ("Screen", screen, "screen_observer"),
         ("Strategy", strategy, "strategy"),
@@ -81,6 +87,15 @@ def build_decision_explanation(
     ):
         item = _item(stage, obj, timestamp, source)
         if item is not None: items.append(item)
+    for component in (market, analysis, prediction, research, screen, strategy, risk, safety, execution):
+        if component is None:
+            continue
+        component_ts = _field(component, "timestamp", None)
+        if component_ts is not None and pd.Timestamp(component_ts) > timestamp:
+            raise ValueError("future explanation evidence rejected")
+        component_symbol = _field(component, "symbol", None)
+        if component_symbol is not None and str(component_symbol).strip().upper() != str(symbol).strip().upper():
+            raise ValueError("explanation symbol mismatch")
     strategy_direction = _field(strategy, "direction", None)
     risk_status = _field(risk, "status", None)
     safety_allowed = _field(safety, "allowed", None)
