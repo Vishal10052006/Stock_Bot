@@ -227,3 +227,16 @@ def test_same_timestamp_items_follow_causal_stage_order():
     assert [item.stage for item in result.items] == [
         "Market", "Strategy", "Risk", "Execution"
     ]
+
+
+def test_strategy_without_reason_retains_direction_as_structural_evidence():
+    ts = pd.Timestamp("2026-10-02 10:00:00", tz="Asia/Kolkata")
+    result = build_decision_explanation(
+        ts,
+        "RELIANCE.NS",
+        strategy={"timestamp": ts, "symbol": "RELIANCE.NS", "direction": "NO_TRADE"},
+    )
+    assert result.outcome == "NO_TRADE"
+    assert [(item.stage, item.status, item.reason) for item in result.items] == [
+        ("Strategy", "NO_TRADE", "NO_TRADE")
+    ]
