@@ -71,7 +71,10 @@ def audit_decision_explanation(
     if not explanation.outcome.strip():
         reasons.append("EXPLANATION_OUTCOME_MISSING")
 
-    states = {item.stage: item.status for item in explanation.items}
+    states = {
+        item.stage: str(item.status).strip().upper().split(".")[-1]
+        for item in explanation.items
+    }
 
     required_stage = {
         "NO_TRADE": "Strategy",
