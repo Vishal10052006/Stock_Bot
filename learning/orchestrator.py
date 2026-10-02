@@ -290,8 +290,29 @@ class SelfLearningEngine:
         record: ExperimentRecord,
         lineage: LineageRecord,
     ) -> EvaluationReport:
-        """Validate and persist one completed experiment result."""
+        """Validate and persist one completed experiment result.
+
+        The measured record and lineage must belong to the exact frozen
+        definition. A failed integrity evaluation is never persisted.
+        """
+        if not isinstance(definition, ExperimentDefinition):
+            raise TypeError("definition must be an ExperimentDefinition")
+        if not isinstance(record, ExperimentRecord):
+            raise TypeError("record must be an ExperimentRecord")
+        if not isinstance(lineage, LineageRecord):
+            raise TypeError("lineage must be a LineageRecord")
+        definition_fingerprint = definition.fingerprint()
+        if record.definition_fingerprint != definition_fingerprint:
+            raise ValueError("record does not match frozen experiment definition")
+        if lineage.definition_fingerprint != definition_fingerprint:
+            raise ValueError("lineage does not match frozen experiment definition")
+        if lineage.record_fingerprint != record.fingerprint():
+            raise ValueError("lineage does not match measured experiment record")
+
         evaluation = evaluate_experiment_record(record)
+        if not evaluation.valid:
+            return evaluation
+
         if self.experiment_registry is not None:
             self.experiment_registry.append(definition, record, lineage)
         return evaluation
