@@ -2,7 +2,7 @@
 
 ## Status
 
-**Foundation + PIT universe integration + causal validation implemented.**
+**M00 Universe Manager + M01 Stock Ranking + PIT causal validation implemented.**
 
 Module 6 aggregates validated per-stock AnalysisContext into a single causal
 multi-stock observation and reuses the existing point-in-time Market Bot
@@ -24,6 +24,8 @@ universe infrastructure.
 - regression tests
 - deterministic PIT adapter integration tests with in-memory Security Master/Bhavcopy fixtures
 - future PIT universe rejection
+- M01 deterministic stock ranking using existing AnalysisContext quality
+- deterministic tie-breaking and explicit exclusion of unavailable quality
 
 ## Boundaries
 
@@ -33,6 +35,6 @@ Safety, and Execution remain downstream authorities.
 
 ## Next validation
 
-Focused and full-suite execution remains the final validation gate. The PIT
+Focused M00/M01 tests and the full-suite execution remain the final validation gate. The PIT
 integration tests use deterministic in-memory adapters; no external NSE or
 Upstox network call is performed by the test suite.
