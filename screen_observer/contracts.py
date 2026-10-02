@@ -11,7 +11,7 @@ References:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Mapping, Sequence
+from typing import Any, Mapping, Sequence\n\nfrom .ocr import OCRResult
 
 import pandas as pd
 
