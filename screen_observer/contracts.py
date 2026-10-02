@@ -112,6 +112,10 @@ class ScreenObservation:
     confidence: ScreenConfidence = field(
         default_factory=lambda: ScreenConfidence(overall=0.0)
     )
+    ocr_result: OCRResult | None = None
+    candle_evidence: CandleVisualEvidence | None = None
+    indicator_evidence: tuple[IndicatorEvidence, ...] = ()
+    timeframe_evidence: TimeframeEvidence | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "observed_at", _timestamp(self.observed_at))
