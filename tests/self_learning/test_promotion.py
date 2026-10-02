@@ -282,3 +282,37 @@ def test_promotion_decision_requires_validation_evidence():
             reasons=("review",),
             validation_fingerprints=(),
         )
+
+
+def test_promoted_decision_requires_timezone_aware_created_at():
+    from self_learning.contracts import PromotionDecision, PromotionState
+
+    with pytest.raises(ValueError, match="timezone-aware"):
+        PromotionDecision(
+            candidate_id="C1",
+            candidate_fingerprint="b" * 64,
+            champion_version="model-v1",
+            challenger_version="model-v2",
+            state=PromotionState.PROMOTED,
+            reasons=("approved",),
+            validation_fingerprints=("c" * 64,),
+            approval_reference="review-001",
+            created_at="2026-09-24T10:00:00",
+        )
+
+
+def test_promoted_decision_accepts_timezone_aware_created_at():
+    from self_learning.contracts import PromotionDecision, PromotionState
+
+    decision = PromotionDecision(
+        candidate_id="C1",
+        candidate_fingerprint="b" * 64,
+        champion_version="model-v1",
+        challenger_version="model-v2",
+        state=PromotionState.PROMOTED,
+        reasons=("approved",),
+        validation_fingerprints=("c" * 64,),
+        approval_reference="review-001",
+        created_at="2026-09-24T10:00:00+05:30",
+    )
+    assert decision.created_at.endswith("+05:30")
