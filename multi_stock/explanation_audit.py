@@ -96,7 +96,14 @@ def audit_decision_explanation(
         "OPEN": "EXECUTION_PENDING",
         "CANCEL_PENDING": "EXECUTION_PENDING",
     }.get(execution_state)
-    if execution_expected is not None and explanation.outcome != execution_expected:
+
+    # A blocked execution authorization can be a downstream consequence of a
+    # Risk rejection. In that case the upstream reason remains authoritative.
+    risk_rejected = states.get("Risk") == "REJECTED"
+    safety_blocked = states.get("Safety") in {"BLOCKED", "REJECTED"}
+    if execution_expected is not None and not (
+        execution_state == "BLOCKED" and (risk_rejected or safety_blocked)
+    ) and explanation.outcome != execution_expected:
         reasons.append("EXPLANATION_OUTCOME_EXECUTION_MISMATCH")
 
     return ExplanationAuditResult(not reasons, tuple(reasons))
