@@ -167,3 +167,28 @@ def test_build_from_market_universe_keeps_unavailable_symbols_in_universe(tmp_pa
     assert context.observation.provenance["causal_boundary"].endswith(
         "multi_stock.timestamp"
     )
+
+
+def test_future_market_universe_fails_closed(tmp_path):
+    master_path = tmp_path / "NSE.json.gz"
+    _write_upstox_master(master_path)
+    base = _config()
+    config = MarketUniverseConfig(
+        benchmark=base.benchmark,
+        universe_policy=base.universe_policy,
+        liquidity_policy=base.liquidity_policy,
+        upstox_master_path=str(master_path),
+    )
+
+    try:
+        MultiStockIntelligence().build_from_market_universe(
+            as_of=date(2026, 10, 3),
+            timestamp=TIMESTAMP,
+            config=config,
+            security_master_adapter=FakeSecurityMaster(_security_snapshot()),
+            bhavcopy_adapter=FakeBhavcopy(_rows()),
+        )
+    except ValueError as exc:
+        assert str(exc) == "future market universe rejected"
+    else:
+        raise AssertionError("future market universe was not rejected")
