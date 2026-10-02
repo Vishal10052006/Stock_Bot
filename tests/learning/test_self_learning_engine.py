@@ -307,8 +307,8 @@ def test_self_learning_engine_observe_builds_causal_learning_cycle():
 
     engine = SelfLearningEngine()
     run = engine.observe(
-        (_decision("T1"),),
-        (_outcome("T1", pnl=-20.0),),
+        tuple(_decision(f"T{i}") for i in range(1, 4)),
+        tuple(_outcome(f"T{i}", pnl=-20.0) for i in range(1, 4)),
         cycle_id="cycle-observe-1",
     )
 
