@@ -98,7 +98,7 @@ def test_live_cache_preserves_source_availability_in_rb12_context():
     assert context.provenance
 
 
-def test_live_cache_rejects_provider_document_unavailable_at_requested_end():
+def test_live_cache_retains_future_evidence_but_excludes_it_from_snapshot():
     decision = datetime(2026, 10, 2, 10, 0, tzinfo=UTC)
     future = _document(
         external_id="future",
@@ -110,16 +110,18 @@ def test_live_cache_rejects_provider_document_unavailable_at_requested_end():
         clock=lambda: decision,
     )
 
-    try:
-        cache.refresh(
-            symbols=("RELIANCE",),
-            start=decision - timedelta(hours=1),
-            end=decision,
-        )
-    except ValueError as exc:
-        assert "unavailable at requested end" in str(exc)
-    else:
-        raise AssertionError("future provider evidence must be rejected")
+    cache.refresh(
+        symbols=("RELIANCE",),
+        start=decision - timedelta(hours=1),
+        end=decision,
+    )
+
+    assert cache.snapshot(symbol="RELIANCE", as_of=decision) == ()
+    later = cache.snapshot(
+        symbol="RELIANCE",
+        as_of=decision + timedelta(seconds=1),
+    )
+    assert [document.external_id for document in later] == ["future"]
 
 
 def test_live_runtime_refreshes_and_records_provider_failure():
