@@ -76,7 +76,8 @@ class CanonicalLivePaperOrchestrator:
     benchmark_history_provider: Callable[[pd.Timestamp], pd.DataFrame]
     benchmark_context_provider: Callable[[pd.Timestamp, pd.DataFrame], MarketContext]
     calibrator: IsotonicProbabilityCalibrator | None = None
-    downstream_handler: Callable[[PredictionContext, MarketAnalysisResult, Candle, LivePaperEngine], None] | None = None
+    downstream_handler: Callable[[PredictionContext, MarketAnalysisResult, Candle, LivePaperEngine], Any] | None = None
+    decision_observer: Callable[[Any, Candle], None] | None = None
     history_provider: Callable[[pd.Timestamp], Iterable[Candle]] | None = None
     history: CausalCandleHistory | None = None
     config: CanonicalLivePaperConfig = CanonicalLivePaperConfig()
@@ -317,14 +318,17 @@ class CanonicalLivePaperOrchestrator:
         # or alternate Strategy/Risk implementation exists in this module.
         handler = self.downstream_handler
         if handler is not None:
-            handler(prediction, result, candle, self.paper_engine)
+            decision = handler(prediction, result, candle, self.paper_engine)
         else:
-            execute_prediction_to_paper(
+            decision = execute_prediction_to_paper(
                 prediction,
                 result,
                 candle,
                 self.paper_engine,
             )
+
+        if self.decision_observer is not None:
+            self.decision_observer(decision, candle)
 
         return prediction
 
