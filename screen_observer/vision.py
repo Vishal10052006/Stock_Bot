@@ -89,7 +89,7 @@ def detect_symbol(text: Iterable[str]) -> tuple[str | None, float]:
 
         # TradingView commonly renders NSE symbols as "NSE:RELIANCE".
         prefixed = re.search(
-            r"\\b(?:NSE|BSE)\\s*:\\s*([A-Z][A-Z0-9.-]{1,19})\\b",
+            r"\b(?:NSE|BSE)\s*:\s*([A-Z][A-Z0-9.-]{1,19})\b",
             normalized,
         )
         if prefixed:
@@ -98,7 +98,7 @@ def detect_symbol(text: Iterable[str]) -> tuple[str | None, float]:
             return f"{ticker}{suffix}", 0.80
 
         candidate = re.sub(r"[^A-Za-z0-9._-]", "", normalized)
-        if re.fullmatch(r"[A-Z][A-Z0-9.-]{1,19}(?:\\.NS|\\.BO)?", candidate):
+        if re.fullmatch(r"[A-Z][A-Z0-9.-]{1,19}(?:\.NS|\.BO)?", candidate):
             # Avoid interpreting common exchange/index words as equity tickers.
             if candidate not in {"NSE", "BSE", "NIFTY", "SENSEX"}:
                 return candidate, 0.65
