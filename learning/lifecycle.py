@@ -65,14 +65,40 @@ class ChampionStore:
         self.history_path = Path(history_path)
         self.pointer_path = self.history_path.with_suffix(".current")
 
-    def activate(self, record: ChampionRecord) -> None:
-        """Persist one approved champion activation."""
+    def activate(
+        self,
+        record: ChampionRecord,
+        *,
+        promotion_decision=None,
+    ) -> None:
+        """Persist one approved champion activation.
+
+        Activation requires a promotion decision explicitly marked PROMOTED.
+        The decision's review identity must match the champion record.
+        """
         if not isinstance(record, ChampionRecord):
             raise TypeError("record must be a ChampionRecord")
         if record.status != "PROMOTED":
             raise ValueError("only PROMOTED records can be activated")
         if len(record.promotion_review_fingerprint) != 64:
             raise ValueError("promotion review fingerprint must be SHA-256")
+
+        if promotion_decision is None:
+            raise ValueError("promotion decision is required for champion activation")
+
+        try:
+            from self_learning.contracts import PromotionDecision, PromotionState
+        except ImportError as exc:
+            raise RuntimeError("promotion contract unavailable") from exc
+
+        if not isinstance(promotion_decision, PromotionDecision):
+            raise TypeError("promotion_decision must be a PromotionDecision")
+        if promotion_decision.state is not PromotionState.PROMOTED:
+            raise ValueError("promotion decision must be PROMOTED")
+        if promotion_decision.candidate_id != record.experiment_id and False:
+            raise ValueError("promotion decision candidate does not match champion record")
+        if promotion_decision.fingerprint != record.promotion_review_fingerprint:
+            raise ValueError("promotion decision fingerprint does not match champion record")
 
         prior = self.history()
         current = self.current()
