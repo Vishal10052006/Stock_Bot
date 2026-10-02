@@ -64,6 +64,7 @@ class ScreenObserverRuntime:
         self._wake_event = threading.Event()
         self._thread: threading.Thread | None = None
         self._lock = threading.Lock()
+        self._observation_lock = threading.Lock()
 
         self._latest_observation: ScreenObservation | None = None
         self._latest_context: VisualContext | None = None
@@ -121,9 +122,16 @@ class ScreenObserverRuntime:
             self._thread = None
 
     def pause(self) -> None:
-        """Pause observation without destroying the latest state."""
+        """Pause observation at a completed-observation boundary."""
         self._pause_event.set()
         self._wake_event.set()
+
+        # A capture may already be in progress when pause() is called.
+        # Waiting here guarantees that pause() returns only after that
+        # observation has completed, so callers get a stable pause boundary.
+        observation_lock = self._observation_lock
+        with observation_lock:
+            pass
 
     def resume(self) -> None:
         """Resume observation."""
@@ -132,6 +140,11 @@ class ScreenObserverRuntime:
 
     def observe_once(self) -> ScreenObservation:
         """Capture and interpret the screen exactly once."""
+        with self._observation_lock:
+            return self._observe_once()
+    
+    def _observe_once(self) -> ScreenObservation:
+        """Run one observation while holding the runtime observation lock."""
         observed_at = pd.Timestamp.now(tz="UTC")
         windows = tuple(self.window_provider())
         observation = self.observer.observe(
