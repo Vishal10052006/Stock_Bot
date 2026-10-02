@@ -46,3 +46,5 @@ Upstox network call is performed by the test suite.
 
 - M04 causal pairwise correlation matrix from historical return observations
 - M04 deterministic symbol ordering, duplicate-row rejection, minimum-overlap validation, and no future-data usage
+
+- M05 relative strength exposes existing causal `stock_vs_market_return_1` and `stock_vs_sector_return_1` evidence without adding ranking or trading thresholds
