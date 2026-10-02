@@ -49,11 +49,30 @@ def _field(obj: Any, name: str, default: Any = None) -> Any:
     return getattr(obj, name, default)
 
 def _item(stage: str, obj: Any, timestamp: pd.Timestamp, source: str) -> DecisionExplanationItem | None:
-    if obj is None: return None
-    ts = pd.Timestamp(_field(obj, "timestamp", timestamp))
-    status = _field(obj, "status", _field(obj, "direction", "OBSERVED"))
-    reason = _field(obj, "reason", _field(obj, "rationale", ""))
-    if not str(reason).strip(): return None
+    if obj is None:
+        return None
+    nested = _field(obj, "snapshot", None)
+    ts = pd.Timestamp(
+        _field(
+            obj,
+            "timestamp",
+            _field(nested, "updated_at", timestamp),
+        )
+    )
+    if stage == "Safety":
+        allowed = _field(obj, "allowed", None)
+        status = "ALLOWED" if allowed is True else "BLOCKED" if allowed is False else "OBSERVED"
+    elif stage == "Execution" and nested is not None:
+        status = _enum_value(_field(nested, "status", None)) or "OBSERVED"
+    else:
+        status = _field(obj, "status", _field(obj, "direction", "OBSERVED"))
+    reason = _field(
+        obj,
+        "reason",
+        _field(obj, "rationale", _field(nested, "reason", "")),
+    )
+    if not str(reason).strip():
+        return None
     return DecisionExplanationItem(stage, ts, str(status), str(reason), source)
 
 def _enum_value(value: Any) -> str | None:
@@ -112,7 +131,11 @@ def build_decision_explanation(
     for component in (market, analysis, prediction, research, screen, strategy, risk, safety, execution):
         if component is None:
             continue
-        component_ts = _field(component, "timestamp", None)
+        component_ts = _field(
+            component,
+            "timestamp",
+            _field(_field(component, "snapshot", None), "updated_at", None),
+        )
         if component_ts is not None and pd.Timestamp(component_ts) > timestamp:
             raise ValueError("future explanation evidence rejected")
         component_symbol = _field(component, "symbol", None)
@@ -121,7 +144,8 @@ def build_decision_explanation(
     strategy_direction = _enum_value(_field(strategy, "direction", None))
     risk_status = _enum_value(_field(risk, "status", None))
     safety_allowed = _field(safety, "allowed", None)
-    execution_outcome = _execution_outcome(execution)
+    execution_evidence = _field(execution, "snapshot", None) or execution
+    execution_outcome = _execution_outcome(execution_evidence)
     if strategy_direction == "NO_TRADE":
         outcome = "NO_TRADE"
     elif safety_allowed is False:
