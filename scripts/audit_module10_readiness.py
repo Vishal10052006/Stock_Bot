@@ -29,8 +29,8 @@ from execution.production_gate_certification import run_production_gate_certific
 from execution.safety import IndependentSafetyGate, SafetyState
 
 STATUS_RE = re.compile(
-    r"^\\|\\s*(CERT-\\d{2})\\s*\\|\\s*"
-    r"(PASS|PARTIAL|BLOCKED|UNVERIFIED|FAILED)\\s*\\|\\s*(.*?)\\s*\\|$"
+    r"^\|\s*(CERT-\d{2})\s*\|\s*"
+    r"(PASS|PARTIAL|BLOCKED|UNVERIFIED|FAILED)\s*\|\s*(.*?)\s*\|$"
 )
 EXPECTED_IDS = tuple(item.cert_id for item in CERTIFICATION_ITEMS)
 
