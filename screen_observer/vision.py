@@ -83,14 +83,27 @@ def detect_indicators(text: Iterable[str]) -> tuple[tuple[str, ...], float]:
 
 
 def detect_symbol(text: Iterable[str]) -> tuple[str | None, float]:
-    """Conservative ticker extraction; avoids guessing from arbitrary OCR."""
+    """Conservative ticker extraction with common TradingView prefixes."""
     for line in text:
-        candidate = re.sub(r"[^A-Za-z0-9._-]", "", line).upper()
-        if re.fullmatch(r"[A-Z][A-Z0-9.-]{1,19}(?:\.NS)?", candidate):
-            return candidate, 0.65
+        normalized = line.strip().upper()
+
+        # TradingView commonly renders NSE symbols as "NSE:RELIANCE".
+        prefixed = re.search(
+            r"\\b(?:NSE|BSE)\\s*:\\s*([A-Z][A-Z0-9.-]{1,19})\\b",
+            normalized,
+        )
+        if prefixed:
+            ticker = prefixed.group(1)
+            suffix = ".NS" if normalized[prefixed.start():].startswith("NSE") else ".BO"
+            return f"{ticker}{suffix}", 0.80
+
+        candidate = re.sub(r"[^A-Za-z0-9._-]", "", normalized)
+        if re.fullmatch(r"[A-Z][A-Z0-9.-]{1,19}(?:\\.NS|\\.BO)?", candidate):
+            # Avoid interpreting common exchange/index words as equity tickers.
+            if candidate not in {"NSE", "BSE", "NIFTY", "SENSEX"}:
+                return candidate, 0.65
+
     return None, 0.0
-
-
 def _as_rgb_array(image: Any):
     """Convert common screenshot/image objects to an RGB uint8 ndarray."""
     import numpy as np
