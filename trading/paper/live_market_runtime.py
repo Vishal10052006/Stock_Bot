@@ -11,6 +11,7 @@ from dataclasses import dataclass
 import json
 import os
 from pathlib import Path
+from datetime import timedelta
 
 import pandas as pd
 
@@ -31,6 +32,8 @@ from trading.paper.canonical_live_orchestrator import (
 from trading.paper.live_loop import LivePaperEngine, LivePaperSessionConfig
 from trading.paper.upstox_history import UpstoxHistoryProvider
 from paper.virtual_session import VirtualIntradaySession, VirtualIntradaySessionConfig
+from research.live.runtime import LiveResearchCache, LiveResearchRuntime
+from research.providers import pib_provider, rbi_provider, RssResearchProvider
 
 
 def _load_runtime_instrument_mapper() -> UpstoxInstrumentMapper:
@@ -64,6 +67,34 @@ def _load_runtime_instrument_mapper() -> UpstoxInstrumentMapper:
         mapping.update(context_mapping)
 
     return UpstoxInstrumentMapper(mapping)
+
+
+def _load_live_research_providers() -> tuple:
+    """Build explicit live research source adapters from configuration."""
+    providers = [rbi_provider(), pib_provider()]
+
+    raw_urls = os.getenv("STOCK_BOT_RESEARCH_RSS_URLS", "").strip()
+    if raw_urls:
+        try:
+            configured = json.loads(raw_urls)
+        except json.JSONDecodeError as exc:
+            raise ValueError(
+                "STOCK_BOT_RESEARCH_RSS_URLS must contain valid JSON"
+            ) from exc
+        if not isinstance(configured, dict):
+            raise ValueError(
+                "STOCK_BOT_RESEARCH_RSS_URLS must decode to a JSON object"
+            )
+        for source_id, url in configured.items():
+            if not isinstance(source_id, str) or not source_id.strip():
+                raise ValueError("research RSS source IDs must be non-empty strings")
+            if not isinstance(url, str) or not url.strip():
+                raise ValueError(
+                    f"research RSS URL for {source_id!r} must be a non-empty string"
+                )
+            providers.append(RssResearchProvider(source_id.strip(), url.strip()))
+
+    return tuple(providers)
 
 
 @dataclass(frozen=True, slots=True)
@@ -187,6 +218,17 @@ def build_live_market_paper_session(
         )
     )
 
+    research_cache = LiveResearchCache(
+        providers=_load_live_research_providers(),
+        retention=timedelta(days=7),
+    )
+    research_runtime = LiveResearchRuntime(
+        cache=research_cache,
+        symbols=(config.symbol.strip().upper(),),
+        poll_interval=timedelta(seconds=30),
+        lookback=timedelta(hours=24),
+    )
+
     def benchmark_context_provider(cutoff, benchmark_frame):
         return market_bot.build(
             benchmark_data=benchmark_frame,
@@ -223,6 +265,11 @@ def build_live_market_paper_session(
             calibration_version=manifest.provenance.calibration_version,
             target_trades=1_000_000,
         ),
+        research_context_provider=lambda cutoff: research_cache.build_analysis_context(
+            symbol=config.symbol.strip().upper(),
+            as_of=cutoff.to_pydatetime(),
+        ),
+        research_runtime=research_runtime,
     )
 
     return VirtualIntradaySession(
