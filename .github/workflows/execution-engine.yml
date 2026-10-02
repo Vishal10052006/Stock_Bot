@@ -46,7 +46,7 @@ jobs:
       - name: Certification matrix validation
         run: python -m pytest -q tests/execution/test_certification_matrix.py
       - name: Module 10 readiness audit
-        run: python scripts/audit_module10_readiness.py --json || test $? -eq 1
+        run: PYTHONPATH=. python scripts/audit_module10_readiness.py --json || test $? -eq 1
       - name: Execution production validation
         run: python -m pytest -q tests/execution
       - name: Full repository regression
