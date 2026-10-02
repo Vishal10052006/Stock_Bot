@@ -148,19 +148,19 @@ async def main() -> None:
         print(f"Reconciliation: {context.reconciliation_status}")
         print(f"Usable: {context.usable}")
 
-        print("\n[8/9] S12 screen-aware analysis context...")
+        print("\n[8/9] S13 evidence validation...")\n        validation = validate_screen_observation(\n            observation, require_chart=True, require_symbol=True, require_timeframe=True\n        )\n        print(f"Validation: {\"PASS\" if validation.valid else \"FAIL\"}")\n        if validation.reasons:\n            print(f"Validation reasons: {validation.reasons}")\n        if validation.warnings:\n            print(f"Validation warnings: {validation.warnings}")\n        if not validation.valid:\n            raise RuntimeError("S13 validation failed: " + ", ".join(validation.reasons))\n\n        print("\n[9/9] S12 screen-aware analysis context...")
         print(f"Market symbol: {context.market_symbol}")
         print(f"Screen symbol: {context.screen_symbol}")
         print(f"Indicators: {context.indicators}")
         print(f"Authority: {context.provenance['authority']}")
 
-        print(f"Validation: {\"PASS\" if context.usable else \"FAIL\"}")\n        if context.reconciliation_reasons:\n            print(f"Validation/reconciliation reasons: {context.reconciliation_reasons}")\n\n        if not context.reconciliation_status == "MATCH":
+        if not context.reconciliation_status == "MATCH":
             raise RuntimeError(
                 "S10 reconciliation did not match. "
                 + ", ".join(context.reconciliation_reasons)
             )
 
-        if not context.usable:\n            raise RuntimeError("S13 validation failed: " + ", ".join(context.reconciliation_reasons))\n\n        print("\nS06-S13 SCREEN INTELLIGENCE SMOKE TEST: SUCCESS")
+        if not context.usable:\n            raise RuntimeError("S12 analysis context is not usable: " + ", ".join(context.reconciliation_reasons))\n\n        print("\nS06-S13 SCREEN INTELLIGENCE SMOKE TEST: SUCCESS")
     finally:
         if capture is not None:
             capture.stop()
