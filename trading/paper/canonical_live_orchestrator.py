@@ -99,7 +99,7 @@ class CanonicalLivePaperOrchestrator:
             )
         if self.calibrator is not None and not isinstance(self.calibrator, IsotonicProbabilityCalibrator):
             raise TypeError("calibrator must be an IsotonicProbabilityCalibrator")
-        if self.calibration_version is not None and self.calibrator is None:
+        if self.config.calibration_version is not None and self.calibrator is None:
             raise CanonicalLivePaperError("calibration_version requires a calibrator")
         if self.calibrator is not None and not self.calibrator.is_fitted:
             raise CanonicalLivePaperError("calibrator must be fitted before paper inference")
