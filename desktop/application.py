@@ -18,6 +18,7 @@ from .read_models import (
     build_research_panel,
     build_risk_panel,
     build_screen_panel,
+    build_stock_scanner,
     build_timeline,
     start_replay,
 )
@@ -42,6 +43,7 @@ class DesktopApplication:
     """Read-only composition root for the D01-D10 desktop interface."""
 
     VIEW_ORDER = (
+        ("scanner", "Stock Scanner"),
         ("market", "Market Dashboard"),
         ("prediction", "Prediction"),
         ("explanation", "Explanation"),
@@ -63,6 +65,7 @@ class DesktopApplication:
     def snapshot(
         self,
         *,
+        scanner: Any = None,
         market: Any = None,
         monitoring: Any = None,
         prediction: Any = None,
@@ -86,6 +89,7 @@ class DesktopApplication:
         return DesktopSnapshot(
             navigation=self.shell.snapshot(),
             views={
+                "scanner": build_stock_scanner(scanner).as_dict(),
                 "market": build_market_dashboard(
                     market=market, monitoring=monitoring, symbol=symbol, timeframe=timeframe
                 ).as_dict(),
