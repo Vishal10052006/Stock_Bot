@@ -91,13 +91,22 @@ class LiveResearchCache:
 
         with self._lock:
             for document in fetched:
+                # Cache identity is provider-scoped. Preserve every distinct
+                # external document and only collapse an exact same identity.
                 key = (document.source_id, document.external_id)
                 existing = self._documents.get(key)
                 if existing is None:
                     self._documents[key] = document
-                elif existing.content_hash != document.content_hash:
-                    if document.available_at >= existing.available_at:
-                        self._documents[key] = document
+                    continue
+
+                # The provider contract uses external_id within a source as
+                # the document identity. A conflicting payload under that
+                # identity is safer to reject than to overwrite silently.
+                if existing.content_hash != document.content_hash:
+                    raise ValueError(
+                        "conflicting research documents share source/external_id: "
+                        f"{document.source_id}/{document.external_id}"
+                    )
 
             self._prune_locked(_require_aware(self.clock(), "clock"))
 
