@@ -58,7 +58,7 @@ def test_module10_parser_rejects_duplicate_certification(tmp_path: Path):
     rows.insert(2, "| CERT-01 | PASS | duplicate |")
 
     evidence = tmp_path / "evidence.md"
-    evidence.write_text("\\n".join(rows), encoding="utf-8")
+    evidence.write_text("\n".join(rows), encoding="utf-8")
 
     with pytest.raises(ValueError, match="duplicate certification row"):
         parse_certification_evidence(evidence)
