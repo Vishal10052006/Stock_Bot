@@ -352,3 +352,85 @@ def _learning_experience_fixture():
         source_trade_ids=("T1", "T2", "T3"),
         rationale="Observed loss evidence.",
     )
+
+
+def test_experiment_preparation_binds_definition_to_dataset_lineage():
+    from learning.orchestrator import SelfLearningEngine
+
+    dataset = SelfLearningEngine.dataset_version(
+        version="dataset-v-bind-1",
+        source="empirical_outcomes",
+        symbols=("RELIANCE", "TCS"),
+        period_start="2024-01-01",
+        period_end="2026-08-31",
+        row_count=3,
+        label_distribution={"LONG_SUCCESS": 1, "SHORT_SUCCESS": 1, "NO_EDGE": 1},
+        feature_schema_version="features-v1",
+        label_definition_version="labels-v1",
+        creation_timestamp="2026-10-02T00:00:00+00:00",
+    )
+    prepared = SelfLearningEngine.prepare_experiment(
+        experiment_id="EXP-BIND-1",
+        research_question="Test dataset lineage binding",
+        hypothesis="The controlled change improves evidence quality.",
+        failure_criterion="Reject if validation fails.",
+        dataset_version=dataset,
+        code_version="code-v1",
+        period_start="2024-01-01",
+        period_end="2026-08-31",
+        symbols=("TCS", "RELIANCE"),
+        method="controlled",
+        change="model",
+        fixed_components=("dataset", "strategy", "risk", "execution"),
+        allowed_change=("model",),
+        model_version="model-v1",
+        strategy_version="strategy-v1",
+        risk_version="risk-v1",
+        execution_version="execution-v1",
+    )
+    assert prepared.definition.dataset_version == prepared.lineage.dataset.dataset_version
+    assert prepared.definition.fingerprint()
+    assert prepared.lineage.fingerprint
+
+
+def test_experiment_preparation_rejects_dataset_period_mismatch():
+    from dataclasses import replace
+    from learning.orchestrator import ExperimentPreparation, SelfLearningEngine
+
+    dataset = SelfLearningEngine.dataset_version(
+        version="dataset-v-bind-2",
+        source="empirical_outcomes",
+        symbols=("RELIANCE",),
+        period_start="2024-01-01",
+        period_end="2026-08-31",
+        row_count=1,
+        label_distribution={"LONG_SUCCESS": 1},
+        feature_schema_version="features-v1",
+        label_definition_version="labels-v1",
+        creation_timestamp="2026-10-02T00:00:00+00:00",
+    )
+    prepared = SelfLearningEngine.prepare_experiment(
+        experiment_id="EXP-BIND-2",
+        research_question="Test mismatch",
+        hypothesis="Controlled change.",
+        failure_criterion="Reject if validation fails.",
+        dataset_version=dataset,
+        code_version="code-v1",
+        period_start="2024-01-01",
+        period_end="2026-08-31",
+        symbols=("RELIANCE",),
+        method="controlled",
+        change="model",
+        fixed_components=("dataset", "strategy", "risk", "execution"),
+        allowed_change=("model",),
+        model_version="model-v1",
+        strategy_version="strategy-v1",
+        risk_version="risk-v1",
+        execution_version="execution-v1",
+    )
+    changed = replace(
+        prepared.definition,
+        period_end="2026-09-01",
+    )
+    with pytest.raises(ValueError, match="period_end"):
+        ExperimentPreparation(definition=changed, lineage=prepared.lineage)
