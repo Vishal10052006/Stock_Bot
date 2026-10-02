@@ -18,6 +18,7 @@ on:
     branches:
       - main
       - feat/execution-certification-cert01-cert12
+      - feat/screen-observer-foundation
     paths:
       - "execution/**"
       - "tests/execution/**"
