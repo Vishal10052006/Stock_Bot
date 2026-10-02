@@ -43,6 +43,7 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install numpy pandas pytest scipy scikit-learn requests pydantic fastapi sqlalchemy alembic python-dotenv yfinance ta joblib pyarrow
           python -m pip install -r requirements-execution.txt
+          python -m pip install -r requirements-screen-observer.txt
       - name: Certification matrix validation
         run: python -m pytest -q tests/execution/test_certification_matrix.py
       - name: Module 10 readiness audit
