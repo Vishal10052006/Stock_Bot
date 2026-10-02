@@ -24,6 +24,12 @@ class PromotionController:
         policy: ValidationPolicy | None = None,
     ) -> PromotionDecision:
         """Create a deterministic promotion-review decision."""
+        if challenger.lifecycle.value != "PROMOTION_REVIEW":
+            raise ValueError("candidate must be PROMOTION_REVIEW before promotion review")
+        if not champion_version.strip():
+            raise ValueError("champion_version is required")
+        if challenger.parent_model_version != champion_version:
+            raise ValueError("champion_version does not match candidate parent")
         gate = validate_candidate(challenger, validations, policy=policy)
 
         if not gate.valid:
@@ -77,11 +83,18 @@ class PromotionController:
         if validation_run.candidate_fingerprint != challenger.fingerprint:
             raise ValueError("validation run does not match challenger")
 
+        collected = dict(validation_run.stage_map)
         gate = validate_candidate(
             challenger,
-            dict(validation_run.stage_map),
+            collected,
             policy=policy,
         )
+        if validation_run.gate.fingerprint != gate.fingerprint:
+            raise ValueError("validation run gate does not match collected evidence")
+        if challenger.artifact_fingerprint not in validation_run.gate.artifact_fingerprints:
+            raise ValueError("validation run gate does not reference candidate artifact")
+        if challenger.evaluation_fingerprint not in validation_run.gate.artifact_fingerprints:
+            raise ValueError("validation run gate does not reference candidate evaluation")
         evidence = tuple(
             fingerprint
             for result in validation_run.stages

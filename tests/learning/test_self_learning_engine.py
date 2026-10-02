@@ -299,3 +299,240 @@ def test_experiment_definition_is_frozen_and_distinct_from_learning_state() -> N
     )
     assert len(definition.fingerprint()) == 64
     assert definition.allowed_change == ("model",)
+
+
+def test_self_learning_engine_observe_builds_causal_learning_cycle():
+    """Completed linked outcomes become immutable learning evidence."""
+    from learning.orchestrator import SelfLearningEngine
+
+    engine = SelfLearningEngine()
+    run = engine.observe(
+        tuple(_decision(f"T{i}") for i in range(1, 4)),
+        tuple(_outcome(f"T{i}", pnl=-20.0) for i in range(1, 4)),
+        cycle_id="cycle-observe-1",
+    )
+
+    assert run.audit.valid is True
+    assert run.cycle.state is LearningState.HYPOTHESIS
+    assert run.cycle.decision is LearningDecision.REDESIGN
+    assert run.experiences
+    assert run.cycle.experience_fingerprints == tuple(
+        item.fingerprint for item in run.experiences
+    )
+
+
+def test_self_learning_engine_blocks_unlinked_observations():
+    """Unlinked decision/outcome evidence must fail closed."""
+    from learning.orchestrator import SelfLearningEngine
+
+    with pytest.raises(ValueError, match="experience audit"):
+        SelfLearningEngine().observe(
+            (_decision("T1"),),
+            (_outcome("T2", pnl=-20.0),),
+            cycle_id="cycle-invalid-1",
+        )
+
+
+def test_learning_experience_fingerprint_is_deterministic():
+    experience = _learning_experience_fixture()
+    assert len(experience.fingerprint) == 64
+    assert experience.fingerprint == experience.fingerprint
+
+
+def _learning_experience_fixture():
+    from learning.models import LearningExperience, LearningPattern
+    return LearningExperience(
+        pattern=LearningPattern.LOSS,
+        evidence_count=3,
+        population_count=3,
+        occurrence_rate=1.0,
+        confidence=0.5,
+        average_reward=-0.5,
+        total_reward=-1.5,
+        source_trade_ids=("T1", "T2", "T3"),
+        rationale="Observed loss evidence.",
+    )
+
+
+def test_experiment_preparation_binds_definition_to_dataset_lineage():
+    from learning.orchestrator import SelfLearningEngine
+
+    dataset = SelfLearningEngine.dataset_version(
+        version="dataset-v-bind-1",
+        source="empirical_outcomes",
+        symbols=("RELIANCE", "TCS"),
+        period_start="2024-01-01",
+        period_end="2026-08-31",
+        row_count=3,
+        label_distribution={"LONG_SUCCESS": 1, "SHORT_SUCCESS": 1, "NO_EDGE": 1},
+        feature_schema_version="features-v1",
+        label_definition_version="labels-v1",
+        creation_timestamp="2026-10-02T00:00:00+00:00",
+    )
+    prepared = SelfLearningEngine.prepare_experiment(
+        experiment_id="EXP-BIND-1",
+        research_question="Test dataset lineage binding",
+        hypothesis="The controlled change improves evidence quality.",
+        failure_criterion="Reject if validation fails.",
+        dataset_version=dataset,
+        code_version="code-v1",
+        period_start="2024-01-01",
+        period_end="2026-08-31",
+        symbols=("TCS", "RELIANCE"),
+        method="controlled",
+        change="model",
+        fixed_components=("dataset", "strategy", "risk", "execution"),
+        allowed_change=("model",),
+        model_version="model-v1",
+        strategy_version="strategy-v1",
+        risk_version="risk-v1",
+        execution_version="execution-v1",
+    )
+    assert prepared.definition.dataset_version == prepared.lineage.dataset.dataset_version
+    assert prepared.definition.fingerprint()
+    assert prepared.lineage.fingerprint
+
+
+def test_experiment_preparation_rejects_dataset_period_mismatch():
+    from dataclasses import replace
+    from learning.orchestrator import ExperimentPreparation, SelfLearningEngine
+
+    dataset = SelfLearningEngine.dataset_version(
+        version="dataset-v-bind-2",
+        source="empirical_outcomes",
+        symbols=("RELIANCE",),
+        period_start="2024-01-01",
+        period_end="2026-08-31",
+        row_count=1,
+        label_distribution={"LONG_SUCCESS": 1},
+        feature_schema_version="features-v1",
+        label_definition_version="labels-v1",
+        creation_timestamp="2026-10-02T00:00:00+00:00",
+    )
+    prepared = SelfLearningEngine.prepare_experiment(
+        experiment_id="EXP-BIND-2",
+        research_question="Test mismatch",
+        hypothesis="Controlled change.",
+        failure_criterion="Reject if validation fails.",
+        dataset_version=dataset,
+        code_version="code-v1",
+        period_start="2024-01-01",
+        period_end="2026-08-31",
+        symbols=("RELIANCE",),
+        method="controlled",
+        change="model",
+        fixed_components=("dataset", "strategy", "risk", "execution"),
+        allowed_change=("model",),
+        model_version="model-v1",
+        strategy_version="strategy-v1",
+        risk_version="risk-v1",
+        execution_version="execution-v1",
+    )
+    changed = replace(
+        prepared.definition,
+        period_end="2026-09-01",
+    )
+    with pytest.raises(ValueError, match="period_end"):
+        ExperimentPreparation(definition=changed, lineage=prepared.lineage)
+
+
+def _experiment_definition_fixture():
+    return ExperimentDefinition(
+        experiment_id="EXP-REG-1",
+        research_question="Research registration integrity",
+        hypothesis="A frozen candidate improves evidence quality.",
+        failure_criterion="Reject invalid measured evidence.",
+        dataset_version="dataset-v1",
+        code_version="code-v1",
+        period_start="2024-01-01",
+        period_end="2026-08-31",
+        symbols=("RELIANCE",),
+        method="controlled",
+        fixed_parameters=(("risk", "frozen"),),
+        allowed_change=("model",),
+    )
+
+
+def _experiment_record_fixture(definition):
+    return ExperimentRecord.from_definition(
+        definition,
+        observations=10,
+        label_distribution={"LONG_SUCCESS": 5, "NO_EDGE": 5},
+        baseline_results={"backtest": {"metrics": {"trade_count": 10}}},
+        interpretation="Measured experiment.",
+        decision="INCONCLUSIVE",
+        root_cause="",
+        lesson="Evidence retained.",
+        next_experiment="Collect more evidence.",
+    )
+
+
+def test_register_experiment_requires_exact_record_and_lineage():
+    from experiments.lineage import build_lineage
+    from learning.orchestrator import SelfLearningEngine
+
+    definition = _experiment_definition_fixture()
+    record = _experiment_record_fixture(definition)
+    lineage = build_lineage(definition, record)
+    evaluation = SelfLearningEngine().register_experiment(
+        definition=definition,
+        record=record,
+        lineage=lineage,
+    )
+    assert evaluation.valid is True
+
+
+def test_register_experiment_rejects_mismatched_lineage():
+    from experiments.lineage import build_lineage
+    from learning.orchestrator import SelfLearningEngine
+
+    definition = _experiment_definition_fixture()
+    record = _experiment_record_fixture(definition)
+    other_definition = ExperimentDefinition(
+        experiment_id="EXP-REG-OTHER",
+        research_question=definition.research_question,
+        hypothesis=definition.hypothesis,
+        failure_criterion=definition.failure_criterion,
+        dataset_version=definition.dataset_version,
+        code_version=definition.code_version,
+        period_start=definition.period_start,
+        period_end=definition.period_end,
+        symbols=definition.symbols,
+        method=definition.method,
+        fixed_parameters=definition.fixed_parameters,
+        allowed_change=definition.allowed_change,
+    )
+    other_record = _experiment_record_fixture(other_definition)
+    other_lineage = build_lineage(other_definition, other_record)
+
+    with pytest.raises(ValueError, match="lineage does not match frozen"):
+        SelfLearningEngine().register_experiment(
+            definition=definition,
+            record=record,
+            lineage=other_lineage,
+        )
+
+
+def test_register_experiment_does_not_persist_invalid_measurements(tmp_path):
+    from experiments.lineage import build_lineage
+    from learning.experiment_store import ExperimentRegistry
+    from learning.orchestrator import SelfLearningEngine
+
+    definition = _experiment_definition_fixture()
+    record = ExperimentRecord.from_definition(
+        definition,
+        observations=10,
+        baseline_results={"backtest": {"metrics": {"trade_count": -1}}},
+        decision="INCONCLUSIVE",
+    )
+    lineage = build_lineage(definition, record)
+    registry = ExperimentRegistry(tmp_path / "experiments.jsonl")
+    evaluation = SelfLearningEngine(
+        experiment_registry=registry,
+    ).register_experiment(
+        definition=definition,
+        record=record,
+        lineage=lineage,
+    )
+    assert evaluation.valid is False
+    assert registry.count() == 0

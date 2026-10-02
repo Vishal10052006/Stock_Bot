@@ -13,11 +13,15 @@ on:
       - "docs/EXECUTION_ENGINE.md"
       - "docs/EXECUTION_CERTIFICATION_EVIDENCE.md"
       - "requirements-execution.txt"
+      - "requirements-screen-observer.txt"
+      - "learning/**"
+      - "tests/learning/**"
       - ".github/workflows/execution-engine.yml"
   push:
     branches:
       - main
       - feat/execution-certification-cert01-cert12
+      - feat/screen-observer-foundation
     paths:
       - "execution/**"
       - "tests/execution/**"
@@ -42,8 +46,11 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install numpy pandas pytest scipy scikit-learn requests pydantic fastapi sqlalchemy alembic python-dotenv yfinance ta joblib pyarrow
           python -m pip install -r requirements-execution.txt
+          python -m pip install -r requirements-screen-observer.txt
       - name: Certification matrix validation
         run: python -m pytest -q tests/execution/test_certification_matrix.py
+      - name: Module 10 readiness audit
+        run: PYTHONPATH=. python scripts/audit_module10_readiness.py --json || test $? -eq 1
       - name: Execution production validation
         run: python -m pytest -q tests/execution
       - name: Full repository regression

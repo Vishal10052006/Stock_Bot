@@ -203,3 +203,39 @@ def test_source_fingerprint_matches_actual_dataset() -> None:
     assert dataframe_fingerprint(dataset.data) in version.source_fingerprints
     retrained = retrain_candidate(dataset, dataset_version=version, experiment=_experiment(), config=_config())
     assert len(_default_artifact_serializer(retrained.result)) > 0
+
+
+def test_experiment_feature_version_mismatch_is_rejected() -> None:
+    dataset = _dataset()
+    version = _provenance(dataset)
+    experiment = _experiment()
+    object.__setattr__(experiment, "feature_version", "other-features")
+    with pytest.raises(ValueError, match="feature versions"):
+        retrain_candidate(dataset, dataset_version=version, experiment=experiment, config=_config())
+
+
+def test_experiment_label_version_mismatch_is_rejected() -> None:
+    dataset = _dataset()
+    version = _provenance(dataset)
+    experiment = _experiment()
+    object.__setattr__(experiment, "label_version", "other-labels")
+    with pytest.raises(ValueError, match="label versions"):
+        retrain_candidate(dataset, dataset_version=version, experiment=experiment, config=_config())
+
+
+def test_experiment_period_mismatch_is_rejected() -> None:
+    dataset = _dataset()
+    version = _provenance(dataset)
+    experiment = _experiment()
+    object.__setattr__(experiment, "period_end", "2026-01-03T05:10")
+    with pytest.raises(ValueError, match="period_end"):
+        retrain_candidate(dataset, dataset_version=version, experiment=experiment, config=_config())
+
+
+def test_experiment_symbols_mismatch_is_rejected() -> None:
+    dataset = _dataset()
+    version = _provenance(dataset)
+    experiment = _experiment()
+    object.__setattr__(experiment, "symbols", ("AAA",))
+    with pytest.raises(ValueError, match="symbols"):
+        retrain_candidate(dataset, dataset_version=version, experiment=experiment, config=_config())

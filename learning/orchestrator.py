@@ -59,6 +59,24 @@ class ExperimentPreparation:
     definition: ExperimentDefinition
     lineage: ExperimentLineage
 
+    def __post_init__(self) -> None:
+        """Require the frozen definition and lineage to describe one dataset."""
+        if self.definition.dataset_version != self.lineage.dataset.dataset_version:
+            raise ValueError("experiment definition does not match dataset lineage")
+        if self.definition.code_version != self.lineage.code_version:
+            raise ValueError("experiment definition does not match code lineage")
+        if self.definition.period_start != self.lineage.dataset.period_start:
+            raise ValueError("experiment definition period_start does not match dataset lineage")
+        if self.definition.period_end != self.lineage.dataset.period_end:
+            raise ValueError("experiment definition period_end does not match dataset lineage")
+        definition_symbols = tuple(sorted(symbol.strip().upper() for symbol in self.definition.symbols))
+        if definition_symbols != self.lineage.dataset.symbols:
+            raise ValueError("experiment definition symbols do not match dataset lineage")
+        if self.lineage.feature_version != self.lineage.dataset.feature_schema_version:
+            raise ValueError("lineage feature version does not match dataset schema")
+        if self.lineage.label_version != self.lineage.dataset.label_definition_version:
+            raise ValueError("lineage label version does not match dataset definition")
+
 
 class SelfLearningEngine:
     """Evidence-first coordinator for the complete self-learning lifecycle."""
@@ -272,8 +290,29 @@ class SelfLearningEngine:
         record: ExperimentRecord,
         lineage: LineageRecord,
     ) -> EvaluationReport:
-        """Validate and persist one completed experiment result."""
+        """Validate and persist one completed experiment result.
+
+        The measured record and lineage must belong to the exact frozen
+        definition. A failed integrity evaluation is never persisted.
+        """
+        if not isinstance(definition, ExperimentDefinition):
+            raise TypeError("definition must be an ExperimentDefinition")
+        if not isinstance(record, ExperimentRecord):
+            raise TypeError("record must be an ExperimentRecord")
+        if not isinstance(lineage, LineageRecord):
+            raise TypeError("lineage must be a LineageRecord")
+        definition_fingerprint = definition.fingerprint()
+        if record.definition_fingerprint != definition_fingerprint:
+            raise ValueError("record does not match frozen experiment definition")
+        if lineage.definition_fingerprint != definition_fingerprint:
+            raise ValueError("lineage does not match frozen experiment definition")
+        if lineage.record_fingerprint != record.fingerprint():
+            raise ValueError("lineage does not match measured experiment record")
+
         evaluation = evaluate_experiment_record(record)
+        if not evaluation.valid:
+            return evaluation
+
         if self.experiment_registry is not None:
             self.experiment_registry.append(definition, record, lineage)
         return evaluation

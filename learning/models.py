@@ -56,6 +56,37 @@ class LearningExperience:
     total_net_pnl: float = 0.0
     detail: str = ""
 
+    @property
+    def fingerprint(self) -> str:
+        """Return deterministic identity for this immutable learning experience."""
+        import hashlib
+        import json
+
+        payload = {
+            "pattern": self.pattern.value,
+            "error_class": self.error_class.value,
+            "symbol": self.symbol,
+            "evidence_count": self.evidence_count,
+            "population_count": self.population_count,
+            "occurrence_rate": self.occurrence_rate,
+            "confidence": self.confidence,
+            "average_reward": self.average_reward,
+            "total_reward": self.total_reward,
+            "source_trade_ids": self.source_trade_ids,
+            "rationale": self.rationale,
+            "conditions": self.conditions,
+            "average_net_pnl": self.average_net_pnl,
+            "total_net_pnl": self.total_net_pnl,
+            "detail": self.detail,
+        }
+        canonical = json.dumps(
+            payload,
+            sort_keys=True,
+            separators=(",", ":"),
+            default=str,
+        )
+        return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
     def __post_init__(self) -> None:
         if self.evidence_count < 1:
             raise ValueError("evidence_count must be at least 1")

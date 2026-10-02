@@ -38,7 +38,7 @@ from .validation import ValidationBundle, ValidationOrchestrator
 from .promotion import PromotionGate
 from .champion import ChampionChallenger, RollbackPlan, build_rollback_plan
 from .drift import DriftInvestigation, DriftInvestigator
-from .orchestrator import SelfLearningEngine, SelfLearningRun
+from .orchestrator import ExperimentPreparation, SelfLearningEngine, SelfLearningRun
 
 __all__ = [
     "ChampionChallenger",
@@ -49,6 +49,7 @@ __all__ = [
     "DriftInvestigation",
     "DriftInvestigator",
     "ErrorClass",
+    "ExperimentPreparation",
     "ExperienceAudit",
     "ExperienceContractError",
     "ExperimentLineage",

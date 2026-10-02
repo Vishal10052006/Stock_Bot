@@ -51,8 +51,30 @@ def _validations(candidate: ModelCandidate):
     return result
 
 
-def test_complete_evidence_is_eligible_but_not_promoted() -> None:
+def test_review_requires_promotion_review_lifecycle() -> None:
     candidate = _candidate()
+    with pytest.raises(ValueError, match="PROMOTION_REVIEW"):
+        PromotionController().review(
+            champion_version="model-v1",
+            challenger=candidate,
+            validations=_validations(candidate),
+        )
+
+
+def test_review_requires_champion_to_match_candidate_parent() -> None:
+    from dataclasses import replace
+
+    candidate = replace(_candidate(), lifecycle=CandidateLifecycle.PROMOTION_REVIEW)
+    with pytest.raises(ValueError, match="champion_version"):
+        PromotionController().review(
+            champion_version="model-v0",
+            challenger=candidate,
+            validations=_validations(candidate),
+        )
+
+
+def test_complete_evidence_is_eligible_but_not_promoted() -> None:
+    candidate = replace(_candidate(), lifecycle=CandidateLifecycle.PROMOTION_REVIEW)
     decision = PromotionController().review(
         champion_version="model-v1",
         challenger=candidate,
@@ -72,7 +94,7 @@ def test_missing_stage_blocks_promotion_review() -> None:
 
 
 def test_explicit_approval_is_required() -> None:
-    candidate = _candidate()
+    candidate = replace(_candidate(), lifecycle=CandidateLifecycle.PROMOTION_REVIEW)
     review = PromotionController().review(
         champion_version="model-v1",
         challenger=candidate,
@@ -88,7 +110,7 @@ def test_explicit_approval_is_required() -> None:
 
 
 def test_blocked_review_cannot_be_approved() -> None:
-    candidate = _candidate()
+    candidate = replace(_candidate(), lifecycle=CandidateLifecycle.PROMOTION_REVIEW)
     validations = _validations(candidate)
     validations.pop("OOS")
     review = PromotionController().review(
@@ -189,3 +211,108 @@ def test_review_run_revalidates_stage_evidence() -> None:
 
     assert decision.state.value == "BLOCKED"
     assert "STAGE_INVALID:PAPER" in decision.reasons
+
+def test_review_run_rejects_tampered_promotion_gate():
+    candidate = replace(_candidate(), lifecycle=CandidateLifecycle.PROMOTION_REVIEW)
+    run = _validation_run(candidate)
+    forged_gate = replace(run.gate, issues=("tampered",))
+    forged_run = ValidationRun(
+        candidate_fingerprint=run.candidate_fingerprint,
+        stages=run.stages,
+        gate=forged_gate,
+    )
+
+    with pytest.raises(ValueError, match="gate does not match"):
+        PromotionController().review_run(
+            champion_version="model-v1",
+            challenger=candidate,
+            validation_run=forged_run,
+        )
+
+
+def test_review_run_requires_candidate_artifact_and_evaluation_in_gate():
+    candidate = replace(_candidate(), lifecycle=CandidateLifecycle.PROMOTION_REVIEW)
+    validations = _validations(candidate)
+    run = _validation_run(candidate)
+    # Keep the gate internally consistent with the collected evidence, then
+    # verify the promotion boundary checks the candidate identities explicitly.
+    stripped = {
+        stage: replace(summary, artifact_fingerprints=())
+        for stage, summary in validations.items()
+    }
+    stripped_run = ValidationRun(
+        candidate_fingerprint=candidate.fingerprint,
+        stages=tuple(stripped.values()),
+        gate=validate_candidate(candidate, stripped),
+    )
+
+    with pytest.raises(ValueError, match="candidate artifact"):
+        PromotionController().review_run(
+            champion_version="model-v1",
+            challenger=candidate,
+            validation_run=stripped_run,
+        )
+
+
+def test_promotion_decision_rejects_same_champion_and_challenger():
+    with pytest.raises(ValueError, match="must differ"):
+        from self_learning.contracts import PromotionDecision, PromotionState
+
+        PromotionDecision(
+            candidate_id="C1",
+            candidate_fingerprint="b" * 64,
+            champion_version="model-v1",
+            challenger_version="model-v1",
+            state=PromotionState.ELIGIBLE,
+            reasons=("review",),
+            validation_fingerprints=("c" * 64,),
+        )
+
+
+def test_promotion_decision_requires_validation_evidence():
+    with pytest.raises(ValueError, match="validation_fingerprints"):
+        from self_learning.contracts import PromotionDecision, PromotionState
+
+        PromotionDecision(
+            candidate_id="C1",
+            candidate_fingerprint="b" * 64,
+            champion_version="model-v1",
+            challenger_version="model-v2",
+            state=PromotionState.ELIGIBLE,
+            reasons=("review",),
+            validation_fingerprints=(),
+        )
+
+
+def test_promoted_decision_requires_timezone_aware_created_at():
+    from self_learning.contracts import PromotionDecision, PromotionState
+
+    with pytest.raises(ValueError, match="timezone-aware"):
+        PromotionDecision(
+            candidate_id="C1",
+            candidate_fingerprint="b" * 64,
+            champion_version="model-v1",
+            challenger_version="model-v2",
+            state=PromotionState.PROMOTED,
+            reasons=("approved",),
+            validation_fingerprints=("c" * 64,),
+            approval_reference="review-001",
+            created_at="2026-09-24T10:00:00",
+        )
+
+
+def test_promoted_decision_accepts_timezone_aware_created_at():
+    from self_learning.contracts import PromotionDecision, PromotionState
+
+    decision = PromotionDecision(
+        candidate_id="C1",
+        candidate_fingerprint="b" * 64,
+        champion_version="model-v1",
+        challenger_version="model-v2",
+        state=PromotionState.PROMOTED,
+        reasons=("approved",),
+        validation_fingerprints=("c" * 64,),
+        approval_reference="review-001",
+        created_at="2026-09-24T10:00:00+05:30",
+    )
+    assert decision.created_at.endswith("+05:30")

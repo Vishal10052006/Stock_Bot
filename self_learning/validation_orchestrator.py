@@ -28,6 +28,11 @@ class ValidationRun:
             raise ValueError("candidate_fingerprint must be SHA-256")
         if not self.stages:
             raise ValueError("stages must not be empty")
+        stage_names = tuple(summary.stage for summary in self.stages)
+        if len(stage_names) != len(set(stage_names)):
+            raise ValueError("validation stages must be unique")
+        if self.gate.stage != "PROMOTION_GATE":
+            raise ValueError("validation run gate must be PROMOTION_GATE")
 
     @property
     def stage_map(self) -> Mapping[str, ValidationSummary]:
@@ -98,7 +103,26 @@ class ValidationOrchestrator:
                 normalized[stage] = result
 
         gate = validate_candidate(candidate, normalized, policy=self.policy)
-        stages = tuple(normalized[stage] for stage in self.policy.required_stages if stage in normalized)
+
+        # Validation evidence is immutable input to the gate. Every supplied
+        # stage artifact must be explicitly tied to this candidate's artifact
+        # and evaluation identities; the gate must not accept unrelated proof.
+        for stage, result in normalized.items():
+            artifact_ids = set(result.artifact_fingerprints)
+            if candidate.artifact_fingerprint not in artifact_ids:
+                raise ValueError(
+                    f"{stage} validation evidence does not reference candidate artifact"
+                )
+            if candidate.evaluation_fingerprint not in artifact_ids:
+                raise ValueError(
+                    f"{stage} validation evidence does not reference candidate evaluation"
+                )
+
+        stages = tuple(
+            normalized[stage]
+            for stage in self.policy.required_stages
+            if stage in normalized
+        )
         return ValidationRun(
             candidate_fingerprint=candidate.fingerprint,
             stages=stages,
@@ -119,6 +143,22 @@ class ValidationOrchestrator:
             raise TypeError("run must be a ValidationRun")
         if run.candidate_fingerprint != candidate.fingerprint:
             raise ValueError("validation run does not match candidate")
+        if run.gate.stage != "PROMOTION_GATE":
+            raise ValueError("validation run gate must be PROMOTION_GATE")
+
+        collected = {stage.stage: stage for stage in run.stages}
+        expected_gate = validate_candidate(
+            candidate,
+            collected,
+            policy=self.policy,
+        )
+        if run.gate.fingerprint != expected_gate.fingerprint:
+            raise ValueError("validation gate is not derived from collected stages")
+
+        if candidate.evaluation_fingerprint not in run.gate.artifact_fingerprints:
+            raise ValueError("validation gate does not reference candidate evaluation")
+        if candidate.artifact_fingerprint not in run.gate.artifact_fingerprints:
+            raise ValueError("validation gate does not reference candidate artifact")
         if candidate.lifecycle is not CandidateLifecycle.VALIDATING:
             raise ValueError("candidate must be VALIDATING before completion")
         if not run.gate.valid:

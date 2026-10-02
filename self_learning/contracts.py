@@ -12,6 +12,7 @@ this boundary.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from enum import Enum
 import hashlib
 import json
@@ -421,12 +422,23 @@ class PromotionDecision:
             raise ValueError("candidate_fingerprint must be SHA-256")
         if not self.champion_version.strip() or not self.challenger_version.strip():
             raise ValueError("champion/challenger versions are required")
+        if self.champion_version == self.challenger_version:
+            raise ValueError("champion and challenger versions must differ")
+        if self.state in (PromotionState.ELIGIBLE, PromotionState.PROMOTED) and not self.validation_fingerprints:
+            raise ValueError("validation_fingerprints must not be empty")
         if any(len(item) != 64 for item in self.validation_fingerprints):
             raise ValueError("validation_fingerprints must be SHA-256")
         if self.state is PromotionState.PROMOTED and not self.approval_reference.strip():
             raise ValueError("PROMOTED requires approval_reference")
-        if self.state is PromotionState.PROMOTED and not self.created_at.strip():
-            raise ValueError("PROMOTED requires created_at")
+        if self.state is PromotionState.PROMOTED:
+            if not self.created_at.strip():
+                raise ValueError("PROMOTED requires created_at")
+            try:
+                timestamp = datetime.fromisoformat(self.created_at)
+            except ValueError as exc:
+                raise ValueError("PROMOTED created_at must be ISO-8601") from exc
+            if timestamp.tzinfo is None or timestamp.utcoffset() is None:
+                raise ValueError("PROMOTED created_at must be timezone-aware")
 
     @property
     def fingerprint(self) -> str:

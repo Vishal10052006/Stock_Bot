@@ -7,6 +7,7 @@ an explicit governance operation.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 import hashlib
 import json
 from pathlib import Path
@@ -58,6 +59,15 @@ class RollbackRecord:
         ).hexdigest()
 
 
+def _is_valid_timestamp(value: str) -> bool:
+    """Return whether a timestamp is an offset-aware ISO-8601 value."""
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError:
+        return False
+    return parsed.tzinfo is not None and parsed.utcoffset() is not None
+
+
 class ChampionStore:
     """Append-only champion history with a current-version pointer."""
 
@@ -65,16 +75,56 @@ class ChampionStore:
         self.history_path = Path(history_path)
         self.pointer_path = self.history_path.with_suffix(".current")
 
-    def activate(self, record: ChampionRecord) -> None:
-        """Persist one approved champion activation."""
+    def activate(
+        self,
+        record: ChampionRecord,
+        *,
+        promotion_decision=None,
+    ) -> None:
+        """Persist one approved champion activation.
+
+        Activation requires a promotion decision explicitly marked PROMOTED.
+        The decision's review identity must match the champion record.
+        """
         if not isinstance(record, ChampionRecord):
             raise TypeError("record must be a ChampionRecord")
         if record.status != "PROMOTED":
             raise ValueError("only PROMOTED records can be activated")
+        if len(record.promotion_review_fingerprint) != 64:
+            raise ValueError("promotion review fingerprint must be SHA-256")
+        if not _is_valid_timestamp(record.activated_at):
+            raise ValueError("champion activated_at must be timezone-aware")
+
+        if promotion_decision is None:
+            raise ValueError("promotion decision is required for champion activation")
+
+        try:
+            from self_learning.contracts import PromotionDecision, PromotionState
+        except ImportError as exc:
+            raise RuntimeError("promotion contract unavailable") from exc
+
+        if not isinstance(promotion_decision, PromotionDecision):
+            raise TypeError("promotion_decision must be a PromotionDecision")
+        if promotion_decision.state is not PromotionState.PROMOTED:
+            raise ValueError("promotion decision must be PROMOTED")
+        if promotion_decision.challenger_version != record.model_version:
+            raise ValueError("promotion decision challenger does not match champion record")
+        if promotion_decision.fingerprint != record.promotion_review_fingerprint:
+            raise ValueError("promotion decision fingerprint does not match champion record")
 
         prior = self.history()
-        if prior and record.parent_model_version != prior[-1].model_version:
-            raise ValueError("champion parent must match current champion")
+        current = self.current()
+        if prior:
+            if current != prior[-1].model_version:
+                raise ValueError("champion pointer does not match history")
+            if record.parent_model_version is None:
+                raise ValueError("champion parent is required for successor activation")
+            if record.parent_model_version != prior[-1].model_version:
+                raise ValueError("champion parent must match current champion")
+        elif current is not None:
+            raise ValueError("champion pointer exists without history")
+        if record.model_version == current:
+            raise ValueError("model version is already current champion")
 
         self.history_path.parent.mkdir(parents=True, exist_ok=True)
         payload = {
@@ -93,11 +143,19 @@ class ChampionStore:
         self.pointer_path.write_text(record.model_version, encoding="utf-8")
 
     def current(self) -> str | None:
-        """Return the current champion model version."""
-        if not self.pointer_path.exists():
+        """Return the current champion model version after integrity checks."""
+        pointer = None
+        if self.pointer_path.exists():
+            pointer = self.pointer_path.read_text(encoding="utf-8").strip() or None
+        history = self.history()
+        if not history:
+            if pointer is not None:
+                raise ValueError("champion pointer exists without history")
             return None
-        value = self.pointer_path.read_text(encoding="utf-8").strip()
-        return value or None
+        expected = history[-1].model_version
+        if pointer != expected:
+            raise ValueError("champion pointer does not match history")
+        return pointer
 
     def history(self) -> tuple[ChampionRecord, ...]:
         """Load and verify champion history."""
@@ -113,10 +171,24 @@ class ChampionStore:
                 raise ValueError(f"blank champion history line {line_number}")
             payload = json.loads(line)
             expected = payload.pop("fingerprint", None)
+            if not expected:
+                raise ValueError(
+                    f"champion history fingerprint is required at line {line_number}"
+                )
             record = ChampionRecord(**payload)
-            if expected is not None and expected != record.fingerprint:
+            if expected != record.fingerprint:
                 raise ValueError(
                     f"champion history fingerprint mismatch at line {line_number}"
+                )
+            if result:
+                previous = result[-1]
+                if record.parent_model_version != previous.model_version:
+                    raise ValueError(
+                        f"champion history parent mismatch at line {line_number}"
+                    )
+            elif record.parent_model_version is not None:
+                raise ValueError(
+                    f"initial champion cannot have a parent at line {line_number}"
                 )
             result.append(record)
 

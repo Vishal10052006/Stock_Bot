@@ -1,0 +1,7 @@
+# Optional dependencies for Screen Observer desktop/vision adapters.
+# Core STOCK_BOT tests do not require these packages.
+mss>=9.0
+pytesseract>=0.3.13
+Pillow>=10.0
+opencv-python-headless>=4.10
+dbus-next>=0.2.3

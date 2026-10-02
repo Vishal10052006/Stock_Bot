@@ -1,0 +1,242 @@
+from __future__ import annotations
+import pandas as pd
+import pytest
+from multi_stock.decision_explanation import build_decision_explanation
+
+def test_explanation_preserves_pipeline_reasons_and_order():
+    ts = pd.Timestamp("2026-10-02 10:00:00", tz="Asia/Kolkata")
+    result = build_decision_explanation(ts, "RELIANCE.NS", strategy={"timestamp": ts, "direction": "NO_TRADE", "rationale": "Regime filter failed."}, risk={"timestamp": ts, "status": "REJECTED", "reason": "Risk gate blocked execution."})
+    assert result.outcome == "NO_TRADE"
+    assert [item.stage for item in result.items] == ["Strategy", "Risk"]
+    assert result.items[0].reason == "Regime filter failed."
+    assert result.authority == "OBSERVATION_ONLY"
+
+def test_future_explanation_evidence_fails_closed():
+    ts = pd.Timestamp("2026-10-02 10:00:00", tz="Asia/Kolkata")
+    with pytest.raises(ValueError, match="future explanation evidence rejected"):
+        build_decision_explanation(ts, "RELIANCE.NS", strategy={"timestamp": ts + pd.Timedelta(seconds=1), "direction": "LONG", "rationale": "candidate"})
+
+def test_full_pipeline_layers_are_preserved():
+    ts = pd.Timestamp("2026-10-02 10:00:00", tz="Asia/Kolkata")
+    result = build_decision_explanation(
+        ts, "RELIANCE.NS",
+        market={"timestamp": ts, "symbol": "RELIANCE.NS", "status": "OBSERVED", "reason": "Market context available."},
+        analysis={"timestamp": ts, "symbol": "RELIANCE.NS", "status": "OBSERVED", "reason": "Analysis context available."},
+        prediction={"timestamp": ts, "symbol": "RELIANCE.NS", "status": "VALID", "reason": "Prediction evidence available."},
+    )
+    assert [item.stage for item in result.items] == ["Market", "Analysis", "Prediction"]
+    assert result.outcome == "OBSERVATION_ONLY"
+
+
+def test_symbol_mismatch_fails_closed():
+    ts = pd.Timestamp("2026-10-02 10:00:00", tz="Asia/Kolkata")
+    with pytest.raises(ValueError, match="explanation symbol mismatch"):
+        build_decision_explanation(ts, "RELIANCE.NS", prediction={"timestamp": ts, "symbol": "TCS.NS", "reason": "evidence"})
+
+
+def test_missing_reason_is_not_fabricated():
+    ts = pd.Timestamp("2026-10-02 10:00:00", tz="Asia/Kolkata")
+    result = build_decision_explanation(ts, "RELIANCE.NS", strategy={"timestamp": ts, "direction": "LONG"})
+    assert result.items == ()
+
+
+@pytest.mark.parametrize(
+    ("execution_status", "expected"),
+    [
+        ("BLOCKED", "EXECUTION_BLOCKED"),
+        ("REJECTED_BROKER", "EXECUTION_REJECTED"),
+        ("FILLED", "EXECUTION_FILLED"),
+        ("PARTIALLY_FILLED", "EXECUTION_PENDING"),
+        ("OPEN", "EXECUTION_PENDING"),
+        ("ACKNOWLEDGED", "EXECUTION_PENDING"),
+    ],
+)
+def test_execution_lifecycle_outcomes_are_explicit(execution_status, expected):
+    ts = pd.Timestamp("2026-10-02 10:00:00", tz="Asia/Kolkata")
+    result = build_decision_explanation(
+        ts,
+        "RELIANCE.NS",
+        strategy={"timestamp": ts, "symbol": "RELIANCE.NS", "direction": "LONG", "reason": "candidate"},
+        execution={"timestamp": ts, "symbol": "RELIANCE.NS", "status": execution_status, "reason": "observed execution state"},
+    )
+    assert result.outcome == expected
+
+
+def test_authorized_execution_is_not_reported_as_filled():
+    ts = pd.Timestamp("2026-10-02 10:00:00", tz="Asia/Kolkata")
+    result = build_decision_explanation(
+        ts,
+        "RELIANCE.NS",
+        strategy={"timestamp": ts, "symbol": "RELIANCE.NS", "direction": "LONG", "reason": "candidate"},
+        execution={"timestamp": ts, "symbol": "RELIANCE.NS", "status": "AUTHORIZED", "reason": "risk-approved authorization"},
+    )
+    assert result.outcome == "LONG"
+
+
+def test_risk_rejection_remains_authoritative_over_blocked_execution():
+    ts = pd.Timestamp("2026-10-02 10:00:00", tz="Asia/Kolkata")
+    result = build_decision_explanation(
+        ts,
+        "RELIANCE.NS",
+        strategy={"timestamp": ts, "symbol": "RELIANCE.NS", "direction": "LONG", "reason": "candidate"},
+        risk={"timestamp": ts, "symbol": "RELIANCE.NS", "status": "REJECTED", "reason": "exposure limit"},
+        execution={"timestamp": ts, "symbol": "RELIANCE.NS", "status": "BLOCKED", "reason": "risk rejected"},
+    )
+    assert result.outcome == "RISK_REJECTED"
+
+
+def test_safety_decision_is_explained_from_allowed_state():
+    ts = pd.Timestamp("2026-10-02 10:00:00", tz="Asia/Kolkata")
+    result = build_decision_explanation(
+        ts,
+        "RELIANCE.NS",
+        strategy={"timestamp": ts, "symbol": "RELIANCE.NS", "direction": "LONG", "reason": "candidate"},
+        safety={"timestamp": ts, "symbol": "RELIANCE.NS", "allowed": False, "reason": "Live execution locked."},
+    )
+    assert result.outcome == "SAFETY_BLOCKED"
+    assert result.items[-1].status == "BLOCKED"
+
+
+def test_execution_result_snapshot_is_explained_without_inference():
+    ts = pd.Timestamp("2026-10-02 10:00:00", tz="Asia/Kolkata")
+    snapshot = {"updated_at": ts, "status": "FILLED", "reason": "broker fill observed"}
+    result = build_decision_explanation(
+        ts,
+        "RELIANCE.NS",
+        strategy={"timestamp": ts, "symbol": "RELIANCE.NS", "direction": "LONG", "reason": "candidate"},
+        execution={"snapshot": snapshot, "symbol": "RELIANCE.NS"},
+    )
+    assert result.outcome == "EXECUTION_FILLED"
+    assert result.items[-1].status == "FILLED"
+
+
+def test_strategy_primary_and_secondary_reasons_are_preserved():
+    ts = pd.Timestamp("2026-10-02 10:00:00", tz="Asia/Kolkata")
+    result = build_decision_explanation(
+        ts,
+        "RELIANCE.NS",
+        strategy={
+            "timestamp": ts,
+            "symbol": "RELIANCE.NS",
+            "direction": "NO_TRADE",
+            "primary_reason": "LIQUIDITY_INSUFFICIENT",
+            "secondary_reasons": ("COST_TOO_HIGH",),
+            "rationale": "Strategy rejected the candidate.",
+        },
+    )
+    item = result.items[-1]
+    assert item.status == "NO_TRADE"
+    assert item.reason == "LIQUIDITY_INSUFFICIENT; secondary=COST_TOO_HIGH"
+
+
+def test_safety_block_code_is_preserved_in_explanation():
+    ts = pd.Timestamp("2026-10-02 10:00:00", tz="Asia/Kolkata")
+    result = build_decision_explanation(
+        ts,
+        "RELIANCE.NS",
+        safety={
+            "timestamp": ts,
+            "symbol": "RELIANCE.NS",
+            "allowed": False,
+            "block": "LIVE_LOCKED",
+            "reason": "Live execution remains locked.",
+        },
+    )
+    assert result.items[-1].reason == "LIVE_LOCKED: Live execution remains locked."
+
+
+def test_concrete_pipeline_contracts_preserve_authoritative_reasons():
+    from execution.safety import SafetyBlock, SafetyDecision
+    from execution.trading_execution import ExecutionAuthorization, ExecutionAuthorizationStatus
+    from trading.risk.gate import RiskDecision, RiskDecisionStatus
+    from trading.strategy.models import StrategyDecision, StrategyDirection
+
+    ts = pd.Timestamp("2026-10-02 10:00:00", tz="Asia/Kolkata")
+    strategy = StrategyDecision(
+        timestamp=ts,
+        symbol="RELIANCE.NS",
+        direction=StrategyDirection.NO_TRADE,
+        strategy_version="v1.0",
+        rationale="Liquidity gate rejected candidate.",
+        primary_reason="LIQUIDITY_INSUFFICIENT",
+    )
+    risk = RiskDecision(
+        timestamp=ts,
+        symbol="RELIANCE.NS",
+        status=RiskDecisionStatus.REJECTED,
+        strategy_direction=StrategyDirection.NO_TRADE,
+        reason="Strategy produced NO_TRADE; risk gate blocks execution.",
+    )
+    safety = SafetyDecision(
+        allowed=False,
+        block=SafetyBlock.LIVE_LOCKED,
+        reason="Live execution remains locked by the trading specification.",
+    )
+    execution = ExecutionAuthorization(
+        timestamp=ts,
+        symbol="RELIANCE.NS",
+        direction=StrategyDirection.NO_TRADE,
+        status=ExecutionAuthorizationStatus.BLOCKED,
+        reason="Execution blocked because RiskDecision is not APPROVED.",
+        risk_version="RISK-v1.0",
+    )
+
+    result = build_decision_explanation(
+        ts,
+        "RELIANCE.NS",
+        strategy=strategy,
+        risk=risk,
+        safety=safety,
+        execution=execution,
+    )
+
+    assert result.outcome == "NO_TRADE"
+    assert [item.stage for item in result.items] == ["Strategy", "Risk", "Safety", "Execution"]
+    assert result.items[0].reason == "LIQUIDITY_INSUFFICIENT"
+    assert result.items[1].reason.startswith("Strategy produced NO_TRADE")
+    assert result.items[2].reason.startswith("LIVE_LOCKED:")
+    assert result.items[3].status == "BLOCKED"
+
+
+def test_concrete_risk_enum_status_is_normalized_for_audit():
+    from trading.risk.gate import RiskDecision, RiskDecisionStatus
+    from trading.strategy.models import StrategyDirection
+
+    ts = pd.Timestamp("2026-10-02 10:00:00", tz="Asia/Kolkata")
+    risk = RiskDecision(
+        timestamp=ts,
+        symbol="RELIANCE.NS",
+        status=RiskDecisionStatus.REJECTED,
+        strategy_direction=StrategyDirection.NO_TRADE,
+        reason="risk rejected",
+    )
+    result = build_decision_explanation(ts, "RELIANCE.NS", risk=risk)
+    assert result.items[0].status == "REJECTED"
+
+
+def test_same_timestamp_items_follow_causal_stage_order():
+    ts = pd.Timestamp("2026-10-02 10:00:00", tz="Asia/Kolkata")
+    result = build_decision_explanation(
+        ts,
+        "RELIANCE.NS",
+        strategy={"timestamp": ts, "direction": "NO_TRADE", "rationale": "strategy"},
+        risk={"timestamp": ts, "status": "REJECTED", "reason": "risk"},
+        market={"timestamp": ts, "status": "OBSERVED", "reason": "market"},
+        execution={"timestamp": ts, "status": "BLOCKED", "reason": "execution"},
+    )
+    assert [item.stage for item in result.items] == [
+        "Market", "Strategy", "Risk", "Execution"
+    ]
+
+
+def test_strategy_without_reason_retains_direction_as_structural_evidence():
+    ts = pd.Timestamp("2026-10-02 10:00:00", tz="Asia/Kolkata")
+    result = build_decision_explanation(
+        ts,
+        "RELIANCE.NS",
+        strategy={"timestamp": ts, "symbol": "RELIANCE.NS", "direction": "NO_TRADE"},
+    )
+    assert result.outcome == "NO_TRADE"
+    assert [(item.stage, item.status, item.reason) for item in result.items] == [
+        ("Strategy", "NO_TRADE", "NO_TRADE")
+    ]

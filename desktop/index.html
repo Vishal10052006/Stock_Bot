@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>STOCK_BOT Desktop</title>
+<style>
+:root{font-family:Inter,system-ui,sans-serif;background:#0b1020;color:#e7ecf7}
+*{box-sizing:border-box}body{margin:0}header{padding:18px 22px;border-bottom:1px solid #26304a;display:flex;justify-content:space-between;gap:16px}
+h1,h2,p{margin:0}.layout{display:grid;grid-template-columns:210px 1fr;min-height:calc(100vh - 69px)}
+nav{border-right:1px solid #26304a;padding:12px}.nav{width:100%;padding:10px;margin:4px 0;background:#121a2e;color:#cbd5e1;border:1px solid #26304a;border-radius:8px;text-align:left;cursor:pointer}.nav.active{border-color:#7aa2ff;color:#fff}
+main{padding:20px;overflow:auto}.view{display:none}.view.active{display:block}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:14px}.card{background:#11192c;border:1px solid #26304a;border-radius:12px;padding:16px}.label{font-size:12px;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em}.value{font-size:24px;margin-top:6px}.ok{color:#7ee2a8}.warn{color:#ffd166}.bad{color:#ff8d8d}pre{white-space:pre-wrap;word-break:break-word;color:#b8c4d9}.row{display:flex;justify-content:space-between;gap:12px;padding:8px 0;border-bottom:1px solid #202a42}.btn{padding:8px 12px;border-radius:8px;border:1px solid #33405f;background:#18223a;color:#fff;cursor:pointer}.muted{color:#94a3b8}
+@media(max-width:760px){.layout{grid-template-columns:1fr}nav{border-right:0;border-bottom:1px solid #26304a;display:flex;overflow:auto}.nav{min-width:max-content}}
+</style>
+</head>
+<body>
+<header><div><h1>STOCK_BOT Desktop</h1><p class="muted">D01–D10 operator interface · observation/composition only</p></div><strong id="lock" class="ok">LIVE BROKER: LOCKED</strong></header>
+<div class="layout"><nav id="nav"></nav><main id="main"></main></div>
+<script>
+const DEFAULT={
+ navigation:{active_view:"market"},
+ views:{
+  market:{symbol:null,session_state:"UNKNOWN",timeframe:null,price:null,freshness_seconds:null,monitoring_readiness:"UNKNOWN",paper_state:"IDLE",live_execution_state:"LOCKED"},
+  prediction:{status:"MISSING"},
+  explanation:{state:"NO_EVIDENCE",items:[]},
+  research:{status:"NO_EVIDENCE",items:[]},
+  screen:{capture_status:"UNAVAILABLE",reconciliation_status:"INVALID",validation_status:"INVALID",confidence:{}},
+  timeline:{status:"EMPTY",events:[]},
+  telemetry:{status:"NO_TELEMETRY",metrics:{},alerts:[]},
+  risk:{status:"UNKNOWN",kill_switch:"UNKNOWN",safety_state:"UNKNOWN"},
+  paper:{execution_state:"IDLE",positions:[],orders:[],equity:0,realized_pnl:0,unrealized_pnl:0,gross_exposure:0},
+  replay:{session_id:null,cursor:0,status:"PAUSED",events:[],live_mutation:false}
+ }
+};
+const snapshot=window.STOCK_BOT_SNAPSHOT||DEFAULT;
+const names=[["market","Market Dashboard"],["prediction","Prediction"],["explanation","Explanation"],["research","Research / News"],["screen","Screen Observer"],["timeline","Decision Timeline"],["telemetry","Model Telemetry"],["risk","Risk"],["paper","Paper Account"],["replay","Session Replay"]];
+let active="market";
+const nav=document.getElementById("nav"),main=document.getElementById("main");
+function esc(v){return String(v??"—").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c]))}
+function card(label,value,cls=""){return '<div class="card"><div class="label">'+esc(label)+'</div><div class="value '+cls+'">'+esc(value)+'</div></div>'}
+function rows(obj){return Object.entries(obj||{}).map(([k,v])=>'<div class="row"><span class="muted">'+esc(k)+'</span><span>'+esc(typeof v==="object"?JSON.stringify(v):v)+'</span></div>').join("")}
+function render(id){
+ const v=(snapshot.views||{})[id]||{};
+ if(id==="market") return '<div class="grid">'+card("Symbol",v.symbol)+card("Price",v.price)+card("Timeframe",v.timeframe)+card("Session",v.session_state)+card("Freshness (s)",v.freshness_seconds)+card("Monitoring",v.monitoring_readiness)+card("Paper",v.paper_state)+card("Live",v.live_execution_state,"ok")+'</div>';
+ if(id==="prediction") return '<div class="grid">'+card("Status",v.status,v.status==="VALID"?"ok":"warn")+card("LONG_SUCCESS",v.long_success)+card("SHORT_SUCCESS",v.short_success)+card("NO_EDGE",v.no_edge)+card("Predicted class",v.predicted_class)+card("Model",v.model_version)+'</div><div class="card"><h2>Provenance</h2><pre>'+esc(JSON.stringify(v.provenance||{},null,2))+'</pre></div>';
+ if(id==="explanation") return '<div class="card"><h2>'+esc(v.state)+'</h2>'+((v.items||[]).map(x=>'<div class="row"><span>'+esc(x.source)+'</span><span>'+esc(x.reason)+'</span></div>').join("")||'<p class="muted">No upstream evidence.</p>')+'</div>';
+ if(id==="research") return '<div class="card"><h2>'+esc(v.status)+'</h2>'+((v.items||[]).map(x=>'<div class="row"><span>'+esc(x.source)+' · '+esc(x.title)+'</span><span>'+esc(x.available_at)+'</span></div>').join("")||'<p class="muted">No causally available evidence.</p>')+'</div>';
+ if(id==="screen") return '<div class="grid">'+card("Capture",v.capture_status)+card("Chart",v.chart_detected)+card("OCR",v.ocr_status)+card("Symbol",v.symbol)+card("Timeframe",v.timeframe)+card("Reconciliation",v.reconciliation_status)+card("Validation",v.validation_status)+card("Authority",v.authority,"ok")+'</div><div class="card"><pre>'+esc(JSON.stringify(v.confidence||{},null,2))+'</pre></div>';
+ if(id==="timeline") return '<div class="card">'+((v.events||[]).map(x=>'<div class="row"><span>'+esc(x.timestamp)+' · '+esc(x.event_type)+'</span><span>'+esc(x.state||x.reason||x.source)+'</span></div>').join("")||'<p class="muted">No timeline events.</p>')+'</div>';
+ if(id==="telemetry") return '<div class="grid">'+card("Status",v.status)+card("Model",v.model_version)+card("Predictions",v.prediction_count)+card("Alerts",(v.alerts||[]).length)+'</div><div class="card"><pre>'+esc(JSON.stringify(v.metrics||{},null,2))+'</pre></div>';
+ if(id==="risk") return '<div class="grid">'+card("Risk",v.status)+card("Exposure",v.exposure)+card("Daily loss",v.daily_loss)+card("Kill switch",v.kill_switch)+card("Safety",v.safety_state)+card("Reason",v.rejection_reason)+'</div>';
+ if(id==="paper") return '<div class="grid">'+card("Execution",v.execution_state)+card("Equity",v.equity)+card("Realized P&L",v.realized_pnl)+card("Unrealized P&L",v.unrealized_pnl)+card("Exposure",v.gross_exposure)+card("Positions",(v.positions||[]).length)+card("Orders",(v.orders||[]).length)+'</div>';
+ if(id==="replay"){const ev=v.events||[];return '<div class="card"><h2>Session '+esc(v.session_id)+'</h2><p>Status: '+esc(v.status)+' · Cursor: '+esc(v.cursor)+' / '+esc(ev.length)+'</p><p class="muted">Live mutation: '+esc(v.live_mutation)+'</p><div style="margin-top:12px"><button class="btn" onclick="replayStep()">Step</button> <button class="btn" onclick="replayPause()">Pause</button> <button class="btn" onclick="replayResume()">Resume</button></div><pre>'+esc(JSON.stringify(ev[v.cursor?Math.min(v.cursor-1,ev.length-1):0]||{},null,2))+'</pre></div>'}
+ return '<div class="card">No view data.</div>';
+}
+function select(id){active=id;document.querySelectorAll(".nav").forEach(b=>b.classList.toggle("active",b.dataset.id===id));main.innerHTML='<div class="view active"><h2 style="margin-bottom:14px">'+esc(names.find(x=>x[0]===id)[1])+'</h2>'+render(id)+'</div>'}
+nav.innerHTML=names.map(x=>'<button class="nav" data-id="'+x[0]+'">'+x[1]+'</button>').join("");
+nav.querySelectorAll(".nav").forEach(b=>b.onclick=()=>select(b.dataset.id));
+function replayStep(){const r=snapshot.views.replay;r.cursor=Math.min((r.cursor||0)+1,(r.events||[]).length);r.status=r.cursor===r.events.length?"COMPLETE":"PAUSED";select("replay")}
+function replayPause(){snapshot.views.replay.status="PAUSED";select("replay")}
+function replayResume(){const r=snapshot.views.replay;r.status=r.cursor===r.events.length?"COMPLETE":"PLAYING";select("replay")}
+select(active);
+</script>
+</body>
+</html>
