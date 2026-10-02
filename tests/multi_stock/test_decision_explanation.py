@@ -71,3 +71,15 @@ def test_authorized_execution_is_not_reported_as_filled():
         execution={"timestamp": ts, "symbol": "RELIANCE.NS", "status": "AUTHORIZED", "reason": "risk-approved authorization"},
     )
     assert result.outcome == "LONG"
+
+
+def test_risk_rejection_remains_authoritative_over_blocked_execution():
+    ts = pd.Timestamp("2026-10-02 10:00:00", tz="Asia/Kolkata")
+    result = build_decision_explanation(
+        ts,
+        "RELIANCE.NS",
+        strategy={"timestamp": ts, "symbol": "RELIANCE.NS", "direction": "LONG", "reason": "candidate"},
+        risk={"timestamp": ts, "symbol": "RELIANCE.NS", "status": "REJECTED", "reason": "exposure limit"},
+        execution={"timestamp": ts, "symbol": "RELIANCE.NS", "status": "BLOCKED", "reason": "risk rejected"},
+    )
+    assert result.outcome == "RISK_REJECTED"
