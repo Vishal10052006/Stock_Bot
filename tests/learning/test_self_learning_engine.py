@@ -434,3 +434,97 @@ def test_experiment_preparation_rejects_dataset_period_mismatch():
     )
     with pytest.raises(ValueError, match="period_end"):
         ExperimentPreparation(definition=changed, lineage=prepared.lineage)
+
+
+def _experiment_definition_fixture():
+    return ExperimentDefinition(
+        experiment_id="EXP-REG-1",
+        research_question="Research registration integrity",
+        hypothesis="A frozen candidate improves evidence quality.",
+        failure_criterion="Reject invalid measured evidence.",
+        dataset_version="dataset-v1",
+        code_version="code-v1",
+        period_start="2024-01-01",
+        period_end="2026-08-31",
+        symbols=("RELIANCE",),
+        method="controlled",
+        fixed_parameters=(("risk", "frozen"),),
+        allowed_change=("model",),
+    )
+
+
+def _experiment_record_fixture(definition):
+    return ExperimentRecord.from_definition(
+        definition,
+        observations=10,
+        label_distribution={"LONG_SUCCESS": 5, "NO_EDGE": 5},
+        baseline_results={"backtest": {"metrics": {"trade_count": 10}}},
+        interpretation="Measured experiment.",
+        decision="INCONCLUSIVE",
+        root_cause="",
+        lesson="Evidence retained.",
+        next_experiment="Collect more evidence.",
+    )
+
+
+def test_register_experiment_requires_exact_record_and_lineage():
+    from experiments.lineage import build_lineage
+    from learning.orchestrator import SelfLearningEngine
+
+    definition = _experiment_definition_fixture()
+    record = _experiment_record_fixture(definition)
+    lineage = build_lineage(definition, record)
+    evaluation = SelfLearningEngine().register_experiment(
+        definition=definition,
+        record=record,
+        lineage=lineage,
+    )
+    assert evaluation.valid is True
+
+
+def test_register_experiment_rejects_mismatched_lineage():
+    from experiments.lineage import build_lineage
+    from learning.orchestrator import SelfLearningEngine
+
+    definition = _experiment_definition_fixture()
+    record = _experiment_record_fixture(definition)
+    other_definition = ExperimentDefinition(
+        **{
+            **definition.to_dict(),
+            "experiment_id": "EXP-REG-OTHER",
+        }
+    )
+    other_record = _experiment_record_fixture(other_definition)
+    other_lineage = build_lineage(other_definition, other_record)
+
+    with pytest.raises(ValueError, match="lineage does not match frozen"):
+        SelfLearningEngine().register_experiment(
+            definition=definition,
+            record=record,
+            lineage=other_lineage,
+        )
+
+
+def test_register_experiment_does_not_persist_invalid_measurements(tmp_path):
+    from experiments.lineage import build_lineage
+    from learning.experiment_store import ExperimentRegistry
+    from learning.orchestrator import SelfLearningEngine
+
+    definition = _experiment_definition_fixture()
+    record = ExperimentRecord.from_definition(
+        definition,
+        observations=10,
+        baseline_results={"backtest": {"metrics": {"trade_count": -1}}},
+        decision="INCONCLUSIVE",
+    )
+    lineage = build_lineage(definition, record)
+    registry = ExperimentRegistry(tmp_path / "experiments.jsonl")
+    evaluation = SelfLearningEngine(
+        experiment_registry=registry,
+    ).register_experiment(
+        definition=definition,
+        record=record,
+        lineage=lineage,
+    )
+    assert evaluation.valid is False
+    assert registry.count() == 0
