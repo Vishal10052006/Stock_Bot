@@ -235,3 +235,33 @@ def test_complete_rejects_gate_without_candidate_artifact():
             forged,
             at="2026-09-24T11:10:00+05:30",
         )
+
+
+def test_validation_run_rejects_duplicate_stage_names():
+    candidate = _candidate()
+    stages = _all_stages()
+    duplicate = tuple(stages.values()) + (stages["PAPER"],)
+    gate = ValidationSummary(
+        stage="PROMOTION_GATE",
+        valid=True,
+        observations=10,
+        metrics={"score": 0.5},
+        artifact_fingerprints=("c" * 64, "d" * 64),
+    )
+
+    with pytest.raises(ValueError, match="stages must be unique"):
+        ValidationRun(
+            candidate_fingerprint=candidate.fingerprint,
+            stages=duplicate,
+            gate=gate,
+        )
+
+
+def test_validation_run_requires_promotion_gate():
+    candidate = _candidate()
+    with pytest.raises(ValueError, match="PROMOTION_GATE"):
+        ValidationRun(
+            candidate_fingerprint=candidate.fingerprint,
+            stages=tuple(_all_stages().values()),
+            gate=_stage("PAPER"),
+        )
