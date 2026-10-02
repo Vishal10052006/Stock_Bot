@@ -143,3 +143,56 @@ def test_safety_block_code_is_preserved_in_explanation():
         },
     )
     assert result.items[-1].reason == "LIVE_LOCKED: Live execution remains locked."
+
+
+def test_concrete_pipeline_contracts_preserve_authoritative_reasons():
+    from execution.safety import SafetyBlock, SafetyDecision
+    from execution.trading_execution import ExecutionAuthorization, ExecutionAuthorizationStatus
+    from trading.risk.gate import RiskDecision, RiskDecisionStatus
+    from trading.strategy.models import StrategyDecision, StrategyDirection
+
+    ts = pd.Timestamp("2026-10-02 10:00:00", tz="Asia/Kolkata")
+    strategy = StrategyDecision(
+        timestamp=ts,
+        symbol="RELIANCE.NS",
+        direction=StrategyDirection.NO_TRADE,
+        strategy_version="v1.0",
+        rationale="Liquidity gate rejected candidate.",
+        primary_reason="LIQUIDITY_INSUFFICIENT",
+    )
+    risk = RiskDecision(
+        timestamp=ts,
+        symbol="RELIANCE.NS",
+        status=RiskDecisionStatus.REJECTED,
+        strategy_direction=StrategyDirection.NO_TRADE,
+        reason="Strategy produced NO_TRADE; risk gate blocks execution.",
+    )
+    safety = SafetyDecision(
+        allowed=False,
+        block=SafetyBlock.LIVE_LOCKED,
+        reason="Live execution remains locked by the trading specification.",
+    )
+    execution = ExecutionAuthorization(
+        timestamp=ts,
+        symbol="RELIANCE.NS",
+        direction=StrategyDirection.NO_TRADE,
+        status=ExecutionAuthorizationStatus.BLOCKED,
+        reason="Execution blocked because RiskDecision is not APPROVED.",
+        risk_version="RISK-v1.0",
+    )
+
+    result = build_decision_explanation(
+        ts,
+        "RELIANCE.NS",
+        strategy=strategy,
+        risk=risk,
+        safety=safety,
+        execution=execution,
+    )
+
+    assert result.outcome == "NO_TRADE"
+    assert [item.stage for item in result.items] == ["Strategy", "Risk", "Safety", "Execution"]
+    assert result.items[0].reason == "LIQUIDITY_INSUFFICIENT"
+    assert result.items[1].reason.startswith("Strategy produced NO_TRADE")
+    assert result.items[2].reason.startswith("LIVE_LOCKED:")
+    assert result.items[3].status == "BLOCKED"
