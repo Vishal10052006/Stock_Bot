@@ -8,10 +8,11 @@ It never submits broker orders.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import json
+import os
 from pathlib import Path
 
 import pandas as pd
-from typing import Iterable
 
 from market.bot.orchestrator import MarketBot, MarketBotConfig
 from market.candles.aggregator import CandleAggregator
@@ -30,6 +31,39 @@ from trading.paper.canonical_live_orchestrator import (
 from trading.paper.live_loop import LivePaperEngine, LivePaperSessionConfig
 from trading.paper.upstox_history import UpstoxHistoryProvider
 from paper.virtual_session import VirtualIntradaySession, VirtualIntradaySessionConfig
+
+
+def _load_runtime_instrument_mapper() -> UpstoxInstrumentMapper:
+    """Merge trading and benchmark Upstox instrument maps from environment."""
+    raw_mapping = os.getenv("UPSTOX_INSTRUMENT_MAP", "").strip()
+    if not raw_mapping:
+        raise ValueError(
+            "UPSTOX_INSTRUMENT_MAP is required for the live market feed"
+        )
+
+    try:
+        mapping = json.loads(raw_mapping)
+    except json.JSONDecodeError as exc:
+        raise ValueError("UPSTOX_INSTRUMENT_MAP must contain valid JSON") from exc
+
+    if not isinstance(mapping, dict):
+        raise ValueError("UPSTOX_INSTRUMENT_MAP must decode to a JSON object")
+
+    raw_context = os.getenv("UPSTOX_CONTEXT_INSTRUMENT_MAP", "").strip()
+    if raw_context:
+        try:
+            context_mapping = json.loads(raw_context)
+        except json.JSONDecodeError as exc:
+            raise ValueError(
+                "UPSTOX_CONTEXT_INSTRUMENT_MAP must contain valid JSON"
+            ) from exc
+        if not isinstance(context_mapping, dict):
+            raise ValueError(
+                "UPSTOX_CONTEXT_INSTRUMENT_MAP must decode to a JSON object"
+            )
+        mapping.update(context_mapping)
+
+    return UpstoxInstrumentMapper(mapping)
 
 
 @dataclass(frozen=True, slots=True)
@@ -69,7 +103,7 @@ def build_live_market_paper_session(
     config: LiveMarketPaperConfig,
 ) -> VirtualIntradaySession:
     """Build the complete real-market paper stack without starting it."""
-    mapper = UpstoxInstrumentMapper.from_env()
+    mapper = _load_runtime_instrument_mapper()
     mapper.instrument_key(config.symbol)
     mapper.instrument_key(config.benchmark_symbol)
 
@@ -106,7 +140,11 @@ def build_live_market_paper_session(
         # Historical V3 supplies previous trading days while Intraday V3
         # supplies the current trading day. Combine both sources and retain
         # only candles available at the exact causal decision timestamp.
-        historical = history.frame(config.benchmark_symbol, cutoff)
+        historical = history.frame(
+            config.benchmark_symbol,
+            cutoff,
+            include_cutoff=True,
+        )
         intraday = history.intraday_frame(config.benchmark_symbol)
 
         if intraday.empty:
@@ -222,4 +260,5 @@ __all__ = [
     "LiveMarketPaperConfig",
     "build_live_market_paper_session",
     "run_live_market_paper_session",
+    "_load_runtime_instrument_mapper",
 ]

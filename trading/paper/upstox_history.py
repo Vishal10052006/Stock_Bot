@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from datetime import timedelta
 import os
+import time
 from urllib.parse import quote
 import requests
 
@@ -76,8 +77,14 @@ class UpstoxHistoryProvider:
             raise RuntimeError("Upstox historical candle request was unsuccessful")
         return body.get("data", {}).get("candles", [])
 
-    def frame(self, symbol: str, cutoff: pd.Timestamp) -> pd.DataFrame:
-        """Return causal OHLCV history strictly before the decision time."""
+    def frame(
+        self,
+        symbol: str,
+        cutoff: pd.Timestamp,
+        *,
+        include_cutoff: bool = False,
+    ) -> pd.DataFrame:
+        """Return causal OHLCV history with an optional inclusive cutoff."""
         timestamp = pd.Timestamp(cutoff)
         if timestamp.tzinfo is None:
             raise ValueError("cutoff must be timezone-aware")
@@ -122,27 +129,21 @@ class UpstoxHistoryProvider:
             utc=True,
             errors="raise",
         )
-        frame = frame.loc[frame["timestamp"] < timestamp].copy()
+        if include_cutoff:
+            frame = frame.loc[frame["timestamp"] <= timestamp].copy()
+        else:
+            frame = frame.loc[frame["timestamp"] < timestamp].copy()
         frame = frame.sort_values("timestamp", kind="stable")
         frame = frame.drop_duplicates(["timestamp", "symbol"], keep="last")
         return frame.reset_index(drop=True)
 
-    def intraday_frame(self, symbol: str) -> pd.DataFrame:
-        """Return current trading-day 5-minute OHLCV from Upstox Intraday V3.
-
-        This endpoint is intentionally separate from ``frame()`` because
-        Historical Candle V3 does not reliably expose the current trading
-        day's candles while the market is open.
-        """
-        normalized = symbol.strip().upper()
-        instrument_key = self.instrument_mapper.instrument_key(normalized)
+    def _fetch_intraday(self, instrument_key: str) -> list[list]:
+        """Fetch raw current-trading-day candles from Upstox Intraday V3."""
         encoded_key = quote(instrument_key, safe="")
-
         url = (
             "https://api.upstox.com/v3/historical-candle/intraday/"
             f"{encoded_key}/minutes/{self.interval_minutes}"
         )
-
         response = requests.get(
             url,
             headers={
@@ -153,19 +154,22 @@ class UpstoxHistoryProvider:
             timeout=15,
         )
         response.raise_for_status()
-
         body = response.json()
         if body.get("status") != "success":
             raise RuntimeError("Upstox intraday candle request was unsuccessful")
+        return body.get("data", {}).get("candles", [])
 
+    @staticmethod
+    def _frame_from_raw(symbol: str, candles: list[list]) -> pd.DataFrame:
+        """Normalize raw Upstox candles into the canonical OHLCV frame."""
         rows = []
-        for raw in body.get("data", {}).get("candles", []):
+        for raw in candles:
             if len(raw) < 6:
                 continue
             rows.append(
                 {
                     "timestamp": pd.Timestamp(raw[0]),
-                    "symbol": normalized,
+                    "symbol": symbol,
                     "open": float(raw[1]),
                     "high": float(raw[2]),
                     "low": float(raw[3]),
@@ -186,7 +190,6 @@ class UpstoxHistoryProvider:
                 "volume",
             ],
         )
-
         if frame.empty:
             return frame
 
@@ -196,11 +199,53 @@ class UpstoxHistoryProvider:
             errors="raise",
         )
         frame = frame.sort_values("timestamp", kind="stable")
-        frame = frame.drop_duplicates(
-            ["timestamp", "symbol"],
-            keep="last",
-        )
+        frame = frame.drop_duplicates(["timestamp", "symbol"], keep="last")
         return frame.reset_index(drop=True)
+
+    def intraday_frame(
+        self,
+        symbol: str,
+        *,
+        target_timestamp: pd.Timestamp | None = None,
+        max_retries: int = 3,
+        retry_delay: float = 0.5,
+    ) -> pd.DataFrame:
+        """Return current-day candles, retrying until an optional target appears."""
+        if max_retries <= 0:
+            raise ValueError("max_retries must be positive")
+        if retry_delay < 0:
+            raise ValueError("retry_delay must not be negative")
+
+        normalized = symbol.strip().upper()
+        instrument_key = self.instrument_mapper.instrument_key(normalized)
+
+        target_utc = None
+        if target_timestamp is not None:
+            target = pd.Timestamp(target_timestamp)
+            if target.tzinfo is None:
+                raise ValueError("target_timestamp must be timezone-aware")
+            target_utc = target.tz_convert("UTC")
+
+        attempts = max_retries if target_utc is not None else 1
+        frame = pd.DataFrame()
+
+        for attempt in range(attempts):
+            frame = self._frame_from_raw(
+                normalized,
+                self._fetch_intraday(instrument_key),
+            )
+            if target_utc is None:
+                break
+            if not frame.empty and (frame["timestamp"] == target_utc).any():
+                break
+            if attempt + 1 < attempts and retry_delay:
+                time.sleep(retry_delay)
+
+        if target_utc is not None and not frame.empty:
+            frame = frame.loc[frame["timestamp"] <= target_utc].copy()
+            frame = frame.reset_index(drop=True)
+
+        return frame
 
     def candles(self, symbol: str, cutoff: pd.Timestamp) -> tuple[Candle, ...]:
         """Return causal Candle objects for canonical history seeding."""
