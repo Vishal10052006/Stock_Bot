@@ -4,6 +4,7 @@ import pandas as pd
 
 from market.data.ingestion.providers.upstox.instrument_mapper import UpstoxInstrumentMapper
 from trading.paper.upstox_history import UpstoxHistoryProvider
+from trading.paper.live_market_runtime import _load_runtime_instrument_mapper
 
 
 def test_upstox_history_provider_filters_future_rows(monkeypatch) -> None:
