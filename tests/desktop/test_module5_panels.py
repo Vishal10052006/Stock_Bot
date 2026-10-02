@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
+import pytest
+
 from desktop.application import DesktopApplication
 from desktop.read_models import (
     ReplayState,
@@ -59,18 +61,17 @@ def test_d03_explanation_uses_authoritative_module7_contract() -> None:
 
 def test_d03_explanation_rejects_invalid_authoritative_evidence() -> None:
     ts = datetime(2026, 10, 2, 10, tzinfo=timezone.utc)
-    state = build_explanation({
-        "timestamp": ts,
-        "symbol": "RELIANCE",
-        "strategy": {
+    with pytest.raises(ValueError, match="explanation symbol mismatch"):
+        build_explanation({
             "timestamp": ts,
-            "symbol": "TCS",
-            "direction": "NO_TRADE",
-            "reason": "No edge.",
-        },
-    })
-    assert state.state == "INVALID"
-    assert state.provenance["audit_reasons"] == ()
+            "symbol": "RELIANCE",
+            "strategy": {
+                "timestamp": ts,
+                "symbol": "TCS",
+                "direction": "NO_TRADE",
+                "reason": "No edge.",
+            },
+        })
 
 
 def test_d04_future_research_is_not_exposed() -> None:
