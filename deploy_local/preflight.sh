@@ -1,6 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+
+# Run from repository root so package imports resolve deterministically.
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
-[[ -f .venv/bin/activate ]] && source .venv/bin/activate
-python deploy_local/doctor.py
+
+if [[ -f .venv/bin/activate ]]; then
+    # shellcheck disable=SC1091
+    source .venv/bin/activate
+fi
+
+PYTHONPATH="$ROOT${PYTHONPATH:+:$PYTHONPATH}" python -m deploy_local.doctor
