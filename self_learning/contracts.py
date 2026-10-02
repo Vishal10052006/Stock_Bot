@@ -423,7 +423,7 @@ class PromotionDecision:
             raise ValueError("champion/challenger versions are required")
         if self.champion_version == self.challenger_version:
             raise ValueError("champion and challenger versions must differ")
-        if not self.validation_fingerprints:
+        if self.state in (PromotionState.ELIGIBLE, PromotionState.PROMOTED) and not self.validation_fingerprints:
             raise ValueError("validation_fingerprints must not be empty")
         if any(len(item) != 64 for item in self.validation_fingerprints):
             raise ValueError("validation_fingerprints must be SHA-256")
