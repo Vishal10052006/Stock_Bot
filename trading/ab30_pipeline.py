@@ -178,6 +178,7 @@ def build_market_analysis_and_prediction(
         data_version=data_version,
         feature_version=feature_version,
         monitoring=monitoring,
+        research_context=research_context,
     )
     prediction = predict_from_analysis(
         result.analysis,
