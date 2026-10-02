@@ -39,3 +39,70 @@ def test_upstox_history_provider_filters_future_rows(monkeypatch) -> None:
         pd.Timestamp("2026-09-30T03:45:00+00:00"),
     ]
     assert (frame["timestamp"] < pd.Timestamp("2026-09-30T03:50:00+00:00")).all()
+
+
+
+def test_upstox_intraday_frame_retries_until_target_candle_is_available(monkeypatch) -> None:
+    mapper = UpstoxInstrumentMapper(
+        {"NIFTY50": "NSE_INDEX|Nifty 50"},
+    )
+    provider = UpstoxHistoryProvider(
+        access_token="token",
+        instrument_mapper=mapper,
+        lookback_days=5,
+    )
+
+    responses = [
+        [["2026-10-01T09:35:00+05:30", 100, 101, 99, 100.5, 1000, 0]],
+        [
+            ["2026-10-01T09:35:00+05:30", 100, 101, 99, 100.5, 1000, 0],
+            ["2026-10-01T09:40:00+05:30", 100.5, 102, 100, 101, 1100, 0],
+        ],
+    ]
+    calls = []
+
+    def fake_fetch(instrument_key):
+        calls.append(instrument_key)
+        return responses.pop(0)
+
+    monkeypatch.setattr(provider, "_fetch_intraday", fake_fetch)
+    monkeypatch.setattr("trading.paper.upstox_history.time.sleep", lambda _: None)
+
+    frame = provider.intraday_frame(
+        "NIFTY50",
+        target_timestamp=pd.Timestamp("2026-10-01T09:40:00+05:30"),
+        max_retries=2,
+        retry_delay=0,
+    )
+
+    assert len(calls) == 2
+    assert calls == ["NSE_INDEX|Nifty 50", "NSE_INDEX|Nifty 50"]
+    assert frame["timestamp"].max() == pd.Timestamp("2026-10-01T04:10:00+00:00")
+
+
+def test_upstox_intraday_frame_never_returns_future_target_rows(monkeypatch) -> None:
+    mapper = UpstoxInstrumentMapper(
+        {"NIFTY50": "NSE_INDEX|Nifty 50"},
+    )
+    provider = UpstoxHistoryProvider(
+        access_token="token",
+        instrument_mapper=mapper,
+    )
+
+    monkeypatch.setattr(
+        provider,
+        "_fetch_intraday",
+        lambda instrument_key: [
+            ["2026-10-01T09:35:00+05:30", 100, 101, 99, 100.5, 1000, 0],
+            ["2026-10-01T09:40:00+05:30", 100.5, 102, 100, 101, 1100, 0],
+            ["2026-10-01T09:45:00+05:30", 101, 103, 100.5, 102, 1200, 0],
+        ],
+    )
+
+    frame = provider.intraday_frame(
+        "NIFTY50",
+        target_timestamp=pd.Timestamp("2026-10-01T09:40:00+05:30"),
+    )
+
+    assert frame["timestamp"].max() == pd.Timestamp("2026-10-01T04:10:00+00:00")
+    assert (frame["timestamp"] <= pd.Timestamp("2026-10-01T04:10:00+00:00")).all()

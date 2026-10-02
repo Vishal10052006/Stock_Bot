@@ -145,7 +145,10 @@ def build_live_market_paper_session(
             cutoff,
             include_cutoff=True,
         )
-        intraday = history.intraday_frame(config.benchmark_symbol)
+        intraday = history.intraday_frame(
+            config.benchmark_symbol,
+            target_timestamp=cutoff,
+        )
 
         if intraday.empty:
             combined = historical
