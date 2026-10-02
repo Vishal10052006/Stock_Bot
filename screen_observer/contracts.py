@@ -14,6 +14,7 @@ from dataclasses import dataclass, field
 from typing import Any, Mapping, Sequence
 
 from .ocr import OCRResult
+from .evidence import CandleVisualEvidence, IndicatorEvidence, TimeframeEvidence
 
 import pandas as pd
 
@@ -118,6 +119,7 @@ class ScreenObservation:
             object.__setattr__(self, "symbol", self.symbol.strip().upper())
         object.__setattr__(self, "ocr_text", tuple(self.ocr_text))
         object.__setattr__(self, "indicators", tuple(self.indicators))
+        object.__setattr__(self, "indicator_evidence", tuple(self.indicator_evidence))
 
 
 @dataclass(frozen=True, slots=True)
