@@ -131,11 +131,12 @@ def _as_rgb_array(image: Any):
 
 
 def recognize_chart(image: Any) -> tuple[bool, float]:
-    """S05 chart recognition using conservative edge/line structure.
+    """S05 chart recognition using long plot/grid structure.
 
-    A chart-like image should contain enough edges to represent plot/grid
-    structure without being almost entirely an edge map. This is intentionally
-    a recognition signal, not a semantic claim that the image is TradingView.
+    Text-heavy desktop UI can contain many short horizontal/vertical edges.
+    A chart is expected to contain repeated, long plot/grid structures, so
+    detection requires line segments that span a meaningful fraction of the
+    image rather than merely counting arbitrary Hough segments.
     """
     try:
         import cv2
@@ -148,45 +149,89 @@ def recognize_chart(image: Any) -> tuple[bool, float]:
 
         gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
         edges = cv2.Canny(gray, 50, 150)
+
         edge_density = float(np.count_nonzero(edges)) / float(edges.size)
 
         horizontal = cv2.HoughLinesP(
             edges,
             1,
             np.pi / 180,
-            threshold=max(25, width // 12),
-            minLineLength=max(30, width // 8),
-            maxLineGap=8,
+            threshold=max(30, width // 10),
+            minLineLength=max(60, int(width * 0.25)),
+            maxLineGap=max(12, width // 80),
         )
         vertical = cv2.HoughLinesP(
             edges,
             1,
             np.pi / 180,
-            threshold=max(20, height // 10),
-            minLineLength=max(25, height // 8),
-            maxLineGap=8,
+            threshold=max(25, height // 10),
+            minLineLength=max(50, int(height * 0.25)),
+            maxLineGap=max(12, height // 80),
         )
 
-        horizontal_count = 0 if horizontal is None else len(horizontal)
-        vertical_count = 0 if vertical is None else len(vertical)
+        def long_line_counts(lines):
+            horizontal_count = 0
+            vertical_count = 0
+            horizontal_positions: set[int] = set()
+            vertical_positions: set[int] = set()
 
-        # Chart-like structure needs a moderate edge field plus horizontal
-        # and/or vertical plot/grid structure. Extremely edge-dense images
-        # are rejected as likely UI/text/noise.
-        density_score = min(1.0, edge_density / 0.10)
-        structure_score = min(1.0, (horizontal_count + vertical_count) / 8.0)
-        score = round(0.55 * density_score + 0.45 * structure_score, 4)
+            if lines is None:
+                return 0, 0, horizontal_positions, vertical_positions
+
+            for x1, y1, x2, y2 in lines[:, 0]:
+                dx = int(x2) - int(x1)
+                dy = int(y2) - int(y1)
+                length = float((dx * dx + dy * dy) ** 0.5)
+                if length <= 0:
+                    continue
+
+                angle = abs(float(np.degrees(np.arctan2(dy, dx))))
+                if angle <= 3.0 or angle >= 177.0:
+                    horizontal_count += 1
+                    horizontal_positions.add(int(round((int(y1) + int(y2)) / 2)))
+                elif 87.0 <= angle <= 93.0:
+                    vertical_count += 1
+                    vertical_positions.add(int(round((int(x1) + int(x2)) / 2)))
+
+            return (
+                horizontal_count,
+                vertical_count,
+                horizontal_positions,
+                vertical_positions,
+            )
+
+        (
+            horizontal_count,
+            vertical_count,
+            horizontal_positions,
+            vertical_positions,
+        ) = long_line_counts(horizontal)
+
+        # HoughLinesP above is run separately for horizontal and vertical
+        # structure; recompute the vertical statistics from the vertical set.
+        _, vertical_count, _, vertical_positions = long_line_counts(vertical)
+
+        repeated_horizontal = len(horizontal_positions)
+        repeated_vertical = len(vertical_positions)
+
+        horizontal_score = min(1.0, repeated_horizontal / 5.0)
+        vertical_score = min(1.0, repeated_vertical / 5.0)
+        structure_score = max(horizontal_score, vertical_score)
+
+        density_score = min(1.0, edge_density / 0.12)
+        score = round(0.65 * structure_score + 0.35 * density_score, 4)
 
         detected = (
-            0.015 <= edge_density <= 0.22
-            and (horizontal_count >= 2 or vertical_count >= 2)
-            and score >= 0.35
+            0.008 <= edge_density <= 0.22
+            and (
+                repeated_horizontal >= 3
+                or repeated_vertical >= 3
+            )
+            and score >= 0.45
         )
         return detected, score if detected else min(score, 0.30)
     except (ImportError, ValueError, TypeError):
         return False, 0.0
-
-
 def _color_masks(rgb):
     """Return common TradingView-style red and green pixel masks."""
     import cv2
@@ -242,11 +287,13 @@ def parse_candles(image: Any) -> CandleObservation:
     """S06 detect visually supported bullish/bearish candle candidates.
 
     The parser reports counts only. It does not infer OHLC prices, timestamps,
-    or market direction. Confidence reflects the amount and consistency of
-    visible colored candle evidence.
+    or market direction. A chart-structure gate prevents colored desktop UI
+    text from being interpreted as candles.
     """
     try:
-        import numpy as np
+        chart_detected, _ = recognize_chart(image)
+        if not chart_detected:
+            return CandleObservation(confidence=0.0)
 
         rgb = _as_rgb_array(image)
         red_mask, green_mask = _color_masks(rgb)
@@ -257,8 +304,6 @@ def parse_candles(image: Any) -> CandleObservation:
         if total == 0:
             return CandleObservation(confidence=0.0)
 
-        # More independent candidates and a balanced visual sample increase
-        # confidence, while a single candidate remains deliberately weak.
         sample_score = min(1.0, total / 12.0)
         class_score = 1.0 if bullish and bearish else 0.70
         confidence = round(0.35 + 0.45 * sample_score + 0.20 * class_score, 4)
@@ -270,8 +315,6 @@ def parse_candles(image: Any) -> CandleObservation:
         )
     except (ImportError, ValueError, TypeError):
         return CandleObservation(confidence=0.0)
-
-
 def build_confidence(
     *,
     chart: float,
