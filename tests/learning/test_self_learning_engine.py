@@ -489,10 +489,18 @@ def test_register_experiment_rejects_mismatched_lineage():
     definition = _experiment_definition_fixture()
     record = _experiment_record_fixture(definition)
     other_definition = ExperimentDefinition(
-        **{
-            **definition.to_dict(),
-            "experiment_id": "EXP-REG-OTHER",
-        }
+        experiment_id="EXP-REG-OTHER",
+        research_question=definition.research_question,
+        hypothesis=definition.hypothesis,
+        failure_criterion=definition.failure_criterion,
+        dataset_version=definition.dataset_version,
+        code_version=definition.code_version,
+        period_start=definition.period_start,
+        period_end=definition.period_end,
+        symbols=definition.symbols,
+        method=definition.method,
+        fixed_parameters=definition.fixed_parameters,
+        allowed_change=definition.allowed_change,
     )
     other_record = _experiment_record_fixture(other_definition)
     other_lineage = build_lineage(other_definition, other_record)
