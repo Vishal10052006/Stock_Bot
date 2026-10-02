@@ -16,6 +16,7 @@ import pickle
 from typing import Any
 
 from ml.prediction.contracts import PredictionProvenance
+from ml.models.calibration import IsotonicProbabilityCalibrator
 from ml.models.logistic import LogisticOutcomeModel
 from ml.preprocessing.pipeline import FeaturePreprocessor
 
@@ -107,8 +108,8 @@ def load_phase9_logistic_bundle(
     path: str | Path,
     *,
     expected_sha256: str | None = None,
-) -> tuple[LogisticOutcomeModel, FeaturePreprocessor, PredictionArtifactManifest]:
-    """Load a hash-verified Phase-9 Logistic model/preprocessor bundle."""
+) -> tuple[LogisticOutcomeModel, FeaturePreprocessor, IsotonicProbabilityCalibrator, PredictionArtifactManifest]:
+    """Load a hash-verified Phase-9 Logistic calibrated inference bundle."""
     model, manifest = load_prediction_artifact(
         path,
         expected_sha256=expected_sha256,
@@ -117,12 +118,15 @@ def load_phase9_logistic_bundle(
         raise TypeError("Phase-9 artifact payload must be a mapping")
     fitted_model = model.get("model")
     fitted_preprocessor = model.get("preprocessor")
+    fitted_calibrator = model.get("calibrator")
     if not isinstance(fitted_model, LogisticOutcomeModel):
         raise TypeError("Phase-9 artifact model must be LogisticOutcomeModel")
     if not isinstance(fitted_preprocessor, FeaturePreprocessor):
         raise TypeError("Phase-9 artifact preprocessor must be FeaturePreprocessor")
-    if not fitted_model.is_fitted or not fitted_preprocessor.is_fitted:
-        raise ValueError("Phase-9 model and preprocessor must both be fitted")
+    if not isinstance(fitted_calibrator, IsotonicProbabilityCalibrator):
+        raise TypeError("Phase-9 artifact calibrator must be IsotonicProbabilityCalibrator")
+    if not fitted_model.is_fitted or not fitted_preprocessor.is_fitted or not fitted_calibrator.is_fitted:
+        raise ValueError("Phase-9 model, preprocessor, and calibrator must all be fitted")
     if fitted_model.feature_count != len(fitted_preprocessor.get_feature_names_out()):
         raise ValueError("Phase-9 model/preprocessor feature counts do not match")
-    return fitted_model, fitted_preprocessor, manifest
+    return fitted_model, fitted_preprocessor, fitted_calibrator, manifest
