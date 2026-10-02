@@ -209,20 +209,27 @@ def test_complete_rejects_gate_not_derived_from_collected_stages():
 def test_complete_rejects_gate_without_candidate_artifact():
     controller = ValidationOrchestrator()
     candidate = controller.start(_candidate(), at="2026-09-24T11:00:00+05:30")
-    run = controller.collect(candidate, _all_stages())
+    validations = _all_stages()
+    run = controller.collect(candidate, validations)
+
     forged_gate = ValidationSummary(
         stage="PROMOTION_GATE",
-        valid=True,
+        valid=run.gate.valid,
         observations=run.gate.observations,
         metrics=run.gate.metrics,
-        artifact_fingerprints=(candidate.evaluation_fingerprint, "e" * 64),
+        limitations=run.gate.limitations,
+        issues=run.gate.issues,
+        artifact_fingerprints=(
+            candidate.evaluation_fingerprint,
+            "e" * 64,
+        ),
     )
     forged = ValidationRun(
         candidate_fingerprint=run.candidate_fingerprint,
         stages=run.stages,
         gate=forged_gate,
     )
-    with pytest.raises(ValueError, match="candidate artifact"):
+    with pytest.raises(ValueError, match="not derived"):
         controller.complete(
             candidate,
             forged,
