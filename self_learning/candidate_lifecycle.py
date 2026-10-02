@@ -187,6 +187,10 @@ class CandidateLifecycleController:
             raise ValueError("promotion decision candidate_id does not match")
         if decision.candidate_fingerprint != candidate.fingerprint:
             raise ValueError("promotion decision does not match candidate")
+        if decision.challenger_version != candidate.candidate_version:
+            raise ValueError("promotion decision challenger does not match candidate")
+        if decision.champion_version != candidate.parent_model_version:
+            raise ValueError("promotion decision champion does not match candidate parent")
 
         promoted = replace(
             candidate,
