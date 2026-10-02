@@ -291,6 +291,10 @@ class StockScannerStore:
         self._rows[symbol] = row
         return row
 
+    def as_dict(self) -> dict[str, Any]:
+        """Return the current latest-per-symbol snapshot."""
+        return self.snapshot().as_dict()
+
     def snapshot(self) -> StockScannerSnapshot:
         """Build a deterministic latest-per-symbol snapshot."""
         rows = self.rows
