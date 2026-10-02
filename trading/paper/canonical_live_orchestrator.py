@@ -70,8 +70,8 @@ class CanonicalLivePaperOrchestrator:
     market_bot: MarketBot
     model: LogisticOutcomeModel
     preprocessor: FeaturePreprocessor
-    calibrator: IsotonicProbabilityCalibrator | None = None
     paper_engine: LivePaperEngine
+    calibrator: IsotonicProbabilityCalibrator | None = None
     benchmark_history_provider: Callable[[pd.Timestamp], pd.DataFrame]
     benchmark_context_provider: Callable[[pd.Timestamp, pd.DataFrame], MarketContext]
     downstream_handler: Callable[[PredictionContext, MarketAnalysisResult, Candle, LivePaperEngine], None] | None = None
