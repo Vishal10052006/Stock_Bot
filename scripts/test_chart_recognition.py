@@ -6,8 +6,6 @@ import asyncio
 import sys
 from pathlib import Path
 
-import pandas as pd
-
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
@@ -38,7 +36,7 @@ async def main() -> None:
 
         print("\n[3/6] Selecting TradingView/browser WINDOW...")
         print("Select the TradingView/browser window in GNOME.")
-        await portal.select_sources(types=2)
+        await portal.select_sources(source_types=2)
         print("Source selection: OK")
 
         print("\n[4/6] Starting ScreenCast and PipeWire capture...")
