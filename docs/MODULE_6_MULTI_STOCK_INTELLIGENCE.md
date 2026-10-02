@@ -2,7 +2,7 @@
 
 ## Status
 
-**Foundation + PIT universe integration implemented.**
+**Foundation + PIT universe integration + causal validation implemented.**
 
 Module 6 aggregates validated per-stock AnalysisContext into a single causal
 multi-stock observation and reuses the existing point-in-time Market Bot
@@ -22,6 +22,8 @@ universe infrastructure.
 - PIT Market Bot universe integration
 - observation-only authority
 - regression tests
+- deterministic PIT adapter integration tests with in-memory Security Master/Bhavcopy fixtures
+- future PIT universe rejection
 
 ## Boundaries
 
@@ -31,5 +33,6 @@ Safety, and Execution remain downstream authorities.
 
 ## Next validation
 
-Run the focused multi-stock tests, then the full repository suite and a
-real-data/PIT integration check before declaring Module 6 complete.
+Focused and full-suite execution remains the final validation gate. The PIT
+integration tests use deterministic in-memory adapters; no external NSE or
+Upstox network call is performed by the test suite.
