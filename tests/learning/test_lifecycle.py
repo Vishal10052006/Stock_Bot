@@ -124,7 +124,10 @@ def test_activation_rejects_naive_activation_timestamp(tmp_path):
 def test_activation_binds_challenger_and_review_fingerprint(tmp_path):
     store = ChampionStore(tmp_path / "champions.jsonl")
     decision = _decision("model-v1")
-    store.activate(_record("model-v1", review_fp=decision.fingerprint), promotion_decision=decision)
+    store.activate(
+        _record("model-v1", review_fp=decision.fingerprint),
+        promotion_decision=decision,
+    )
 
     mismatched_decision = _decision("model-v1")
     with pytest.raises(
@@ -175,7 +178,6 @@ def test_rollback_updates_history_and_pointer(tmp_path):
     )
     assert result.state is PromotionState.ROLLED_BACK
     assert result.challenger_version == "model-v1"
-
 
 
 def test_pointer_without_history_is_rejected(tmp_path):
