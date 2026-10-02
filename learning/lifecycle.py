@@ -171,10 +171,24 @@ class ChampionStore:
                 raise ValueError(f"blank champion history line {line_number}")
             payload = json.loads(line)
             expected = payload.pop("fingerprint", None)
+            if not expected:
+                raise ValueError(
+                    f"champion history fingerprint is required at line {line_number}"
+                )
             record = ChampionRecord(**payload)
-            if expected is not None and expected != record.fingerprint:
+            if expected != record.fingerprint:
                 raise ValueError(
                     f"champion history fingerprint mismatch at line {line_number}"
+                )
+            if result:
+                previous = result[-1]
+                if record.parent_model_version != previous.model_version:
+                    raise ValueError(
+                        f"champion history parent mismatch at line {line_number}"
+                    )
+            elif record.parent_model_version is not None:
+                raise ValueError(
+                    f"initial champion cannot have a parent at line {line_number}"
                 )
             result.append(record)
 
