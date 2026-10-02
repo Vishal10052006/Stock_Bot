@@ -32,16 +32,16 @@ The desktop interface:
 | Stage | Module | Scope | Status |
 |---|---|---|---|
 | D00 | Desktop Shell | Navigation + composition boundary | COMPLETE |
-| D01 | Market Dashboard | Market state and pipeline overview | NEXT |
-| D02 | Prediction Panel | Prediction/probability display | PLANNED |
-| D03 | Explanation Engine | Decision/explanation presentation | PLANNED |
-| D04 | Research/News Panel | Research and event intelligence | PLANNED |
-| D05 | Screen Observer Panel | TradingView/screen intelligence | PLANNED |
-| D06 | Decision Timeline | Auditable chronological decision view | PLANNED |
-| D07 | Model Telemetry | Model quality/health/uncertainty | PLANNED |
-| D08 | Risk Panel | Risk state and controls visibility | PLANNED |
-| D09 | Paper Account | Virtual portfolio/account state | PLANNED |
-| D10 | Session Replay | Historical session reconstruction | PLANNED |
+| D01 | Market Dashboard | Market state and pipeline overview | COMPLETE |
+| D02 | Prediction Panel | Prediction/probability display | COMPLETE |
+| D03 | Explanation Engine | Decision/explanation presentation | COMPLETE |
+| D04 | Research/News Panel | Research and event intelligence | COMPLETE |
+| D05 | Screen Observer Panel | TradingView/screen intelligence | COMPLETE |
+| D06 | Decision Timeline | Auditable chronological decision view | COMPLETE |
+| D07 | Model Telemetry | Model quality/health/uncertainty | COMPLETE |
+| D08 | Risk Panel | Risk state and controls visibility | COMPLETE |
+| D09 | Paper Account | Virtual portfolio/account state | COMPLETE |
+| D10 | Session Replay | Historical session reconstruction | COMPLETE |
 
 ---
 
