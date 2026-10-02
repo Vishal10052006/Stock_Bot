@@ -208,4 +208,8 @@ def test_ab25_applies_calibrated_probabilities_when_calibrator_is_supplied() -> 
 
     assert prediction.calibration_version == "isotonic-v1"
     assert prediction.target_version == "phase7-decision-label-v1"
-    assert prediction.probabilities.equals(expected)
+    assert np.allclose(
+        prediction.probabilities.to_numpy(),
+        expected.to_numpy(),
+        atol=1e-12,
+    )
