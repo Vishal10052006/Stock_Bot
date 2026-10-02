@@ -24,6 +24,12 @@ class PromotionController:
         policy: ValidationPolicy | None = None,
     ) -> PromotionDecision:
         """Create a deterministic promotion-review decision."""
+        if challenger.lifecycle.value != "PROMOTION_REVIEW":
+            raise ValueError("candidate must be PROMOTION_REVIEW before promotion review")
+        if not champion_version.strip():
+            raise ValueError("champion_version is required")
+        if challenger.parent_model_version != champion_version:
+            raise ValueError("champion_version does not match candidate parent")
         gate = validate_candidate(challenger, validations, policy=policy)
 
         if not gate.valid:
