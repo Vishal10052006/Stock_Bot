@@ -124,12 +124,12 @@ def build_decision_explanation(
     execution_outcome = _execution_outcome(execution)
     if strategy_direction == "NO_TRADE":
         outcome = "NO_TRADE"
-    elif execution_outcome is not None:
-        outcome = execution_outcome
-    elif risk_status == "REJECTED":
-        outcome = "RISK_REJECTED"
     elif safety_allowed is False:
         outcome = "SAFETY_BLOCKED"
+    elif risk_status == "REJECTED":
+        outcome = "RISK_REJECTED"
+    elif execution_outcome is not None:
+        outcome = execution_outcome
     elif strategy_direction in {"LONG", "SHORT"}:
         outcome = strategy_direction
     else:
