@@ -128,7 +128,7 @@ def validate_session(session_dir: Path) -> dict[str, object]:
     for summary_field, ledger_field in ledger_summary_fields.items():
         if float(final[ledger_field]) != float(summary[summary_field]):
             raise ValueError(
-                f"summary/{field} does not match final ledger snapshot"
+                f"summary/{summary_field} does not match final ledger snapshot"
             )
 
     fingerprint_payload = dict(summary)
