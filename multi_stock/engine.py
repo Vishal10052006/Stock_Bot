@@ -65,6 +65,11 @@ class MultiStockIntelligence:
         sector_context: Mapping[str, Any] | None = None,
     ) -> MultiStockContext:
         """Build from the authoritative point-in-time Market Bot universe."""
+        ts = pd.Timestamp(timestamp)
+        if ts.tzinfo is None:
+            raise ValueError("timestamp must be timezone-aware")
+        if as_of > ts.date():
+            raise ValueError("future market universe rejected")
         symbols, result = build_market_universe(
             as_of=as_of,
             config=config,
