@@ -79,6 +79,8 @@ class ChampionStore:
         if prior:
             if current != prior[-1].model_version:
                 raise ValueError("champion pointer does not match history")
+            if record.parent_model_version is None:
+                raise ValueError("champion parent is required for successor activation")
             if record.parent_model_version != prior[-1].model_version:
                 raise ValueError("champion parent must match current champion")
         elif current is not None:
