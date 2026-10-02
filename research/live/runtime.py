@@ -87,10 +87,6 @@ class LiveResearchCache:
                     raise TypeError(
                         f"{provider.source_id} returned a non-ResearchDocument"
                     )
-                if document.available_at > end_utc:
-                    raise ValueError(
-                        f"{document.document_id} is unavailable at requested end"
-                    )
                 fetched.append(document)
 
         with self._lock:
