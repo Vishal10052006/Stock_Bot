@@ -10,6 +10,7 @@ import pandas as pd
 from intelligence.analysis.contracts import AnalysisInput
 from intelligence.analysis.engine import AnalysisEngine
 from ml.integration.analysis_prediction import predict_from_analysis
+from ml.models.calibration import IsotonicProbabilityCalibrator
 from ml.models.logistic import LogisticOutcomeModel
 from ml.preprocessing.pipeline import FeaturePreprocessor
 from ml.preprocessing.models import NUMERIC_FEATURES, BOOLEAN_FEATURES
@@ -160,3 +161,51 @@ def test_analysis_integration_emits_monitoring_telemetry() -> None:
     assert context.symbol == "RELIANCE"
     assert "analysis.completeness" in dashboard["metrics"]
     assert any(item["component"] == "analysis_bot" for item in dashboard["health"])
+
+
+def test_ab25_applies_calibrated_probabilities_when_calibrator_is_supplied() -> None:
+    X_train, y_train = _training_frame()
+    preprocessor = FeaturePreprocessor()
+    transformed = preprocessor.fit_transform(X_train)
+
+    model = LogisticOutcomeModel()
+    model.fit(transformed, y_train)
+
+    calibrator = IsotonicProbabilityCalibrator()
+    raw = model.predict_proba(transformed)
+    calibrator.fit(raw, y_train)
+
+    features = {
+        column: (
+            True if column in BOOLEAN_FEATURES else float(X_train.iloc[-1][column])
+        )
+        for column in X_train.columns
+    }
+    analysis = AnalysisEngine().analyze(
+        AnalysisInput(
+            timestamp=pd.Timestamp("2026-09-20 10:25:00+05:30"),
+            symbol="RELIANCE",
+            features=features,
+            data_version="market-test-v1",
+            feature_version="v1.0",
+        )
+    )
+
+    prediction = predict_from_analysis(
+        analysis,
+        model=model,
+        preprocessor=preprocessor,
+        calibrator=calibrator,
+        target_version="phase7-decision-label-v1",
+        calibration_version="isotonic-v1",
+    )
+
+    expected = calibrator.transform(
+        model.predict_proba(
+            preprocessor.transform(pd.DataFrame([dict(analysis.feature_vector)]))
+        )
+    )
+
+    assert prediction.calibration_version == "isotonic-v1"
+    assert prediction.target_version == "phase7-decision-label-v1"
+    assert prediction.probabilities.equals(expected)
