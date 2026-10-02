@@ -51,6 +51,28 @@ def _validations(candidate: ModelCandidate):
     return result
 
 
+def test_review_requires_promotion_review_lifecycle() -> None:
+    candidate = _candidate()
+    with pytest.raises(ValueError, match="PROMOTION_REVIEW"):
+        PromotionController().review(
+            champion_version="model-v1",
+            challenger=candidate,
+            validations=_validations(candidate),
+        )
+
+
+def test_review_requires_champion_to_match_candidate_parent() -> None:
+    from dataclasses import replace
+
+    candidate = replace(_candidate(), lifecycle=CandidateLifecycle.PROMOTION_REVIEW)
+    with pytest.raises(ValueError, match="champion_version"):
+        PromotionController().review(
+            champion_version="model-v0",
+            challenger=candidate,
+            validations=_validations(candidate),
+        )
+
+
 def test_complete_evidence_is_eligible_but_not_promoted() -> None:
     candidate = _candidate()
     decision = PromotionController().review(
