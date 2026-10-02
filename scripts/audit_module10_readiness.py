@@ -10,6 +10,16 @@ It never authorizes live execution.
 
 from __future__ import annotations
 
+
+# Allow direct `python scripts/audit_module10_readiness.py` execution from the repository root.
+# GitHub Actions invokes this file as a script rather than with `python -m`.
+import sys
+from pathlib import Path as _Path
+
+_REPOSITORY_ROOT = _Path(__file__).resolve().parents[1]
+if str(_REPOSITORY_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPOSITORY_ROOT))
+
 import argparse
 import json
 import re
