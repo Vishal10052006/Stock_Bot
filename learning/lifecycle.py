@@ -71,10 +71,20 @@ class ChampionStore:
             raise TypeError("record must be a ChampionRecord")
         if record.status != "PROMOTED":
             raise ValueError("only PROMOTED records can be activated")
+        if len(record.promotion_review_fingerprint) != 64:
+            raise ValueError("promotion review fingerprint must be SHA-256")
 
         prior = self.history()
-        if prior and record.parent_model_version != prior[-1].model_version:
-            raise ValueError("champion parent must match current champion")
+        current = self.current()
+        if prior:
+            if current != prior[-1].model_version:
+                raise ValueError("champion pointer does not match history")
+            if record.parent_model_version != prior[-1].model_version:
+                raise ValueError("champion parent must match current champion")
+        elif current is not None:
+            raise ValueError("champion pointer exists without history")
+        if record.model_version == current:
+            raise ValueError("model version is already current champion")
 
         self.history_path.parent.mkdir(parents=True, exist_ok=True)
         payload = {
@@ -93,11 +103,19 @@ class ChampionStore:
         self.pointer_path.write_text(record.model_version, encoding="utf-8")
 
     def current(self) -> str | None:
-        """Return the current champion model version."""
-        if not self.pointer_path.exists():
+        """Return the current champion model version after integrity checks."""
+        pointer = None
+        if self.pointer_path.exists():
+            pointer = self.pointer_path.read_text(encoding="utf-8").strip() or None
+        history = self.history()
+        if not history:
+            if pointer is not None:
+                raise ValueError("champion pointer exists without history")
             return None
-        value = self.pointer_path.read_text(encoding="utf-8").strip()
-        return value or None
+        expected = history[-1].model_version
+        if pointer != expected:
+            raise ValueError("champion pointer does not match history")
+        return pointer
 
     def history(self) -> tuple[ChampionRecord, ...]:
         """Load and verify champion history."""
