@@ -48,3 +48,6 @@ Upstox network call is performed by the test suite.
 - M04 deterministic symbol ordering, duplicate-row rejection, minimum-overlap validation, and no future-data usage
 
 - M05 relative strength exposes existing causal `stock_vs_market_return_1` and `stock_vs_sector_return_1` evidence without adding ranking or trading thresholds
+
+- M06 point-in-time liquidity snapshot using existing `LiquidityMeasurement.average_traded_value`
+- M06 preserves missing liquidity as unavailable, rejects future measurements, and does not reselect the universe or add thresholds
