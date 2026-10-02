@@ -167,7 +167,9 @@ def ocr_image(
     try:
         import pytesseract
         from pytesseract import Output
-        pytesseract.get_tesseract_version()
+        version_getter = getattr(pytesseract, "get_tesseract_version", None)
+        if version_getter is not None:
+            version_getter()
     except ImportError:
         return OCRResult(
             observed_at=timestamp,
