@@ -43,3 +43,6 @@ Upstox network call is performed by the test suite.
 
 - M03 descriptive market breadth: advances, declines, unchanged, coverage, breadth ratio, and advance/decline ratio from causal stock returns
 - M03 missing returns are excluded rather than inferred; future/duplicate observations fail closed
+
+- M04 causal pairwise correlation matrix from historical return observations
+- M04 deterministic symbol ordering, duplicate-row rejection, minimum-overlap validation, and no future-data usage
