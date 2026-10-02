@@ -56,10 +56,6 @@ def reconcile(
         reasons.append("SCREEN_SYMBOL_MISMATCH")
     if timeframe_match is False:
         reasons.append("SCREEN_TIMEFRAME_MISMATCH")
-    if not context.chart_detected:
-        reasons.append("SCREEN_CHART_NOT_DETECTED")
-    if context.confidence.chart < 0.50:
-        reasons.append("SCREEN_CHART_LOW_CONFIDENCE")
 
     status = "MATCH" if not reasons else "MISMATCH"
     return ReconciliationResult(
