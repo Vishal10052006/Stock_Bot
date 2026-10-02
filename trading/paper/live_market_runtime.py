@@ -120,7 +120,7 @@ def build_live_market_paper_session(
         metrics=DataQualityMetrics(),
     )
 
-    model, preprocessor, manifest = load_phase9_logistic_bundle(
+    model, preprocessor, calibrator, manifest = load_phase9_logistic_bundle(
         config.model_artifact,
         expected_sha256=config.model_sha256,
     )
@@ -130,6 +130,8 @@ def build_live_market_paper_session(
         )
     if manifest.provenance.model_family != "logistic":
         raise ValueError("live paper runtime requires a logistic Phase-9 artifact")
+    if not manifest.provenance.calibration_version:
+        raise ValueError("live paper runtime requires a calibrated Phase-9 artifact")
 
     history = UpstoxHistoryProvider.from_env(mapper)
 
@@ -207,6 +209,7 @@ def build_live_market_paper_session(
         market_bot=market_bot,
         model=model,
         preprocessor=preprocessor,
+        calibrator=calibrator,
         paper_engine=paper_engine,
         benchmark_history_provider=benchmark_history_provider,
         benchmark_context_provider=benchmark_context_provider,
@@ -216,6 +219,8 @@ def build_live_market_paper_session(
             model_version=config.model_version,
             data_version=config.data_version,
             feature_version=config.feature_version,
+            target_version=manifest.provenance.target_version,
+            calibration_version=manifest.provenance.calibration_version,
             target_trades=1_000_000,
         ),
     )

@@ -20,6 +20,7 @@ from market.indicators.engine import IndicatorEngine
 from market.regime.detector import detect_market_regime
 from monitoring.runtime import MonitoringRuntime
 from ml.integration.analysis_prediction import PredictionContext, predict_from_analysis
+from ml.models.calibration import IsotonicProbabilityCalibrator
 from ml.models.logistic import LogisticOutcomeModel
 from ml.preprocessing.pipeline import FeaturePreprocessor
 
@@ -155,6 +156,7 @@ def build_market_analysis_and_prediction(
     symbol: str,
     model: LogisticOutcomeModel,
     preprocessor: FeaturePreprocessor,
+    calibrator: IsotonicProbabilityCalibrator | None = None,
     market_context: pd.DataFrame,
     sector_context: pd.DataFrame | None = None,
     sector_mappings: tuple = (),
@@ -178,6 +180,7 @@ def build_market_analysis_and_prediction(
         result.analysis,
         model=model,
         preprocessor=preprocessor,
+        calibrator=calibrator,
         model_version=model_version,
         monitoring=monitoring,
     )

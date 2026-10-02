@@ -13,6 +13,7 @@ import pandas as pd
 from market.bot.contracts import MarketContext
 from monitoring.runtime import MonitoringRuntime
 from ml.integration.analysis_prediction import PredictionContext, predict_from_analysis
+from ml.models.calibration import IsotonicProbabilityCalibrator
 from ml.models.logistic import LogisticOutcomeModel
 from ml.preprocessing.pipeline import FeaturePreprocessor
 from trading.ab30_pipeline import MarketAnalysisResult
@@ -46,6 +47,7 @@ class TradingResearchRuntime:
         market_context: MarketContext,
         model: LogisticOutcomeModel,
         preprocessor: FeaturePreprocessor,
+        calibrator: IsotonicProbabilityCalibrator | None = None,
         sector_context: pd.DataFrame | None = None,
         sector_mappings: tuple = (),
         data_version: str | None = None,
@@ -74,6 +76,7 @@ class TradingResearchRuntime:
             analysis.analysis,
             model=model,
             preprocessor=preprocessor,
+            calibrator=calibrator,
             model_version=model_version,
             monitoring=self.monitoring,
         )

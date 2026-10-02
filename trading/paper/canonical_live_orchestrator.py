@@ -17,6 +17,7 @@ from market.bot.orchestrator import MarketBot
 from market.candles.models import Candle
 from market.data.realtime_pipeline import RealtimeMarketDataPipeline
 from ml.integration.analysis_prediction import PredictionContext, predict_from_analysis
+from ml.models.calibration import IsotonicProbabilityCalibrator
 from ml.models.logistic import LogisticOutcomeModel
 from ml.preprocessing.pipeline import FeaturePreprocessor
 from trading.ab30_pipeline import MarketAnalysisResult
@@ -38,6 +39,8 @@ class CanonicalLivePaperConfig:
     model_version: str = "phase9-logistic-v1"
     data_version: str = "upstox-live-v1"
     feature_version: str = "v1.0"
+    target_version: str = "phase7-decision-label-v1"
+    calibration_version: str | None = None
     target_trades: int = 10
 
     def __post_init__(self) -> None:
@@ -70,6 +73,7 @@ class CanonicalLivePaperOrchestrator:
     paper_engine: LivePaperEngine
     benchmark_history_provider: Callable[[pd.Timestamp], pd.DataFrame]
     benchmark_context_provider: Callable[[pd.Timestamp, pd.DataFrame], MarketContext]
+    calibrator: IsotonicProbabilityCalibrator | None = None
     downstream_handler: Callable[[PredictionContext, MarketAnalysisResult, Candle, LivePaperEngine], None] | None = None
     history_provider: Callable[[pd.Timestamp], Iterable[Candle]] | None = None
     history: CausalCandleHistory | None = None
@@ -93,6 +97,12 @@ class CanonicalLivePaperOrchestrator:
             raise CanonicalLivePaperError(
                 "preprocessor must be fitted before paper inference"
             )
+        if self.calibrator is not None and not isinstance(self.calibrator, IsotonicProbabilityCalibrator):
+            raise TypeError("calibrator must be an IsotonicProbabilityCalibrator")
+        if self.config.calibration_version is not None and self.calibrator is None:
+            raise CanonicalLivePaperError("calibration_version requires a calibrator")
+        if self.calibrator is not None and not self.calibrator.is_fitted:
+            raise CanonicalLivePaperError("calibrator must be fitted before paper inference")
         if self.model.feature_count != len(self.preprocessor.get_feature_names_out()):
             raise CanonicalLivePaperError(
                 "model/preprocessor feature counts do not match"
@@ -261,7 +271,10 @@ class CanonicalLivePaperOrchestrator:
             result.analysis,
             model=self.model,
             preprocessor=self.preprocessor,
+            calibrator=self.calibrator,
             model_version=self.config.model_version,
+            target_version=self.config.target_version,
+            calibration_version=self.config.calibration_version,
         )
 
         if pd.Timestamp(prediction.timestamp) != cutoff:
