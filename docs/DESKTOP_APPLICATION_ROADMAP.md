@@ -649,6 +649,8 @@ Commit
 Move to next D-stage
 ```
 
-## Current implementation target
+## Implementation status
 
-**D01 — Market Dashboard**
+**D01-D10 — COMPLETE (read-model + composition + single-file operator UI)**
+
+`desktop/index.html` provides the framework-neutral operator surface. It consumes a host-provided `window.STOCK_BOT_SNAPSHOT` and has safe empty-state defaults. Replay controls only mutate the in-memory UI snapshot; they never call trading, broker, risk, or safety code.
