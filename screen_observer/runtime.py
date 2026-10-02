@@ -176,6 +176,10 @@ class ScreenObserverRuntime:
                         self._last_error = exc
 
             self._stop_event.wait(self.schedule.interval.total_seconds())
+            # The loop is intentionally event-driven for stop, while pause is
+            # checked at the next scheduler boundary. A capture already in
+            # progress is allowed to finish; no second capture is started once
+            # pause is observed.
 
     def _emit(
         self,
