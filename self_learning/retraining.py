@@ -66,6 +66,18 @@ def retrain_candidate(
         raise TypeError("experiment must be an ExperimentSpec")
     if experiment.dataset_version != dataset_version.dataset_version:
         raise ValueError("experiment and dataset versions do not match")
+    if experiment.feature_version != dataset_version.feature_schema_version:
+        raise ValueError("experiment and dataset feature versions do not match")
+    if experiment.label_version != dataset_version.label_definition_version:
+        raise ValueError("experiment and dataset label versions do not match")
+    if experiment.period_start != dataset_version.period_start:
+        raise ValueError("experiment and dataset period_start do not match")
+    if experiment.period_end != dataset_version.period_end:
+        raise ValueError("experiment and dataset period_end do not match")
+    experiment_symbols = tuple(sorted(symbol.strip().upper() for symbol in experiment.symbols))
+    dataset_symbols = tuple(sorted(symbol.strip().upper() for symbol in dataset_version.symbols))
+    if experiment_symbols != dataset_symbols:
+        raise ValueError("experiment and dataset symbols do not match")
 
     actual_fingerprint = dataframe_fingerprint(dataset.data)
     if actual_fingerprint not in dataset_version.source_fingerprints:
