@@ -18,6 +18,7 @@ from .observer import ScreenObserver
 from .runtime import ScreenEvent, ScreenObserverRuntime
 from .window_provider import LinuxWindowProvider
 from .analysis import build_screen_analysis_context
+from .validation import ScreenValidationResult, validate_screen_observation
 from .confidence import calculate_screen_confidence, screen_is_usable
 from .context import build_visual_context
 from .evidence import CandleVisualEvidence, IndicatorEvidence, ScreenAnalysisContext, TimeframeEvidence
@@ -41,4 +42,6 @@ __all__ = [
     "calculate_screen_confidence",
     "screen_is_usable",
     "build_screen_analysis_context",
+    "ScreenValidationResult",
+    "validate_screen_observation",
 ]
