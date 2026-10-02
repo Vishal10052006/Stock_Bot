@@ -25,6 +25,8 @@ from trading.market_bot_pipeline import build_market_analysis_from_market_bot
 from trading.paper.canonical_paper_callback import execute_prediction_to_paper
 from trading.paper.causal_history import CausalCandleHistory
 from trading.paper.live_loop import LivePaperEngine, LivePaperSessionResult
+from research.integration.analysis_contract import ResearchAnalysisContext
+from research.live.runtime import LiveResearchRuntime
 
 
 class CanonicalLivePaperError(RuntimeError):
@@ -78,6 +80,8 @@ class CanonicalLivePaperOrchestrator:
     history_provider: Callable[[pd.Timestamp], Iterable[Candle]] | None = None
     history: CausalCandleHistory | None = None
     config: CanonicalLivePaperConfig = CanonicalLivePaperConfig()
+    research_context_provider: Callable[[pd.Timestamp], ResearchAnalysisContext] | None = None
+    research_runtime: LiveResearchRuntime | None = None
 
     def __post_init__(self) -> None:
         """Reject incompatible dependencies before any network activity."""
@@ -258,6 +262,22 @@ class CanonicalLivePaperOrchestrator:
                 "MarketContext cannot be newer than the candle decision time"
             )
 
+        research_context = None
+        if self.research_context_provider is not None:
+            research_context = self.research_context_provider(cutoff)
+            if not isinstance(research_context, ResearchAnalysisContext):
+                raise CanonicalLivePaperError(
+                    "research context provider must return ResearchAnalysisContext"
+                )
+            if research_context.symbol.strip().upper() != expected_symbol:
+                raise CanonicalLivePaperError(
+                    "research context symbol must exactly match candle symbol"
+                )
+            if pd.Timestamp(research_context.as_of) > cutoff:
+                raise CanonicalLivePaperError(
+                    "research context cannot be newer than the candle decision time"
+                )
+
         result = build_market_analysis_from_market_bot(
             causal_candles,
             symbol=expected_symbol,
@@ -265,6 +285,7 @@ class CanonicalLivePaperOrchestrator:
             market_context=market_context,
             data_version=self.config.data_version,
             feature_version=self.config.feature_version,
+            research_context=research_context,
         )
 
         prediction = predict_from_analysis(
@@ -320,6 +341,8 @@ class CanonicalLivePaperOrchestrator:
                 "canonical live-paper requires exactly one configured symbol"
             )
 
+        if self.research_runtime is not None:
+            self.research_runtime.start()
         self.market_data.start(requested)
         try:
             for candle in self.market_data.run():
@@ -328,6 +351,8 @@ class CanonicalLivePaperOrchestrator:
                     break
         finally:
             self.market_data.stop()
+            if self.research_runtime is not None:
+                self.research_runtime.stop()
 
         return self.paper_engine.finalize_session()
 
