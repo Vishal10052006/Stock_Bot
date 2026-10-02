@@ -69,12 +69,18 @@ def _session_diagnostics(
         and max_gap_seconds > max_gap_minutes * 60.0
     )
 
+    start = timestamps.min().isoformat()
+    end = timestamps.max().isoformat()
+    observed_duration_seconds = (
+        timestamps.max() - timestamps.min()
+    ).total_seconds()
+
     return {
         "session_id": validation["session_id"],
         "session_dir": str(Path(session_dir)),
-        "start": validation["start"],
-        "end": validation["end"],
-        "observed_duration_seconds": validation["observed_duration_seconds"],
+        "start": start,
+        "end": end,
+        "observed_duration_seconds": observed_duration_seconds,
         "ledger_rows": validation["ledger_rows"],
         "completed_trades": validation["completed_trades"],
         "final_equity": validation["final_equity"],
