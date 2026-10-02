@@ -43,9 +43,34 @@ def test_d02_prediction_rejects_malformed_probability_payload() -> None:
     assert state.status == "INVALID"
 
 
-def test_d03_explanation_never_invents_missing_layers() -> None:
-    state = build_explanation({"analysis": {"timestamp": datetime(2026, 10, 2, 10, tzinfo=timezone.utc), "symbol": "RELIANCE"}})
-    assert [item.source for item in state.items] == ["market"]
+def test_d03_explanation_uses_authoritative_module7_contract() -> None:
+    ts = datetime(2026, 10, 2, 10, tzinfo=timezone.utc)
+    state = build_explanation({
+        "timestamp": ts,
+        "symbol": "RELIANCE",
+        "market": {"timestamp": ts, "symbol": "RELIANCE", "reason": "Market context observed."},
+        "analysis": {"timestamp": ts, "symbol": "RELIANCE", "reason": "Analysis context observed."},
+        "strategy": {"timestamp": ts, "symbol": "RELIANCE", "direction": "NO_TRADE", "reason": "No edge."},
+    })
+    assert state.state == "NO_TRADE"
+    assert [item.source for item in state.items] == ["market", "analysis", "strategy"]
+    assert state.provenance["audit_valid"] is True
+
+
+def test_d03_explanation_rejects_invalid_authoritative_evidence() -> None:
+    ts = datetime(2026, 10, 2, 10, tzinfo=timezone.utc)
+    state = build_explanation({
+        "timestamp": ts,
+        "symbol": "RELIANCE",
+        "strategy": {
+            "timestamp": ts,
+            "symbol": "TCS",
+            "direction": "NO_TRADE",
+            "reason": "No edge.",
+        },
+    })
+    assert state.state == "INVALID"
+    assert state.provenance["audit_reasons"] == ()
 
 
 def test_d04_future_research_is_not_exposed() -> None:
