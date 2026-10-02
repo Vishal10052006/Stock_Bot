@@ -53,7 +53,7 @@ application composition root in `desktop/application.py`.
 |---|---|
 | D01 | `MarketDashboardState` + `build_market_dashboard` |
 | D02 | `PredictionPanelState` + `build_prediction_panel` |
-| D03 | `ExplanationItem` / `ExplanationState` + `build_explanation` |
+| D03 | `ExplanationItem` / `ExplanationState` + authoritative Module 7 `build_explanation` + audit |
 | D04 | `ResearchEvidenceItem` / `ResearchPanelState` + causal filtering |
 | D05 | `ScreenObserverPanelState` + reconciliation/validation visibility |
 | D06 | `DecisionTimelineEvent` / `DecisionTimelineState` + stable timestamp ordering |
