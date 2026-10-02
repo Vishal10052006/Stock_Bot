@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
+import pytest
+
 from research.contracts import ResearchDocument
 from research.live.runtime import LiveResearchCache, LiveResearchRuntime
 
@@ -110,10 +112,13 @@ def test_live_cache_retains_future_evidence_but_excludes_it_from_snapshot():
         clock=lambda: decision,
     )
 
+    # A refresh at T must not drop a source document merely because it belongs
+    # to T+epsilon. The document becomes usable only when the requested
+    # decision snapshot reaches its source-provided availability timestamp.
     cache.refresh(
         symbols=("RELIANCE",),
         start=decision - timedelta(hours=1),
-        end=decision,
+        end=decision + timedelta(seconds=1),
     )
 
     assert cache.snapshot(symbol="RELIANCE", as_of=decision) == ()
@@ -122,6 +127,37 @@ def test_live_cache_retains_future_evidence_but_excludes_it_from_snapshot():
         as_of=decision + timedelta(seconds=1),
     )
     assert [document.external_id for document in later] == ["future"]
+
+
+def test_live_cache_rejects_conflicting_duplicate_identity():
+    decision = datetime(2026, 10, 2, 10, 0, tzinfo=UTC)
+    first = _document(
+        external_id="duplicate",
+        available_at=decision - timedelta(minutes=1),
+    )
+    conflicting = ResearchDocument(
+        document_id="doc-conflict",
+        source_id=first.source_id,
+        external_id=first.external_id,
+        title=first.title,
+        content="different payload",
+        published_at=first.published_at,
+        observed_at=first.observed_at,
+        processed_at=first.processed_at,
+        available_at=first.available_at,
+        symbols=first.symbols,
+    )
+    cache = LiveResearchCache(
+        providers=(FakeProvider((first, conflicting)),),
+        clock=lambda: decision,
+    )
+
+    with pytest.raises(ValueError, match="conflicting research documents"):
+        cache.refresh(
+            symbols=("RELIANCE",),
+            start=decision - timedelta(hours=1),
+            end=decision,
+        )
 
 
 def test_live_runtime_refreshes_and_records_provider_failure():
@@ -161,9 +197,5 @@ def test_live_runtime_rejects_naive_decision_time():
     provider = FakeProvider((document,))
     cache = LiveResearchCache(providers=(provider,))
 
-    try:
+    with pytest.raises(ValueError, match="as_of must be timezone-aware"):
         cache.snapshot(symbol="RELIANCE", as_of=decision)
-    except ValueError as exc:
-        assert "as_of must be timezone-aware" in str(exc)
-    else:
-        raise AssertionError("naive decision timestamps must fail closed")
