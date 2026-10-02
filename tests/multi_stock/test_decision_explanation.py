@@ -108,3 +108,38 @@ def test_execution_result_snapshot_is_explained_without_inference():
     )
     assert result.outcome == "EXECUTION_FILLED"
     assert result.items[-1].status == "FILLED"
+
+
+def test_strategy_primary_and_secondary_reasons_are_preserved():
+    ts = pd.Timestamp("2026-10-02 10:00:00", tz="Asia/Kolkata")
+    result = build_decision_explanation(
+        ts,
+        "RELIANCE.NS",
+        strategy={
+            "timestamp": ts,
+            "symbol": "RELIANCE.NS",
+            "direction": "NO_TRADE",
+            "primary_reason": "LIQUIDITY_INSUFFICIENT",
+            "secondary_reasons": ("COST_TOO_HIGH",),
+            "rationale": "Strategy rejected the candidate.",
+        },
+    )
+    item = result.items[-1]
+    assert item.status == "NO_TRADE"
+    assert item.reason == "LIQUIDITY_INSUFFICIENT; secondary=COST_TOO_HIGH"
+
+
+def test_safety_block_code_is_preserved_in_explanation():
+    ts = pd.Timestamp("2026-10-02 10:00:00", tz="Asia/Kolkata")
+    result = build_decision_explanation(
+        ts,
+        "RELIANCE.NS",
+        safety={
+            "timestamp": ts,
+            "symbol": "RELIANCE.NS",
+            "allowed": False,
+            "block": "LIVE_LOCKED",
+            "reason": "Live execution remains locked.",
+        },
+    )
+    assert result.items[-1].reason == "LIVE_LOCKED: Live execution remains locked."
