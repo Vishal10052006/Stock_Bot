@@ -212,3 +212,18 @@ def test_concrete_risk_enum_status_is_normalized_for_audit():
     )
     result = build_decision_explanation(ts, "RELIANCE.NS", risk=risk)
     assert result.items[0].status == "REJECTED"
+
+
+def test_same_timestamp_items_follow_causal_stage_order():
+    ts = pd.Timestamp("2026-10-02 10:00:00", tz="Asia/Kolkata")
+    result = build_decision_explanation(
+        ts,
+        "RELIANCE.NS",
+        strategy={"timestamp": ts, "direction": "NO_TRADE", "rationale": "strategy"},
+        risk={"timestamp": ts, "status": "REJECTED", "reason": "risk"},
+        market={"timestamp": ts, "status": "OBSERVED", "reason": "market"},
+        execution={"timestamp": ts, "status": "BLOCKED", "reason": "execution"},
+    )
+    assert [item.stage for item in result.items] == [
+        "Market", "Strategy", "Risk", "Execution"
+    ]
