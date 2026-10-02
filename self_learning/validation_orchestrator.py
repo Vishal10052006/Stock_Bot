@@ -140,10 +140,16 @@ class ValidationOrchestrator:
             raise ValueError("validation run does not match candidate")
         if run.gate.stage != "PROMOTION_GATE":
             raise ValueError("validation run gate must be PROMOTION_GATE")
-        if run.gate.fingerprint not in {
-            stage.fingerprint for stage in run.stages
-        }:
+
+        collected = {stage.stage: stage for stage in run.stages}
+        expected_gate = validate_candidate(
+            candidate,
+            collected,
+            policy=self.policy,
+        )
+        if run.gate.fingerprint != expected_gate.fingerprint:
             raise ValueError("validation gate is not derived from collected stages")
+
         if candidate.evaluation_fingerprint not in run.gate.artifact_fingerprints:
             raise ValueError("validation gate does not reference candidate evaluation")
         if candidate.artifact_fingerprint not in run.gate.artifact_fingerprints:
