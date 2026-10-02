@@ -51,16 +51,19 @@ class ScreenObserver:
 
         windows_tuple = tuple(windows)
         target = self.window_detector.select(windows_tuple)
-        chart = self.region_detector.detect(target)
 
-        region = (
-            (chart.left, chart.top, chart.width, chart.height)
-            if chart.detected
+        # S05 must inspect the full selected window before deciding where the
+        # chart is. Capturing the pre-S05 chart region would make detection
+        # circular because S03 would already be assuming the answer.
+        capture_region = (
+            (target.left, target.top, target.width, target.height)
+            if target is not None
             else None
         )
-        image = self.capture_backend.capture(region)
+        image = self.capture_backend.capture(capture_region)
 
         text_lines = ocr(image)
+        chart = self.region_detector.detect(target, image=image)
         symbol, symbol_conf = detect_symbol(text_lines)
         timeframe, timeframe_conf = detect_timeframe(text_lines)
         indicators, indicator_conf = detect_indicators(text_lines)
