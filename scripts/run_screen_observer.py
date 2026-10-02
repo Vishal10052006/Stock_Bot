@@ -52,6 +52,16 @@ def main() -> int:
                     "bullish_candles": context.candle_observation.bullish,
                     "bearish_candles": context.candle_observation.bearish,
                     "confidence": context.confidence.overall,
+                    "target_application": (
+                        event.target_window.application
+                        if event.target_window is not None
+                        else None
+                    ),
+                    "target_title": (
+                        event.target_window.title
+                        if event.target_window is not None
+                        else None
+                    ),
                 },
                 sort_keys=True,
             ),
