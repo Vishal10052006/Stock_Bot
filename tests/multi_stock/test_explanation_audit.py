@@ -60,3 +60,23 @@ def test_unknown_stage_is_rejected():
     result = audit_decision_explanation(explanation)
     assert not result.valid
     assert "EXPLANATION_UNKNOWN_STAGE:Unknown" in result.reasons
+
+
+def test_reported_execution_outcome_requires_execution_evidence():
+    ts = pd.Timestamp("2026-10-02 10:00:00", tz="Asia/Kolkata")
+    from multi_stock.decision_explanation import DecisionExplanation
+
+    explanation = DecisionExplanation(ts, "RELIANCE.NS", "EXECUTION_FILLED", ())
+    result = audit_decision_explanation(explanation)
+    assert not result.valid
+    assert "EXPLANATION_OUTCOME_EVIDENCE_MISSING:Execution" in result.reasons
+
+
+def test_reported_long_outcome_requires_strategy_evidence():
+    ts = pd.Timestamp("2026-10-02 10:00:00", tz="Asia/Kolkata")
+    from multi_stock.decision_explanation import DecisionExplanation
+
+    explanation = DecisionExplanation(ts, "RELIANCE.NS", "LONG", ())
+    result = audit_decision_explanation(explanation)
+    assert not result.valid
+    assert "EXPLANATION_OUTCOME_EVIDENCE_MISSING:Strategy" in result.reasons
