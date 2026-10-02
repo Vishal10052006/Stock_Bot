@@ -8,3 +8,9 @@ from .breadth import MarketBreadth, build_market_breadth
 from .correlation import CorrelationMatrix, build_correlation_matrix
 from .relative_strength import RelativeStrength, RelativeStrengthRow, build_relative_strength
 from .liquidity import LiquiditySnapshot, build_liquidity_snapshot
+
+from .portfolio import PortfolioContext, build_portfolio_context
+from .cross_asset import CrossAssetContext, CrossAssetRow, build_cross_asset_context
+from .decision_explanation import DecisionExplanation, DecisionExplanationItem, build_decision_explanation
+
+__all__ += ["PortfolioContext", "build_portfolio_context", "CrossAssetContext", "CrossAssetRow", "build_cross_asset_context", "DecisionExplanation", "DecisionExplanationItem", "build_decision_explanation"]
