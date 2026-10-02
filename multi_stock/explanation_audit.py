@@ -68,7 +68,26 @@ def audit_decision_explanation(
             reasons.append("EXPLANATION_CAUSAL_ORDER_INVALID")
         previous_order = max(previous_order, order)
 
+    if not explanation.outcome.strip():
+        reasons.append("EXPLANATION_OUTCOME_MISSING")
+
     states = {item.stage: item.status for item in explanation.items}
+
+    required_stage = {
+        "NO_TRADE": "Strategy",
+        "RISK_REJECTED": "Risk",
+        "SAFETY_BLOCKED": "Safety",
+        "EXECUTION_BLOCKED": "Execution",
+        "EXECUTION_REJECTED": "Execution",
+        "EXECUTION_FILLED": "Execution",
+        "EXECUTION_PENDING": "Execution",
+        "LONG": "Strategy",
+        "SHORT": "Strategy",
+    }.get(explanation.outcome)
+    if required_stage is not None and required_stage not in states:
+        reasons.append(
+            f"EXPLANATION_OUTCOME_EVIDENCE_MISSING:{required_stage}"
+        )
 
     if states.get("Strategy") == "NO_TRADE" and explanation.outcome != "NO_TRADE":
         reasons.append("EXPLANATION_OUTCOME_STRATEGY_MISMATCH")
