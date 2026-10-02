@@ -15,6 +15,7 @@ from .contracts import (
     WindowObservation,
 )
 from .observer import ScreenObserver
+from .runtime import ScreenEvent, ScreenObserverRuntime
 
 __all__ = [
     "CandleObservation",
@@ -24,4 +25,6 @@ __all__ = [
     "VisualContext",
     "WindowObservation",
     "ScreenObserver",
+    "ScreenEvent",
+    "ScreenObserverRuntime",
 ]
