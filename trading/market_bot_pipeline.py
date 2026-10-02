@@ -28,6 +28,7 @@ def build_market_analysis_from_market_bot(
     data_version: str | None = None,
     feature_version: str | None = None,
     monitoring: MonitoringRuntime | None = None,
+    research_context: object | None = None,
 ) -> MarketAnalysisResult:
     """Run the production Market Bot -> AB-30 composition.
 
@@ -65,6 +66,7 @@ def build_market_analysis_from_market_bot(
         data_version=data_version or market_context.metadata.data_version,
         feature_version=feature_version or market_context.metadata.feature_version,
         monitoring=monitoring,
+        research_context=research_context,
     )
 
     provenance = dict(result.analysis.provenance)
