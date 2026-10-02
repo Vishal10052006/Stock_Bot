@@ -14,10 +14,11 @@ def _write_session(
     start: str,
     end: str,
     broker_orders: int = 0,
+    session_id: str = "CERT08-TEST",
 ) -> None:
     root.mkdir(parents=True, exist_ok=True)
     summary = {
-        "session_id": "CERT08-TEST",
+        "session_id": session_id,
         "initial_equity": 100_000.0,
         "final_equity": 100_000.0,
         "realized_pnl": 0.0,
