@@ -44,7 +44,7 @@ def _config() -> MarketUniverseConfig:
             version="liq-2026.10",
             lookback_sessions=2,
             minimum_completed_sessions=2,
-            minimum_average_traded_value=100.0,
+            minimum_average_traded_value=101.0,
         ),
         upstox_master_path="",
     )
