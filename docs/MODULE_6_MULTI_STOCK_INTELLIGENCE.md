@@ -2,7 +2,7 @@
 
 ## Status
 
-**M00 Universe Manager + M01 Stock Ranking + PIT causal validation implemented.**
+**M00 Universe Manager + M01 Stock Ranking + M02 Sector Rotation + PIT causal validation implemented.**
 
 Module 6 aggregates validated per-stock AnalysisContext into a single causal
 multi-stock observation and reuses the existing point-in-time Market Bot
@@ -25,6 +25,8 @@ universe infrastructure.
 - deterministic PIT adapter integration tests with in-memory Security Master/Bhavcopy fixtures
 - future PIT universe rejection
 - M01 deterministic stock ranking using existing AnalysisContext quality
+- M02 point-in-time sector rotation snapshot from existing derived sector returns
+- M02 ignores future sector context and preserves observation-only authority
 - deterministic tie-breaking and explicit exclusion of unavailable quality
 
 ## Boundaries
