@@ -189,3 +189,44 @@ def test_review_run_revalidates_stage_evidence() -> None:
 
     assert decision.state.value == "BLOCKED"
     assert "STAGE_INVALID:PAPER" in decision.reasons
+
+def test_review_run_rejects_tampered_promotion_gate():
+    candidate = replace(_candidate(), lifecycle=CandidateLifecycle.PROMOTION_REVIEW)
+    run = _validation_run(candidate)
+    forged_gate = replace(run.gate, issues=("tampered",))
+    forged_run = ValidationRun(
+        candidate_fingerprint=run.candidate_fingerprint,
+        stages=run.stages,
+        gate=forged_gate,
+    )
+
+    with pytest.raises(ValueError, match="gate does not match"):
+        PromotionController().review_run(
+            champion_version="model-v1",
+            challenger=candidate,
+            validation_run=forged_run,
+        )
+
+
+def test_review_run_requires_candidate_artifact_and_evaluation_in_gate():
+    candidate = replace(_candidate(), lifecycle=CandidateLifecycle.PROMOTION_REVIEW)
+    validations = _validations(candidate)
+    run = _validation_run(candidate)
+    # Keep the gate internally consistent with the collected evidence, then
+    # verify the promotion boundary checks the candidate identities explicitly.
+    stripped = {
+        stage: replace(summary, artifact_fingerprints=())
+        for stage, summary in validations.items()
+    }
+    stripped_run = ValidationRun(
+        candidate_fingerprint=candidate.fingerprint,
+        stages=tuple(stripped.values()),
+        gate=validate_candidate(candidate, stripped),
+    )
+
+    with pytest.raises(ValueError, match="candidate artifact"):
+        PromotionController().review_run(
+            champion_version="model-v1",
+            challenger=candidate,
+            validation_run=stripped_run,
+        )
