@@ -9,6 +9,8 @@ def measurement(as_of, value):
     completed_date = as_of
     if completed_date.month == 10 and completed_date.day == 1:
         completed_date = date(2026, 9, 30)
+    elif completed_date > date(2026, 10, 1):
+        completed_date = date(2026, 10, 1)
     return LiquidityMeasurement(
         as_of=as_of,
         lookback_sessions=20,
