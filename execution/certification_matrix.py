@@ -172,6 +172,8 @@ def build_certification_report(
             continue
         if record.cert_id != item.cert_id:
             raise ValueError(f"evidence ID mismatch for {item.cert_id}")
+        if record.passed and not record.evidence:
+            raise ValueError(f"{item.cert_id} PASS requires explicit evidence")
         records.append(record)
 
     return CertificationReport(CERTIFICATION_ITEMS, tuple(records))
