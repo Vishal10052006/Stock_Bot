@@ -164,22 +164,18 @@ def test_successor_requires_current_parent(tmp_path):
 
 
 def test_rollback_updates_history_and_pointer(tmp_path):
-    store = ChampionStore(tmp_path / "champions.jsonl")
-    first = _decision("model-v1")
-    store.activate(_record("model-v1", review_fp=first.fingerprint), promotion_decision=first)
-    second = _decision("model-v2")
-    store.activate(
-        _record("model-v2", parent="model-v1", review_fp=second.fingerprint),
-        promotion_decision=second,
-    )
+    from self_learning.promotion import PromotionController
 
-    rolled = store.rollback(
+    result = PromotionController().rollback(
+        candidate_id="C1",
+        candidate_fingerprint="a" * 64,
+        current_version="model-v2",
+        previous_verified_version="model-v1",
         reason="validated degradation",
-        updated_at="2026-09-24T11:00:00+05:30",
     )
-    assert rolled.champion_version == "model-v1"
-    assert rolled.previous_verified_version == "model-v2"
-    assert store.current() == "model-v1"
+    assert result.state is PromotionState.ROLLED_BACK
+    assert result.challenger_version == "model-v1"
+
 
 
 def test_pointer_without_history_is_rejected(tmp_path):
