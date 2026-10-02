@@ -7,6 +7,7 @@ an explicit governance operation.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 import hashlib
 import json
 from pathlib import Path
@@ -58,6 +59,15 @@ class RollbackRecord:
         ).hexdigest()
 
 
+def _is_valid_timestamp(value: str) -> bool:
+    """Return whether a timestamp is an offset-aware ISO-8601 value."""
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError:
+        return False
+    return parsed.tzinfo is not None and parsed.utcoffset() is not None
+
+
 class ChampionStore:
     """Append-only champion history with a current-version pointer."""
 
@@ -82,6 +92,8 @@ class ChampionStore:
             raise ValueError("only PROMOTED records can be activated")
         if len(record.promotion_review_fingerprint) != 64:
             raise ValueError("promotion review fingerprint must be SHA-256")
+        if not _is_valid_timestamp(record.activated_at):
+            raise ValueError("champion activated_at must be timezone-aware")
 
         if promotion_decision is None:
             raise ValueError("promotion decision is required for champion activation")
