@@ -102,6 +102,7 @@ class ScreenObserverRuntime:
 
         self._stop_event.clear()
         self._pause_event.clear()
+        self._wake_event.clear()
         self._thread = threading.Thread(
             target=self._run,
             name="stock-bot-screen-observer",
