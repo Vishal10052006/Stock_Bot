@@ -13,6 +13,9 @@ on:
       - "docs/EXECUTION_ENGINE.md"
       - "docs/EXECUTION_CERTIFICATION_EVIDENCE.md"
       - "requirements-execution.txt"
+      - "requirements-screen-observer.txt"
+      - "learning/**"
+      - "tests/learning/**"
       - ".github/workflows/execution-engine.yml"
   push:
     branches:
