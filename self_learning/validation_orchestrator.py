@@ -28,6 +28,11 @@ class ValidationRun:
             raise ValueError("candidate_fingerprint must be SHA-256")
         if not self.stages:
             raise ValueError("stages must not be empty")
+        stage_names = tuple(summary.stage for summary in self.stages)
+        if len(stage_names) != len(set(stage_names)):
+            raise ValueError("validation stages must be unique")
+        if self.gate.stage != "PROMOTION_GATE":
+            raise ValueError("validation run gate must be PROMOTION_GATE")
 
     @property
     def stage_map(self) -> Mapping[str, ValidationSummary]:
