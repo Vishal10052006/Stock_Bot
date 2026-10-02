@@ -71,3 +71,35 @@ def test_s11_confidence_gate():
     )
     assert confidence.overall > 0.7
     assert screen_is_usable(confidence)
+
+from screen_observer.analysis import build_screen_analysis_context
+
+
+def test_s12_analysis_context_is_observation_only_and_usable():
+    observation = ScreenObservation(
+        observed_at=pd.Timestamp("2026-10-02T09:30:00+05:30"),
+        image=None,
+        windows=(),
+        target_window=None,
+        chart=ChartObservation(
+            detected=True, left=0, top=100, width=1000, height=600, confidence=0.9
+        ),
+        symbol="RELIANCE.NS",
+        timeframe="5m",
+        indicators=("EMA",),
+        candles=CandleObservation(bullish=5, bearish=4, confidence=0.8),
+        confidence=ScreenConfidence(
+            overall=0.82, chart=0.9, symbol=0.9, timeframe=0.9,
+            indicators=0.8, candles=0.8, ocr=0.8
+        ),
+    )
+    result = build_screen_analysis_context(
+        observation,
+        market_symbol="RELIANCE.NS",
+        market_timeframe="5m",
+        decision_timestamp=pd.Timestamp("2026-10-02T09:30:05+05:30"),
+    )
+    assert result.usable
+    assert result.reconciliation_status == "MATCH"
+    assert result.provenance["authority"] == "OBSERVATION_ONLY"
+    assert "signal" not in result.as_dict()
