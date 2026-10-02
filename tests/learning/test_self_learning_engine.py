@@ -331,3 +331,24 @@ def test_self_learning_engine_blocks_unlinked_observations():
             (_outcome("T2", pnl=-20.0),),
             cycle_id="cycle-invalid-1",
         )
+
+
+def test_learning_experience_fingerprint_is_deterministic():
+    experience = _learning_experience_fixture()
+    assert len(experience.fingerprint) == 64
+    assert experience.fingerprint == experience.fingerprint
+
+
+def _learning_experience_fixture():
+    from learning.models import LearningExperience, LearningPattern
+    return LearningExperience(
+        pattern=LearningPattern.LOSS,
+        evidence_count=3,
+        population_count=3,
+        occurrence_rate=1.0,
+        confidence=0.5,
+        average_reward=-0.5,
+        total_reward=-1.5,
+        source_trade_ids=("T1", "T2", "T3"),
+        rationale="Observed loss evidence.",
+    )
