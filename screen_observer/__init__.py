@@ -16,6 +16,7 @@ from .contracts import (
 )
 from .observer import ScreenObserver
 from .runtime import ScreenEvent, ScreenObserverRuntime
+from .window_provider import LinuxWindowProvider
 
 __all__ = [
     "CandleObservation",
@@ -27,4 +28,5 @@ __all__ = [
     "ScreenObserver",
     "ScreenEvent",
     "ScreenObserverRuntime",
+    "LinuxWindowProvider",
 ]
