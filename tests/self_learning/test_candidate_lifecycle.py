@@ -242,6 +242,50 @@ def test_promotion_requires_matching_explicit_decision() -> None:
     assert promoted.lifecycle is CandidateLifecycle.PROMOTED
 
 
+def test_promotion_decision_must_match_candidate_versions() -> None:
+    controller = CandidateLifecycleController()
+    candidate = _candidate()
+    candidate = controller.transition(
+        candidate, CandidateLifecycle.VALIDATING, at="2026-09-24T10:01:00+05:30"
+    )
+    candidate = controller.transition(
+        candidate, CandidateLifecycle.PAPER, at="2026-09-24T10:02:00+05:30"
+    )
+    candidate = controller.transition(
+        candidate, CandidateLifecycle.PROMOTION_REVIEW, at="2026-09-24T10:03:00+05:30"
+    )
+
+    decision = PromotionDecision(
+        candidate_id=candidate.candidate_id,
+        candidate_fingerprint=candidate.fingerprint,
+        champion_version="wrong-parent",
+        challenger_version="wrong-candidate",
+        state=PromotionState.PROMOTED,
+        reasons=("explicit approval",),
+        validation_fingerprints=(candidate.evaluation_fingerprint,),
+        approval_reference="approval-1",
+        created_at="2026-09-24T10:04:00+05:30",
+    )
+
+    with pytest.raises(ValueError, match="challenger"):
+        controller.apply_promotion(candidate, decision)
+
+    matching_challenger = PromotionDecision(
+        candidate_id=candidate.candidate_id,
+        candidate_fingerprint=candidate.fingerprint,
+        champion_version="wrong-parent",
+        challenger_version=candidate.candidate_version,
+        state=PromotionState.PROMOTED,
+        reasons=("explicit approval",),
+        validation_fingerprints=(candidate.evaluation_fingerprint,),
+        approval_reference="approval-1",
+        created_at="2026-09-24T10:04:00+05:30",
+    )
+
+    with pytest.raises(ValueError, match="champion"):
+        controller.apply_promotion(candidate, matching_challenger)
+
+
 def test_promotion_decision_cannot_be_replayed_against_changed_candidate() -> None:
     controller = CandidateLifecycleController()
     candidate = _candidate()
