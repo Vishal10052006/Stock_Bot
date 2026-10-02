@@ -49,6 +49,7 @@ def build_market_analysis(
     data_version: str = "market-v1",
     feature_version: str = "v1.0",
     monitoring: MonitoringRuntime | None = None,
+    research_context: object | None = None,
 ) -> MarketAnalysisResult:
     """Run real Phase 4/5/6 components and produce one AnalysisContext.
 
@@ -140,6 +141,7 @@ def build_market_analysis(
         data_version=data_version,
         feature_version=feature_version,
         monitoring=monitoring,
+        research_context=research_context,
     )
 
     return MarketAnalysisResult(
