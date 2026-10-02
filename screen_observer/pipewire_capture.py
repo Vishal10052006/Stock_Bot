@@ -142,12 +142,18 @@ class PipeWireFrameCapture:
                 "pipewiresrc does not expose the required 'fd' property"
             )
 
-        if not self._set_if_property(src, "target-object", str(self.node_id)):
-            if not self._set_if_property(src, "target-object", self.node_id):
-                raise PipeWireCaptureError(
-                    "pipewiresrc does not expose a usable 'target-object' "
-                    "property"
-                )
+        # XDG ScreenCast Start() returns a PipeWire node id. The
+        # portal screencast integration wires that node through pipewiresrc's
+        # path property. Using target-object here can leave the stream target
+        # unresolved and cause PipeWire format negotiation to fail.
+        if not self._set_if_property(src, "path", str(self.node_id)):
+            raise PipeWireCaptureError(
+                "pipewiresrc does not expose the required 'path' property"
+            )
+
+        # Capture time is recorded independently by ScreenFrame.observed_at.
+        self._set_if_property(src, "do-timestamp", True)
+        self._set_if_property(src, "always-copy", True)
 
         caps = Gst.Caps.from_string(
             "video/x-raw,format=RGB"
@@ -190,9 +196,26 @@ class PipeWireFrameCapture:
             assert self._pipeline is not None
             state = self._pipeline.set_state(self._gst.State.PLAYING)
             if state == self._gst.StateChangeReturn.FAILURE:
+                # Preserve the real GStreamer/PipeWire error instead of
+                # collapsing it into a generic state-change failure.
+                details: list[str] = []
+                bus = self._pipeline.get_bus()
+                while True:
+                    message = bus.pop()
+                    if message is None:
+                        break
+                    if message.type == self._gst.MessageType.ERROR:
+                        error, debug = message.parse_error()
+                        detail = str(error)
+                        if debug:
+                            detail = f"{detail}; debug={debug}"
+                        details.append(detail)
+                suffix = f": {' | '.join(details)}" if details else ""
                 raise PipeWireCaptureError(
-                    "GStreamer pipeline failed to enter PLAYING"
+                    f"GStreamer pipeline failed to enter PLAYING{suffix}"
                 )
+            # Live sources commonly return ASYNC or NO_PREROLL during the
+            # transition. Neither is a startup failure.
             self._started = True
         except Exception:
             self.stop()
