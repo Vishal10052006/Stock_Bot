@@ -65,7 +65,10 @@ def _item(stage: str, obj: Any, timestamp: pd.Timestamp, source: str) -> Decisio
     elif stage == "Execution" and nested is not None:
         status = _enum_value(_field(nested, "status", None)) or "OBSERVED"
     else:
-        status = _field(obj, "status", _field(obj, "direction", "OBSERVED"))
+        raw_status = _field(obj, "status", None)
+        if raw_status is None:
+            raw_status = _field(obj, "direction", "OBSERVED")
+        status = _enum_value(raw_status) or "OBSERVED"
 
     if stage == "Strategy":
         primary = _enum_value(_field(obj, "primary_reason", None))
