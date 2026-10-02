@@ -106,11 +106,9 @@ def _item(stage: str, obj: Any, timestamp: pd.Timestamp, source: str) -> Decisio
     # reason/rationale field is present. Keep the evidence item so the audit
     # layer can validate outcome consistency without inventing a cause.
     if not str(reason).strip():
-        if stage == "Strategy":
-            reason = status
-        elif stage == "Safety" and status in {"ALLOWED", "BLOCKED"}:
-            reason = status
-        elif stage == "Execution" and status != "OBSERVED":
+        if stage == "Strategy" and status == "NO_TRADE":
+            # NO_TRADE is the authoritative structural outcome. Retain the
+            # evidence item without inventing a causal explanation.
             reason = status
         else:
             return None
