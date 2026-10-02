@@ -6,11 +6,14 @@ from multi_stock.liquidity import build_liquidity_snapshot
 TS = datetime(2026, 10, 2, 10, tzinfo=timezone.utc)
 
 def measurement(as_of, value):
+    completed_date = as_of
+    if completed_date.month == 10 and completed_date.day == 1:
+        completed_date = date(2026, 9, 30)
     return LiquidityMeasurement(
         as_of=as_of,
         lookback_sessions=20,
         completed_sessions=(
-            DailyLiquidity(as_of.replace(day=1), 1, value, "test"),
+            DailyLiquidity(completed_date, 1, value, "test"),
         ),
         average_traded_value=value,
     )
