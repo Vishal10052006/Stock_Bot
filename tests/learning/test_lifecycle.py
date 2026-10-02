@@ -32,6 +32,20 @@ def _decision(challenger="model-v1"):
     )
 
 
+def test_activation_rejects_naive_activation_timestamp(tmp_path):
+    decision = _decision()
+    with pytest.raises(ValueError, match="timezone-aware"):
+        ChampionStore(tmp_path / "champions.jsonl").activate(
+            _record(review_fp=decision.fingerprint)._replace() if False else ChampionRecord(
+                model_version="model-v1",
+                status="PROMOTED",
+                activated_at="2026-09-24T10:00:00",
+                experiment_id="EXP-1",
+                promotion_review_fingerprint=decision.fingerprint,
+            ),
+            promotion_decision=decision,
+        )
+
 def test_activation_requires_promotion_decision(tmp_path):
     with pytest.raises(ValueError, match="promotion decision is required"):
         ChampionStore(tmp_path / "champions.jsonl").activate(_record())
