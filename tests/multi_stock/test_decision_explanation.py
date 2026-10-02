@@ -83,3 +83,28 @@ def test_risk_rejection_remains_authoritative_over_blocked_execution():
         execution={"timestamp": ts, "symbol": "RELIANCE.NS", "status": "BLOCKED", "reason": "risk rejected"},
     )
     assert result.outcome == "RISK_REJECTED"
+
+
+def test_safety_decision_is_explained_from_allowed_state():
+    ts = pd.Timestamp("2026-10-02 10:00:00", tz="Asia/Kolkata")
+    result = build_decision_explanation(
+        ts,
+        "RELIANCE.NS",
+        strategy={"timestamp": ts, "symbol": "RELIANCE.NS", "direction": "LONG", "reason": "candidate"},
+        safety={"timestamp": ts, "symbol": "RELIANCE.NS", "allowed": False, "reason": "Live execution locked."},
+    )
+    assert result.outcome == "SAFETY_BLOCKED"
+    assert result.items[-1].status == "BLOCKED"
+
+
+def test_execution_result_snapshot_is_explained_without_inference():
+    ts = pd.Timestamp("2026-10-02 10:00:00", tz="Asia/Kolkata")
+    snapshot = {"updated_at": ts, "status": "FILLED", "reason": "broker fill observed"}
+    result = build_decision_explanation(
+        ts,
+        "RELIANCE.NS",
+        strategy={"timestamp": ts, "symbol": "RELIANCE.NS", "direction": "LONG", "reason": "candidate"},
+        execution={"snapshot": snapshot, "symbol": "RELIANCE.NS"},
+    )
+    assert result.outcome == "EXECUTION_FILLED"
+    assert result.items[-1].status == "FILLED"
