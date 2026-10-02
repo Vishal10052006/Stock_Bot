@@ -74,7 +74,7 @@ def test_review_requires_champion_to_match_candidate_parent() -> None:
 
 
 def test_complete_evidence_is_eligible_but_not_promoted() -> None:
-    candidate = _candidate()
+    candidate = replace(_candidate(), lifecycle=CandidateLifecycle.PROMOTION_REVIEW)
     decision = PromotionController().review(
         champion_version="model-v1",
         challenger=candidate,
@@ -94,7 +94,7 @@ def test_missing_stage_blocks_promotion_review() -> None:
 
 
 def test_explicit_approval_is_required() -> None:
-    candidate = _candidate()
+    candidate = replace(_candidate(), lifecycle=CandidateLifecycle.PROMOTION_REVIEW)
     review = PromotionController().review(
         champion_version="model-v1",
         challenger=candidate,
@@ -110,7 +110,7 @@ def test_explicit_approval_is_required() -> None:
 
 
 def test_blocked_review_cannot_be_approved() -> None:
-    candidate = _candidate()
+    candidate = replace(_candidate(), lifecycle=CandidateLifecycle.PROMOTION_REVIEW)
     validations = _validations(candidate)
     validations.pop("OOS")
     review = PromotionController().review(
