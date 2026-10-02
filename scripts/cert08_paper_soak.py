@@ -23,7 +23,10 @@ from pathlib import Path
 
 import pandas as pd
 
-from scripts.validate_virtual_session import validate_session
+try:
+    from scripts.validate_virtual_session import validate_session
+except ModuleNotFoundError:
+    from validate_virtual_session import validate_session
 
 
 def _load_ledger(session_dir: Path) -> list[dict[str, object]]:
