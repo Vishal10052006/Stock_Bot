@@ -54,6 +54,8 @@ def _synthetic_terminal_ui() -> Image.Image:
 
     # A terminal prompt-like long line is intentionally shorter than chart
     # grid spacing requirements and should not qualify as plot structure.
+    for y in (120, 260, 400):
+        draw.line((20, y, 700, y), fill=(55, 55, 55), width=1)
     draw.line((20, 486, 300, 486), fill=(90, 90, 90), width=1)
     return image
 
