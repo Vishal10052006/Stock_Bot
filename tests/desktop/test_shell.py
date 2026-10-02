@@ -39,16 +39,18 @@ def test_duplicate_and_unknown_views_fail_closed() -> None:
 
 
 @pytest.mark.parametrize(
-    "view",
+    ("view_id", "title", "order", "message"),
     [
-        DesktopView("", "Home"),
-        DesktopView("home", ""),
-        DesktopView("home", "Home", order=-1),
+        ("", "Home", 0, "view_id must be non-empty"),
+        ("home", "", 0, "title must be non-empty"),
+        ("home", "Home", -1, "order must be non-negative"),
     ],
 )
-def test_view_metadata_is_validated(view: DesktopView) -> None:
-    # Dataclass construction raises before this test body for invalid inputs.
-    assert view.view_id
+def test_view_metadata_is_validated(
+    view_id: str, title: str, order: int, message: str
+) -> None:
+    with pytest.raises(ValueError, match=message):
+        DesktopView(view_id, title, order=order)
 
 
 def test_shell_snapshot_is_deterministic() -> None:
