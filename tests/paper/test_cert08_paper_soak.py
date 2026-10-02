@@ -19,6 +19,7 @@ def _write_session(
     root.mkdir(parents=True, exist_ok=True)
     summary = {
         "session_id": session_id,
+        "account_ledger": str(root / "account_ledger.jsonl"),
         "initial_equity": 100_000.0,
         "final_equity": 100_000.0,
         "realized_pnl": 0.0,
@@ -27,7 +28,6 @@ def _write_session(
         "open_positions": 0,
         "completed_trades": 0,
         "live_broker_orders": broker_orders,
-        "account_ledger": str(root / "account_ledger.jsonl"),
     }
     canonical = json.dumps(summary, sort_keys=True, separators=(",", ":"))
     import hashlib
