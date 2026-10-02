@@ -25,6 +25,7 @@ import pandas as pd
 from .capture import CaptureSchedule
 from .contracts import ScreenObservation, VisualContext, WindowObservation
 from .observer import ScreenObserver
+from .window_provider import LinuxWindowProvider
 
 
 class WindowProvider(Protocol):
@@ -39,6 +40,7 @@ class ScreenEvent:
     event_type: str
     observed_at: pd.Timestamp
     context: VisualContext
+    target_window: WindowObservation | None = None
 
 
 class ScreenObserverRuntime:
@@ -54,7 +56,7 @@ class ScreenObserverRuntime:
     ) -> None:
         self.observer = observer or ScreenObserver()
         self.schedule = CaptureSchedule(interval)
-        self.window_provider = window_provider or (lambda: ())
+        self.window_provider = window_provider or LinuxWindowProvider()
         self.on_event = on_event
 
         self._stop_event = threading.Event()
@@ -66,6 +68,7 @@ class ScreenObserverRuntime:
         self._latest_context: VisualContext | None = None
         self._last_signature: tuple[object, ...] | None = None
         self._last_error: Exception | None = None
+        self._last_target_signature: tuple[object, ...] | None = None
 
     @property
     def running(self) -> bool:
@@ -133,17 +136,33 @@ class ScreenObserverRuntime:
         context = self.observer.to_visual_context(observation)
         signature = self._context_signature(context)
 
+        target = observation.target_window
+        target_signature = self._target_signature(target)
+
         with self._lock:
             self._latest_observation = observation
             self._latest_context = context
             self._last_error = None
             previous_signature = self._last_signature
+            previous_target_signature = self._last_target_signature
             self._last_signature = signature
+            self._last_target_signature = target_signature
+
+        if previous_target_signature is None and target_signature is not None:
+            self._emit("TARGET_WINDOW_FOUND", context, target)
+        elif previous_target_signature is not None and target_signature is None:
+            self._emit("TARGET_WINDOW_LOST", context, None)
+        elif (
+            previous_target_signature is not None
+            and target_signature is not None
+            and target_signature != previous_target_signature
+        ):
+            self._emit("TARGET_WINDOW_CHANGED", context, target)
 
         if previous_signature is None:
-            self._emit("SCREEN_CONNECTED", context)
+            self._emit("SCREEN_CONNECTED", context, target)
         elif signature != previous_signature:
-            self._emit("VISUAL_CONTEXT_CHANGED", context)
+            self._emit("VISUAL_CONTEXT_CHANGED", context, target)
 
         return observation
 
@@ -158,7 +177,12 @@ class ScreenObserverRuntime:
 
             self._stop_event.wait(self.schedule.interval.total_seconds())
 
-    def _emit(self, event_type: str, context: VisualContext) -> None:
+    def _emit(
+        self,
+        event_type: str,
+        context: VisualContext,
+        target_window: WindowObservation | None = None,
+    ) -> None:
         callback = self.on_event
         if callback is not None:
             callback(
@@ -166,8 +190,24 @@ class ScreenObserverRuntime:
                     event_type=event_type,
                     observed_at=context.observed_at,
                     context=context,
+                    target_window=target_window,
                 )
             )
+
+    @staticmethod
+    def _target_signature(
+        target: WindowObservation | None,
+    ) -> tuple[object, ...] | None:
+        if target is None:
+            return None
+        return (
+            target.application,
+            target.title,
+            target.left,
+            target.top,
+            target.width,
+            target.height,
+        )
 
     @staticmethod
     def _context_signature(context: VisualContext) -> tuple[object, ...]:
