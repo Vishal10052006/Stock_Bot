@@ -44,6 +44,11 @@ def test_detect_symbol_is_conservative():
     assert symbol == "RELIANCE.NS"
     assert confidence > 0
 
+def test_detect_symbol_handles_tradingview_exchange_prefix():
+    symbol, confidence = detect_symbol(["NSE:RELIANCE", "5m"])
+    assert symbol == "RELIANCE.NS"
+    assert confidence == 0.80
+
 
 def test_detect_timeframe():
     timeframe, confidence = detect_timeframe(["RELIANCE", "5m"])
