@@ -126,13 +126,16 @@ def test_activation_binds_challenger_and_review_fingerprint(tmp_path):
     decision = _decision("model-v1")
     store.activate(_record("model-v1", review_fp=decision.fingerprint), promotion_decision=decision)
 
-    wrong_challenger = _decision("model-v1")
-    with pytest.raises(ValueError, match="challenger"):
+    mismatched_decision = _decision("model-v1")
+    with pytest.raises(
+        ValueError,
+        match="fingerprint does not match champion record",
+    ):
         store.activate(
             _record(
                 "model-v2",
                 parent="model-v1",
-                review_fp=wrong_challenger.fingerprint,
+                review_fp=mismatched_decision.fingerprint,
             ),
             promotion_decision=_decision("model-v2"),
         )
