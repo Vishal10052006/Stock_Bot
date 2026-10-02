@@ -1,4 +1,4 @@
-# STOCK_BOT Screen Intelligence S00-S13 Status
+# STOCK_BOT Screen Intelligence S00-S14 Status
 
 ## Architecture
 
@@ -28,7 +28,7 @@ size positions, modify risk, or submit broker orders.
 | S10 | Screen/market reconciliation | COMPLETE | REAL smoke |
 | S11 | Screen confidence gate | COMPLETE | REAL smoke |
 | S12 | Screen-aware analysis context | COMPLETE | REAL smoke |
-| S13 | Evidence validation/hardening | COMPLETE | Deterministic unit tests + live smoke |
+| S13 | Evidence validation/hardening | COMPLETE | Deterministic unit tests + live smoke |\n| S14 | Screen/market reconciliation hardening | IN PROGRESS | Implementation complete; local regression pending |
 
 ## S13 validation and hardening
 
@@ -41,7 +41,7 @@ evidence, and OCR status.
 Invalid evidence fails closed. S13 never repairs OCR, invents market values,
 infers OHLC, creates signals, or authorizes orders.
 
-## Safety boundaries
+## S14 reconciliation hardening\n\nS14 hardens the S10 boundary between screen context and authoritative market data. It rejects future observations, stale observations, missing screen identity, invalid market timeframes, and explicit symbol/timeframe mismatches. Timeframe comparison uses the canonical S08 normalization rules. Freshness is inclusive at the configured max-age boundary.\n\n## Safety boundaries
 
 - Market feed remains authoritative for structured market values.
 - Screen observations are contextual evidence.
