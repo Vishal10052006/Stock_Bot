@@ -61,6 +61,7 @@ class ScreenObserverRuntime:
 
         self._stop_event = threading.Event()
         self._pause_event = threading.Event()
+        self._wake_event = threading.Event()
         self._thread: threading.Thread | None = None
         self._lock = threading.Lock()
 
@@ -111,6 +112,7 @@ class ScreenObserverRuntime:
     def stop(self, timeout: float | None = 5.0) -> None:
         """Stop the background loop and wait for clean termination."""
         self._stop_event.set()
+        self._wake_event.set()
         thread = self._thread
         if thread is not None and thread is not threading.current_thread():
             thread.join(timeout=timeout)
@@ -120,10 +122,12 @@ class ScreenObserverRuntime:
     def pause(self) -> None:
         """Pause observation without destroying the latest state."""
         self._pause_event.set()
+        self._wake_event.set()
 
     def resume(self) -> None:
         """Resume observation."""
         self._pause_event.clear()
+        self._wake_event.set()
 
     def observe_once(self) -> ScreenObservation:
         """Capture and interpret the screen exactly once."""
@@ -175,11 +179,8 @@ class ScreenObserverRuntime:
                     with self._lock:
                         self._last_error = exc
 
-            self._stop_event.wait(self.schedule.interval.total_seconds())
-            # The loop is intentionally event-driven for stop, while pause is
-            # checked at the next scheduler boundary. A capture already in
-            # progress is allowed to finish; no second capture is started once
-            # pause is observed.
+            self._wake_event.wait(self.schedule.interval.total_seconds())
+            self._wake_event.clear()
 
     def _emit(
         self,
