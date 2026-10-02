@@ -110,11 +110,13 @@ def test_cert08_aggregates_multiple_sessions_by_observed_duration(tmp_path):
         first,
         start="2026-10-02T09:15:00+05:30",
         end="2026-10-02T12:15:00+05:30",
+        session_id="TEST-SESSION-1",
     )
     _write_session(
         second,
         start="2026-10-05T09:15:00+05:30",
         end="2026-10-05T12:15:00+05:30",
+        session_id="TEST-SESSION-2",
     )
 
     evidence = build_cert08_evidence(
