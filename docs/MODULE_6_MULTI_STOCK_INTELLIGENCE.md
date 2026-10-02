@@ -2,7 +2,7 @@
 
 ## Status
 
-**M00 Universe Manager + M01 Stock Ranking + M02 Sector Rotation + PIT causal validation implemented.**
+**M00 Universe Manager + M01 Stock Ranking + M02 Sector Rotation + M03 Market Breadth + PIT causal validation implemented.**
 
 Module 6 aggregates validated per-stock AnalysisContext into a single causal
 multi-stock observation and reuses the existing point-in-time Market Bot
@@ -40,3 +40,6 @@ Safety, and Execution remain downstream authorities.
 Focused M00/M01 tests and the full-suite execution remain the final validation gate. The PIT
 integration tests use deterministic in-memory adapters; no external NSE or
 Upstox network call is performed by the test suite.
+
+- M03 descriptive market breadth: advances, declines, unchanged, coverage, breadth ratio, and advance/decline ratio from causal stock returns
+- M03 missing returns are excluded rather than inferred; future/duplicate observations fail closed
