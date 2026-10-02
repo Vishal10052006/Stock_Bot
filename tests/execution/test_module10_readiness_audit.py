@@ -55,7 +55,7 @@ def test_module10_parser_rejects_duplicate_certification(tmp_path: Path):
     ]
     for index in range(1, 13):
         rows.append(f"| CERT-{index:02d} | PASS | example |")
-    rows.insert(3, "| CERT-01 | PASS | duplicate |")
+    rows.insert(2, "| CERT-01 | PASS | duplicate |")
 
     evidence = tmp_path / "evidence.md"
     evidence.write_text("\\n".join(rows), encoding="utf-8")
