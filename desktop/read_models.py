@@ -390,29 +390,93 @@ def build_prediction_panel(prediction: Any = None) -> PredictionPanelState:
 
 
 def build_explanation(decision_chain: Any = None) -> ExplanationState:
+    """Adapt the authoritative Module 7 explanation contract for the desktop."""
     if decision_chain is None:
         return ExplanationState(None, None, "NO_EVIDENCE", (), {})
-    items: list[ExplanationItem] = []
-    layers = (
-        ("market", _get(decision_chain, "analysis")),
-        ("prediction", _get(decision_chain, "prediction")),
-        ("strategy", _get(decision_chain, "strategy")),
-        ("risk", _get(decision_chain, "risk")),
-        ("execution", _get(decision_chain, "execution")),
+
+    from multi_stock.decision_explanation import (
+        DecisionExplanation,
+        build_decision_explanation,
     )
-    for source, component in layers:
-        if component is None:
-            continue
-        state = str(_get(component, "status", _get(component, "direction", _get(component, "predicted_class", "OBSERVED"))))
-        reason = str(_get(component, "reason", _get(component, "primary_reason", _get(component, "message", "Observed state"))))
-        items.append(ExplanationItem(source, state, reason, _iso(_get(component, "timestamp")), {"provenance": _json(_get(component, "provenance", {}))}))
-    state = items[-1].state if items else "NO_EVIDENCE"
+    from multi_stock.explanation_audit import audit_decision_explanation
+
+    if isinstance(decision_chain, DecisionExplanation):
+        explanation = decision_chain
+    else:
+        components = (
+            "market", "analysis", "prediction", "research", "screen",
+            "strategy", "risk", "safety", "execution",
+        )
+        has_pipeline = any(_get(decision_chain, name) is not None for name in components)
+        if not has_pipeline:
+            return ExplanationState(None, None, "NO_EVIDENCE", (), {})
+
+        timestamp = _get(decision_chain, "timestamp")
+        if timestamp is None:
+            for name in components:
+                candidate = _get(decision_chain, name)
+                timestamp = _get(candidate, "timestamp") if candidate is not None else None
+                if timestamp is not None:
+                    break
+        if timestamp is None:
+            return ExplanationState(None, None, "INVALID", (), {
+                "source": "module7_decision_explanation",
+                "authority": "OBSERVATION_ONLY",
+                "audit_reasons": ("EXPLANATION_TIMESTAMP_MISSING",),
+            })
+
+        symbol = _get(decision_chain, "symbol")
+        if symbol is None:
+            for name in components:
+                candidate = _get(decision_chain, name)
+                symbol = _get(candidate, "symbol") if candidate is not None else None
+                if symbol:
+                    break
+        if not symbol:
+            return ExplanationState(None, None, "INVALID", (), {
+                "source": "module7_decision_explanation",
+                "authority": "OBSERVATION_ONLY",
+                "audit_reasons": ("EXPLANATION_SYMBOL_MISSING",),
+            })
+
+        explanation = build_decision_explanation(
+            timestamp,
+            symbol,
+            market=_get(decision_chain, "market"),
+            analysis=_get(decision_chain, "analysis"),
+            prediction=_get(decision_chain, "prediction"),
+            research=_get(decision_chain, "research"),
+            screen=_get(decision_chain, "screen"),
+            strategy=_get(decision_chain, "strategy"),
+            risk=_get(decision_chain, "risk"),
+            safety=_get(decision_chain, "safety"),
+            execution=_get(decision_chain, "execution"),
+        )
+
+    audit = audit_decision_explanation(explanation, expected_symbol=explanation.symbol)
+    items = tuple(
+        ExplanationItem(
+            source=item.source,
+            state=item.status,
+            reason=item.reason,
+            timestamp=item.timestamp.isoformat(),
+            details={"stage": item.stage},
+        )
+        for item in explanation.items
+    )
+    provenance = {
+        "source": "module7_decision_explanation",
+        "authority": explanation.authority,
+        "audit_valid": audit.valid,
+        "audit_reasons": audit.reasons,
+    }
+    state = explanation.outcome if audit.valid else "INVALID"
     return ExplanationState(
-        timestamp=_iso(_get(decision_chain, "analysis", None) and _get(_get(decision_chain, "analysis"), "timestamp")),
-        symbol=_get(_get(decision_chain, "analysis"), "symbol"),
+        timestamp=explanation.timestamp.isoformat(),
+        symbol=explanation.symbol,
         state=state,
-        items=tuple(items),
-        provenance={"source": "existing_decision_chain", "authority": "OBSERVATION_ONLY"},
+        items=items,
+        provenance=provenance,
     )
 
 
