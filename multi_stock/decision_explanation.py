@@ -35,7 +35,11 @@ class DecisionExplanation:
         symbol = self.symbol.strip().upper()
         if not symbol: raise ValueError("symbol must not be empty")
         if any(item.timestamp > ts for item in self.items): raise ValueError("future explanation evidence rejected")
-        ordered = tuple(sorted(self.items, key=lambda item: (item.timestamp, item.stage, item.source)))
+        stage_order = {"Market": 10, "Analysis": 20, "Prediction": 30, "Research": 35, "Screen": 40, "Strategy": 50, "Risk": 60, "Safety": 70, "Execution": 80}
+        ordered = tuple(sorted(
+            self.items,
+            key=lambda item: (item.timestamp, stage_order.get(item.stage, 999), item.stage, item.source),
+        ))
         object.__setattr__(self, "timestamp", ts)
         object.__setattr__(self, "symbol", symbol)
         object.__setattr__(self, "items", ordered)
