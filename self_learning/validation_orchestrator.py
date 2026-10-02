@@ -98,7 +98,26 @@ class ValidationOrchestrator:
                 normalized[stage] = result
 
         gate = validate_candidate(candidate, normalized, policy=self.policy)
-        stages = tuple(normalized[stage] for stage in self.policy.required_stages if stage in normalized)
+
+        # Validation evidence is immutable input to the gate. Every supplied
+        # stage artifact must be explicitly tied to this candidate's artifact
+        # and evaluation identities; the gate must not accept unrelated proof.
+        for stage, result in normalized.items():
+            artifact_ids = set(result.artifact_fingerprints)
+            if candidate.artifact_fingerprint not in artifact_ids:
+                raise ValueError(
+                    f"{stage} validation evidence does not reference candidate artifact"
+                )
+            if candidate.evaluation_fingerprint not in artifact_ids:
+                raise ValueError(
+                    f"{stage} validation evidence does not reference candidate evaluation"
+                )
+
+        stages = tuple(
+            normalized[stage]
+            for stage in self.policy.required_stages
+            if stage in normalized
+        )
         return ValidationRun(
             candidate_fingerprint=candidate.fingerprint,
             stages=stages,
