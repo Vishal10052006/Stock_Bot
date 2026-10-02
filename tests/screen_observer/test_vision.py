@@ -1,6 +1,3 @@
-from dataclasses import dataclass
-
-import numpy as np
 from PIL import Image, ImageDraw
 
 from screen_observer.vision import (
@@ -10,11 +7,6 @@ from screen_observer.vision import (
     parse_candles,
     recognize_chart,
 )
-
-
-@dataclass
-class FakeImage:
-    size: tuple[int, int]
 
 
 def _synthetic_chart() -> Image.Image:
@@ -66,8 +58,8 @@ def test_detect_indicators():
 
 
 def test_chart_sanity_check():
-    assert recognize_chart(FakeImage((1200, 700)))[0] is True
-    assert recognize_chart(FakeImage((100, 80))) == (False, 0.0)
+    assert recognize_chart(Image.new("RGB", (1200, 700), "white"))[0] is False
+    assert recognize_chart(Image.new("RGB", (100, 80), "white")) == (False, 0.0)
 
 
 def test_chart_recognition_detects_synthetic_plot_structure():
@@ -85,7 +77,7 @@ def test_candle_parser_counts_colored_candidates():
 
 def test_candle_parser_does_not_invent_candles_from_blank_image():
     blank = Image.new("RGB", (900, 500), "white")
-    observation = parse_candles(np.asarray(blank))
+    observation = parse_candles(blank)
     assert observation.bullish == 0
     assert observation.bearish == 0
     assert observation.confidence == 0.0
