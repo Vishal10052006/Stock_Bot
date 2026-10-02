@@ -59,6 +59,24 @@ class ExperimentPreparation:
     definition: ExperimentDefinition
     lineage: ExperimentLineage
 
+    def __post_init__(self) -> None:
+        """Require the frozen definition and lineage to describe one dataset."""
+        if self.definition.dataset_version != self.lineage.dataset.dataset_version:
+            raise ValueError("experiment definition does not match dataset lineage")
+        if self.definition.code_version != self.lineage.code_version:
+            raise ValueError("experiment definition does not match code lineage")
+        if self.definition.period_start != self.lineage.dataset.period_start:
+            raise ValueError("experiment definition period_start does not match dataset lineage")
+        if self.definition.period_end != self.lineage.dataset.period_end:
+            raise ValueError("experiment definition period_end does not match dataset lineage")
+        definition_symbols = tuple(sorted(symbol.strip().upper() for symbol in self.definition.symbols))
+        if definition_symbols != self.lineage.dataset.symbols:
+            raise ValueError("experiment definition symbols do not match dataset lineage")
+        if self.lineage.feature_version != self.lineage.dataset.feature_schema_version:
+            raise ValueError("lineage feature version does not match dataset schema")
+        if self.lineage.label_version != self.lineage.dataset.label_definition_version:
+            raise ValueError("lineage label version does not match dataset definition")
+
 
 class SelfLearningEngine:
     """Evidence-first coordinator for the complete self-learning lifecycle."""
