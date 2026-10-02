@@ -152,56 +152,6 @@ def build_market_analysis(
     )
 
 
-    )
-    features = validate_feature_dataset(features)
-
-    regime_source = features.loc[
-        :,
-        ["timestamp"]
-        + [
-            column
-            for column in (
-                "market_return_3",
-                "market_return_12",
-                "market_volatility_20",
-            )
-            if column in features.columns
-        ],
-    ].copy()
-
-    required_regime = {
-        "timestamp",
-        "market_return_3",
-        "market_return_12",
-        "market_volatility_20",
-    }
-
-    missing_regime = required_regime.difference(regime_source.columns)
-    if missing_regime:
-        raise MarketAnalysisPipelineError(
-            "AB-30 requires market context for Phase 6 regime detection; "
-            f"missing={sorted(missing_regime)}"
-        )
-
-    regime = detect_market_regime(regime_source)
-
-    analysis = build_analysis_context(
-        features,
-        regime_dataset=regime,
-        data_version=data_version,
-        feature_version=feature_version,
-        monitoring=monitoring,
-        research_context=research_context,
-    )
-
-    return MarketAnalysisResult(
-        indicators=indicators,
-        features=features,
-        regime=regime,
-        analysis=analysis,
-    )
-
-
 def build_market_analysis_and_prediction(
     candles: pd.DataFrame,
     *,
@@ -228,7 +178,6 @@ def build_market_analysis_and_prediction(
         data_version=data_version,
         feature_version=feature_version,
         monitoring=monitoring,
-        research_context=research_context,
     )
     prediction = predict_from_analysis(
         result.analysis,
