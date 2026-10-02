@@ -66,11 +66,35 @@ def _item(stage: str, obj: Any, timestamp: pd.Timestamp, source: str) -> Decisio
         status = _enum_value(_field(nested, "status", None)) or "OBSERVED"
     else:
         status = _field(obj, "status", _field(obj, "direction", "OBSERVED"))
-    reason = _field(
-        obj,
-        "reason",
-        _field(obj, "rationale", _field(nested, "reason", "")),
-    )
+
+    if stage == "Strategy":
+        primary = _enum_value(_field(obj, "primary_reason", None))
+        secondary = tuple(
+            value for value in (
+                _enum_value(reason) for reason in _field(obj, "secondary_reasons", ())
+            )
+            if value
+        )
+        rationale = _field(obj, "rationale", "")
+        if primary:
+            reason = primary
+            if secondary:
+                reason = f"{reason}; secondary={','.join(secondary)}"
+        else:
+            reason = rationale
+    elif stage == "Safety":
+        reason = _field(obj, "reason", "")
+        block = _enum_value(_field(obj, "block", None))
+        if block and block != "NONE" and block not in str(reason).upper():
+            reason = f"{block}: {reason}"
+    elif stage == "Execution":
+        reason = _field(nested, "reason", _field(obj, "reason", _field(obj, "error", "")))
+    else:
+        reason = _field(
+            obj,
+            "reason",
+            _field(obj, "rationale", _field(nested, "reason", "")),
+        )
     if not str(reason).strip():
         return None
     return DecisionExplanationItem(stage, ts, str(status), str(reason), source)
