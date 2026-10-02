@@ -102,8 +102,18 @@ def _item(stage: str, obj: Any, timestamp: pd.Timestamp, source: str) -> Decisio
             "reason",
             _field(obj, "rationale", _field(nested, "reason", "")),
         )
+    # Strategy direction itself is authoritative evidence when no explicit
+    # reason/rationale field is present. Keep the evidence item so the audit
+    # layer can validate outcome consistency without inventing a cause.
     if not str(reason).strip():
-        return None
+        if stage == "Strategy":
+            reason = status
+        elif stage == "Safety" and status in {"ALLOWED", "BLOCKED"}:
+            reason = status
+        elif stage == "Execution" and status != "OBSERVED":
+            reason = status
+        else:
+            return None
     return DecisionExplanationItem(stage, ts, str(status), str(reason), source)
 
 def _enum_value(value: Any) -> str | None:
