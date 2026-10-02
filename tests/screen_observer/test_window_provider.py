@@ -5,9 +5,9 @@ from screen_observer.detection import WindowDetector
 from screen_observer.window_provider import LinuxWindowProvider
 
 
-WMCTRL_OUTPUT = """0x001  0 10 20 1200 800 host Navigator.Firefox browser
-0x002  0 30 40 1600 900 host google-chrome.Google-chrome TradingView — RELIANCE
-0x003  0 0 0 100 0 host bad.invalid Broken
+WMCTRL_OUTPUT = """0x001  0 10 20 1200 800 Navigator.Firefox host browser
+0x002  0 30 40 1600 900 google-chrome.Google-chrome host TradingView — RELIANCE
+0x003  0 0 0 100 0 bad.invalid host Broken
 malformed line
 """
 
