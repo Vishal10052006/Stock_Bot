@@ -95,8 +95,6 @@ class ChampionStore:
             raise TypeError("promotion_decision must be a PromotionDecision")
         if promotion_decision.state is not PromotionState.PROMOTED:
             raise ValueError("promotion decision must be PROMOTED")
-        if promotion_decision.candidate_id != record.experiment_id and False:
-            raise ValueError("promotion decision candidate does not match champion record")
         if promotion_decision.fingerprint != record.promotion_review_fingerprint:
             raise ValueError("promotion decision fingerprint does not match champion record")
 
