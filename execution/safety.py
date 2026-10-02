@@ -73,3 +73,12 @@ class IndependentSafetyGate:
             )
 
         return SafetyDecision(True, SafetyBlock.NONE, "Independent safety checks passed.")
+
+
+def validate_live_lock() -> bool:
+    """Return True only while live broker execution is independently locked."""
+    decision = IndependentSafetyGate().evaluate(SafetyState(live_execution_enabled=False))
+    return (not decision.allowed) and decision.block is SafetyBlock.LIVE_LOCKED
+
+
+__all__ = ["SafetyBlock", "SafetyState", "SafetyDecision", "IndependentSafetyGate", "validate_live_lock"]

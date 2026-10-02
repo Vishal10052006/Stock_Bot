@@ -25,6 +25,7 @@ from market.data.metrics import DataQualityMetrics
 from market.data.realtime_pipeline import RealtimeMarketDataPipeline
 from market.data.validation import MarketEventValidator
 from ml.prediction.artifacts import load_phase9_logistic_bundle
+from multi_stock.scanner import StockScannerStore
 from trading.paper.canonical_live_orchestrator import (
     CanonicalLivePaperConfig,
     CanonicalLivePaperOrchestrator,
@@ -112,6 +113,7 @@ class LiveMarketPaperConfig:
     session_id: str = "VIRTUAL-INTRADAY-001"
     output_dir: Path = Path("paper/virtual_sessions")
     max_candles: int | None = None
+    operator_snapshot_path: Path | None = None
 
     def __post_init__(self) -> None:
         if not self.symbol.strip():
@@ -246,7 +248,19 @@ def build_live_market_paper_session(
         )
     )
 
+    scanner_store = StockScannerStore()
+    operator_snapshot_path = (
+        config.operator_snapshot_path
+        or config.output_dir / config.session_id / "operator_snapshot.json"
+    )
+    scanner_store.write_json(operator_snapshot_path)
+
+    def observe_decision(decision, candle):
+        scanner_store.observe(decision, price=float(candle.close))
+        scanner_store.write_json(operator_snapshot_path)
+
     orchestrator = CanonicalLivePaperOrchestrator(
+        decision_observer=observe_decision,
         market_data=pipeline,
         market_bot=market_bot,
         model=model,

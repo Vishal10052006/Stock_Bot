@@ -16,13 +16,49 @@
     "performance.max_drawdown": 0
   },
   "health": [
-    {"component":"DATA","status":"HEALTHY","message":"freshness within SLA"},
-    {"component":"FEATURES","status":"HEALTHY","message":"decision-time only"},
-    {"component":"CAUSALITY","status":"HEALTHY","message":"future ticks: 0"},
-    {"component":"RISK","status":"HEALTHY","message":"hard limits enforced"},
-    {"component":"EXECUTION","status":"LOCKED","message":"paper simulation"},
-    {"component":"MODEL","status":"OBSERVING","message":"research gate"}
+    {
+      "component": "DATA",
+      "status": "HEALTHY",
+      "message": "freshness within SLA"
+    },
+    {
+      "component": "FEATURES",
+      "status": "HEALTHY",
+      "message": "decision-time only"
+    },
+    {
+      "component": "CAUSALITY",
+      "status": "HEALTHY",
+      "message": "future ticks: 0"
+    },
+    {
+      "component": "RISK",
+      "status": "HEALTHY",
+      "message": "hard limits enforced"
+    },
+    {
+      "component": "EXECUTION",
+      "status": "LOCKED",
+      "message": "paper simulation"
+    },
+    {
+      "component": "MODEL",
+      "status": "OBSERVING",
+      "message": "research gate"
+    }
   ],
   "alerts": [],
-  "alert_summary": {"total":0,"by_severity":{},"by_code":{}}
+  "alert_summary": {
+    "total": 0,
+    "by_severity": {},
+    "by_code": {}
+  },
+  "views": {
+    "scanner": {
+      "status": "NO_DATA",
+      "timestamp": null,
+      "rows": [],
+      "authority": "OBSERVATION_ONLY"
+    }
+  }
 }

@@ -77,3 +77,20 @@ Therefore provider evidence remains PARTIAL and the live execution lock remains 
 Missing or non-PASS evidence must not be converted to PASS. Provider evidence must be explicitly observed. The certification matrix and production readiness gate remain fail-closed.
 
 **Live execution remains LOCKED.**
+
+
+
+## Operator implementation additions
+
+The current development branch adds:
+
+- observation-only Stock Scanner contract in `multi_stock/scanner.py`;
+- atomic operator snapshot at `paper/virtual_sessions/<session-id>/operator_snapshot.json`;
+- localhost-only read-only dashboard server in `scripts/serve_operator_dashboard.py`;
+- Stock Scanner view in the desktop and Ops Center dashboards;
+- multi-session CERT-08 campaign aggregation with optional cadence-gap validation;
+- regression coverage for scanner, dashboard server, decision observation, and
+  CERT-08 campaign behavior.
+
+These additions do not change Strategy, Risk, Safety, broker authorization, or
+live execution state.

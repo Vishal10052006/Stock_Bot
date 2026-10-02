@@ -183,6 +183,27 @@ def test_future_market_context_is_rejected():
         orchestrator.process_candle(candle)
 
 
+def test_decision_observer_receives_canonical_decision():
+    captured = {}
+
+    def observer(decision, candle):
+        captured["decision"] = decision
+        captured["candle"] = candle
+
+    bars = _candles()
+    history = CausalCandleHistory("RELIANCE")
+    for bar in bars[:-1]:
+        history.append(bar)
+
+    orchestrator = _orchestrator(candle_history=history)
+    object.__setattr__(orchestrator, "decision_observer", observer)
+    orchestrator.process_candle(bars[-1])
+
+    assert captured["decision"].prediction.symbol == "RELIANCE"
+    assert captured["decision"].strategy.symbol == "RELIANCE"
+    assert captured["candle"] == bars[-1]
+
+
 def test_downstream_callback_receives_canonical_prediction_and_result():
     captured = {}
 

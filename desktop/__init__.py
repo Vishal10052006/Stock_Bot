@@ -15,6 +15,7 @@ from .read_models import (
     ResearchPanelState,
     RiskPanelState,
     ScreenObserverPanelState,
+    StockScannerPanelState,
     build_explanation,
     build_market_dashboard,
     build_model_telemetry,
@@ -23,6 +24,7 @@ from .read_models import (
     build_research_panel,
     build_risk_panel,
     build_screen_panel,
+    build_stock_scanner,
     build_timeline,
     start_replay,
 )
@@ -33,8 +35,8 @@ __all__ = [
     "MarketDashboardState", "PredictionPanelState", "ExplanationItem",
     "ExplanationState", "ResearchEvidenceItem", "ResearchPanelState",
     "ScreenObserverPanelState", "DecisionTimelineEvent", "DecisionTimelineState",
-    "ModelTelemetryState", "RiskPanelState", "PaperAccountState", "ReplayState",
+    "ModelTelemetryState", "RiskPanelState", "PaperAccountState", "ReplayState", "StockScannerPanelState",
     "build_market_dashboard", "build_prediction_panel", "build_explanation",
     "build_research_panel", "build_screen_panel", "build_timeline",
-    "build_model_telemetry", "build_risk_panel", "build_paper_account", "start_replay",
+    "build_model_telemetry", "build_risk_panel", "build_stock_scanner", "build_paper_account", "start_replay",
 ]

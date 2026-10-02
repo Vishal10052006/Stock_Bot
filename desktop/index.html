@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>STOCK_BOT Desktop</title>
+<title>STOCK_BOT Desktop — Stock Scanner</title>
 <style>
 :root{font-family:Inter,system-ui,sans-serif;background:#0b1020;color:#e7ecf7}
 *{box-sizing:border-box}body{margin:0}header{padding:18px 22px;border-bottom:1px solid #26304a;display:flex;justify-content:space-between;gap:16px}
@@ -18,8 +18,9 @@ main{padding:20px;overflow:auto}.view{display:none}.view.active{display:block}.g
 <div class="layout"><nav id="nav"></nav><main id="main"></main></div>
 <script>
 const DEFAULT={
- navigation:{active_view:"market"},
+ navigation:{active_view:"scanner"},
  views:{
+  scanner:{status:"NO_DATA",timestamp:null,rows:[],authority:"OBSERVATION_ONLY"},
   market:{symbol:null,session_state:"UNKNOWN",timeframe:null,price:null,freshness_seconds:null,monitoring_readiness:"UNKNOWN",paper_state:"IDLE",live_execution_state:"LOCKED"},
   prediction:{status:"MISSING"},
   explanation:{state:"NO_EVIDENCE",items:[]},
@@ -33,14 +34,37 @@ const DEFAULT={
  }
 };
 const snapshot=window.STOCK_BOT_SNAPSHOT||DEFAULT;
-const names=[["market","Market Dashboard"],["prediction","Prediction"],["explanation","Explanation"],["research","Research / News"],["screen","Screen Observer"],["timeline","Decision Timeline"],["telemetry","Model Telemetry"],["risk","Risk"],["paper","Paper Account"],["replay","Session Replay"]];
-let active="market";
+const names=[["scanner","Stock Scanner"],["market","Market Dashboard"],["prediction","Prediction"],["explanation","Explanation"],["research","Research / News"],["screen","Screen Observer"],["timeline","Decision Timeline"],["telemetry","Model Telemetry"],["risk","Risk"],["paper","Paper Account"],["replay","Session Replay"]];
+let active="scanner";
 const nav=document.getElementById("nav"),main=document.getElementById("main");
 function esc(v){return String(v??"—").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c]))}
 function card(label,value,cls=""){return '<div class="card"><div class="label">'+esc(label)+'</div><div class="value '+cls+'">'+esc(value)+'</div></div>'}
 function rows(obj){return Object.entries(obj||{}).map(([k,v])=>'<div class="row"><span class="muted">'+esc(k)+'</span><span>'+esc(typeof v==="object"?JSON.stringify(v):v)+'</span></div>').join("")}
+function renderScanner(v){
+ const rows=Array.isArray(v.rows)?v.rows:[];
+ const meta='<div class="grid">'+
+   card("Status",v.status,v.status==="READY"?"ok":"warn")+
+   card("Decision time",v.timestamp||"—")+
+   card("Symbols",rows.length)+
+   card("Authority",v.authority||"OBSERVATION_ONLY","ok")+
+   '</div>';
+ if(!rows.length){
+   return meta+'<div class="card"><p class="muted">No scanner observations yet. The real-market paper runtime will populate this view after the first completed candle.</p></div>';
+ }
+ const body=rows.map(r=>'<div class="card">'+
+   '<div class="row"><span><b>'+esc(r.symbol)+'</b><br><span class="muted">'+esc(r.regime||"—")+'</span></span>'+
+   '<span><b>↑ '+esc((Number(r.long_success||0)*100).toFixed(1))+'%</b> / ↓ '+esc((Number(r.short_success||0)*100).toFixed(1))+'% / ○ '+esc((Number(r.no_edge||0)*100).toFixed(1))+'%</span></div>'+
+   '<div class="row"><span class="muted">PREDICTED</span><span>'+esc(r.predicted_class)+'</span></div>'+
+   '<div class="row"><span class="muted">STRATEGY</span><span>'+esc(r.strategy)+' — '+esc(r.strategy_reason)+'</span></div>'+
+   '<div class="row"><span class="muted">RISK</span><span>'+esc(r.risk_status)+' — '+esc(r.risk_reason)+'</span></div>'+
+   '<div class="row"><span class="muted">PAPER ORDER</span><span>'+esc(r.paper_order_status||"NONE")+'</span></div>'+
+   '<div class="row"><span class="muted">PRICE / ENTRY / STOP / TARGET</span><span>'+esc(r.price==null?"—":r.price)+' / '+esc(r.entry_reference==null?"—":r.entry_reference)+' / '+esc(r.stop_reference==null?"—":r.stop_reference)+' / '+esc(r.target_reference==null?"—":r.target_reference)+'</span></div>'+
+   '</div>').join("");
+ return meta+body;
+}
 function render(id){
  const v=(snapshot.views||{})[id]||{};
+ if(id==="scanner") return renderScanner(v);
  if(id==="market") return '<div class="grid">'+card("Symbol",v.symbol)+card("Price",v.price)+card("Timeframe",v.timeframe)+card("Session",v.session_state)+card("Freshness (s)",v.freshness_seconds)+card("Monitoring",v.monitoring_readiness)+card("Paper",v.paper_state)+card("Live",v.live_execution_state,"ok")+'</div>';
  if(id==="prediction") return '<div class="grid">'+card("Status",v.status,v.status==="VALID"?"ok":"warn")+card("LONG_SUCCESS",v.long_success)+card("SHORT_SUCCESS",v.short_success)+card("NO_EDGE",v.no_edge)+card("Predicted class",v.predicted_class)+card("Model",v.model_version)+'</div><div class="card"><h2>Provenance</h2><pre>'+esc(JSON.stringify(v.provenance||{},null,2))+'</pre></div>';
  if(id==="explanation") return '<div class="card"><h2>'+esc(v.state)+'</h2>'+((v.items||[]).map(x=>'<div class="row"><span>'+esc(x.source)+'</span><span>'+esc(x.reason)+'</span></div>').join("")||'<p class="muted">No upstream evidence.</p>')+'</div>';
