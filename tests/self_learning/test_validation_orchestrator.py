@@ -150,3 +150,32 @@ def test_collect_requires_validating_lifecycle() -> None:
 
     with pytest.raises(ValueError, match="VALIDATING"):
         controller.collect(_candidate(), _all_stages())
+
+
+def test_collect_rejects_stage_without_candidate_artifact_identity():
+    controller = ValidationOrchestrator()
+    candidate = controller.start(_candidate(), at="2026-09-24T11:00:00+05:30")
+    validations = _all_stages()
+    validations["OOS"] = _stage(
+        "OOS",
+        fingerprint="e" * 64,
+    )
+
+    with pytest.raises(ValueError, match="candidate artifact"):
+        controller.collect(candidate, validations)
+
+
+def test_collect_rejects_stage_without_candidate_evaluation_identity():
+    controller = ValidationOrchestrator()
+    candidate = controller.start(_candidate(), at="2026-09-24T11:00:00+05:30")
+    validations = _all_stages()
+    validations["PAPER"] = ValidationSummary(
+        stage="PAPER",
+        valid=True,
+        observations=10,
+        metrics={"score": 0.5},
+        artifact_fingerprints=(candidate.artifact_fingerprint, "e" * 64),
+    )
+
+    with pytest.raises(ValueError, match="candidate evaluation"):
+        controller.collect(candidate, validations)
