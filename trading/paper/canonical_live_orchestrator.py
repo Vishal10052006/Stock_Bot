@@ -40,7 +40,7 @@ class CanonicalLivePaperConfig:
     data_version: str = "upstox-live-v1"
     feature_version: str = "v1.0"
     target_version: str = "phase7-decision-label-v1"
-    calibration_version: str | None = "isotonic-v1"
+    calibration_version: str | None = None
     target_trades: int = 10
 
     def __post_init__(self) -> None:
