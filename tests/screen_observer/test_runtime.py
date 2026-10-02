@@ -102,6 +102,41 @@ def test_runtime_observe_once_emits_initial_and_changed_events():
     assert runtime.latest_visual_context.symbol == "TCS.NS"
 
 
+def test_runtime_pause_waits_for_in_flight_observation():
+    started = threading.Event()
+    release = threading.Event()
+    
+    class BlockingObserver(FakeObserver):
+        def observe(self, **kwargs):
+            started.set()
+            release.wait(timeout=1.0)
+            return super().observe(**kwargs)
+
+    runtime = ScreenObserverRuntime(
+        observer=BlockingObserver(),
+        interval=timedelta(seconds=1),
+    )
+    runtime.start()
+    assert started.wait(timeout=1.0)
+
+    paused = threading.Event()
+
+    def do_pause():
+        runtime.pause()
+        paused.set()
+
+    pause_thread = threading.Thread(target=do_pause)
+    pause_thread.start()
+    time.sleep(0.02)
+    assert paused.is_set() is False
+
+    release.set()
+    pause_thread.join(timeout=1.0)
+    runtime.stop()
+
+    assert paused.is_set() is True
+
+
 def test_runtime_pause_resume_and_stop():
     calls = []
     observer = FakeObserver()
