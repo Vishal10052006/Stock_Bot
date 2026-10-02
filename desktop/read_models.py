@@ -259,6 +259,19 @@ class PaperAccountState:
 
 
 @dataclass(frozen=True, slots=True)
+class StockScannerPanelState:
+    """Read-only desktop state for the operator stock scanner."""
+
+    timestamp: str | None
+    status: str
+    rows: tuple[Mapping[str, Any], ...]
+    authority: str = "OBSERVATION_ONLY"
+
+    def as_dict(self) -> dict[str, Any]:
+        return _json(asdict(self))
+
+
+@dataclass(frozen=True, slots=True)
 class ReplayState:
     session_id: str | None
     events: tuple[DecisionTimelineEvent, ...]
@@ -534,6 +547,35 @@ def build_screen_panel(observation: Any = None, *, reconciliation: Any = None, v
     )
 
 
+def build_stock_scanner(scanner: Any = None) -> StockScannerPanelState:
+    """Adapt the authoritative scanner snapshot for the desktop UI."""
+    if scanner is None:
+        return StockScannerPanelState(None, "NO_DATA", ())
+    payload = scanner.as_dict() if hasattr(scanner, "as_dict") else _json(scanner)
+    if not isinstance(payload, Mapping):
+        raise ValueError("stock scanner payload must be a mapping")
+    rows = payload.get("rows", ())
+    if not isinstance(rows, (list, tuple)):
+        raise ValueError("stock scanner rows must be a sequence")
+    normalized = []
+    for row in rows:
+        if not isinstance(row, Mapping):
+            raise ValueError("stock scanner rows must be mappings")
+        normalized.append(dict(_json(row)))
+    authority = str(payload.get("authority", "OBSERVATION_ONLY"))
+    if authority != "OBSERVATION_ONLY":
+        raise ValueError("stock scanner authority must remain observational")
+    status = str(payload.get("status", "NO_DATA"))
+    if status not in {"READY", "NO_DATA", "INVALID"}:
+        raise ValueError("invalid stock scanner status")
+    return StockScannerPanelState(
+        timestamp=_iso(payload.get("timestamp")),
+        status=status,
+        rows=tuple(normalized),
+        authority=authority,
+    )
+
+
 def build_timeline(events: Iterable[Any] = ()) -> DecisionTimelineState:
     normalized: list[DecisionTimelineEvent] = []
     for index, event in enumerate(events):
@@ -625,10 +667,10 @@ def start_replay(session_id: str | None, events: Sequence[Any]) -> ReplayState:
 
 
 __all__ = [
-    "MarketDashboardState", "PredictionPanelState", "ExplanationItem", "ExplanationState",
+    "MarketDashboardState", "PredictionPanelState", "ExplanationItem", "ExplanationState", "StockScannerPanelState",
     "ResearchEvidenceItem", "ResearchPanelState", "ScreenObserverPanelState",
     "DecisionTimelineEvent", "DecisionTimelineState", "ModelTelemetryState", "RiskPanelState",
     "PaperAccountState", "ReplayState", "build_market_dashboard", "build_prediction_panel",
-    "build_explanation", "build_research_panel", "build_screen_panel", "build_timeline",
+    "build_explanation", "build_research_panel", "build_screen_panel", "build_stock_scanner", "build_timeline",
     "build_model_telemetry", "build_risk_panel", "build_paper_account", "start_replay",
 ]
