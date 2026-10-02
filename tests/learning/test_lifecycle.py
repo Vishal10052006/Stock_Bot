@@ -112,3 +112,52 @@ def test_pointer_drift_is_detected(tmp_path):
 
     with pytest.raises(ValueError, match="pointer does not match history"):
         store.current()
+
+
+def test_history_requires_fingerprint(tmp_path):
+    store = ChampionStore(tmp_path / "champions.jsonl")
+    decision = _decision()
+    store.activate(_record(review_fp=decision.fingerprint), promotion_decision=decision)
+    line = store.history_path.read_text(encoding="utf-8").strip()
+    import json
+    payload = json.loads(line)
+    payload.pop("fingerprint")
+    store.history_path.write_text(json.dumps(payload) + "\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="fingerprint is required"):
+        store.history()
+
+
+def test_history_rejects_tampered_parent_chain(tmp_path):
+    store = ChampionStore(tmp_path / "champions.jsonl")
+    first = _decision("model-v1")
+    store.activate(
+        _record("model-v1", review_fp=first.fingerprint),
+        promotion_decision=first,
+    )
+    second = _decision("model-v2")
+    store.activate(
+        _record("model-v2", parent="model-v1", review_fp=second.fingerprint),
+        promotion_decision=second,
+    )
+
+    import json
+    lines = store.history_path.read_text(encoding="utf-8").splitlines()
+    payload = json.loads(lines[1])
+    payload["parent_model_version"] = "tampered-parent"
+    from learning.self_learning_models import ChampionRecord
+    forged = ChampionRecord(
+        model_version=payload["model_version"],
+        status=payload["status"],
+        activated_at=payload["activated_at"],
+        experiment_id=payload["experiment_id"],
+        promotion_review_fingerprint=payload["promotion_review_fingerprint"],
+        parent_model_version=payload["parent_model_version"],
+        rollback_of=payload["rollback_of"],
+    )
+    payload["fingerprint"] = forged.fingerprint
+    lines[1] = json.dumps(payload)
+    store.history_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="parent mismatch"):
+        store.history()
