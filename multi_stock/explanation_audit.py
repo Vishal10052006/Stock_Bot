@@ -82,7 +82,21 @@ def audit_decision_explanation(
     if states.get("Safety") in {"BLOCKED", "REJECTED"} and explanation.outcome != "SAFETY_BLOCKED":
         reasons.append("EXPLANATION_OUTCOME_SAFETY_MISMATCH")
 
-    if states.get("Execution") == "BLOCKED" and explanation.outcome != "EXECUTION_BLOCKED":
+    execution_state = states.get("Execution")
+    execution_expected = {
+        "BLOCKED": "EXECUTION_BLOCKED",
+        "REJECTED": "EXECUTION_REJECTED",
+        "REJECTED_LOCAL": "EXECUTION_REJECTED",
+        "REJECTED_BROKER": "EXECUTION_REJECTED",
+        "FAILED": "EXECUTION_REJECTED",
+        "FILLED": "EXECUTION_FILLED",
+        "PARTIALLY_FILLED": "EXECUTION_PENDING",
+        "SUBMITTED": "EXECUTION_PENDING",
+        "ACKNOWLEDGED": "EXECUTION_PENDING",
+        "OPEN": "EXECUTION_PENDING",
+        "CANCEL_PENDING": "EXECUTION_PENDING",
+    }.get(execution_state)
+    if execution_expected is not None and explanation.outcome != execution_expected:
         reasons.append("EXPLANATION_OUTCOME_EXECUTION_MISMATCH")
 
     return ExplanationAuditResult(not reasons, tuple(reasons))
