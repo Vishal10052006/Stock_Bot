@@ -8,3 +8,10 @@ PIPELINE
 .env
 data/
 datasets/financial_phrasebank/
+
+# Local runtime / deployment state
+.stock_bot_runtime/
+*.pt
+*.pth
+*.onnx
+*.safetensors
