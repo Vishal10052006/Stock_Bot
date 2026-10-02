@@ -78,3 +78,109 @@ def validate_file(path: str | Path) -> dict[str, Any]:
 
     with Image.open(image_path) as image:
         return validate_image(image, source=str(image_path))
+
+
+# S13 evidence-quality validation
+
+from dataclasses import dataclass
+
+from .contracts import ScreenObservation
+from .timeframe import normalize_timeframe
+
+
+@dataclass(frozen=True, slots=True)
+class ScreenValidationResult:
+    """Deterministic quality result for one screen observation."""
+
+    valid: bool
+    reasons: tuple[str, ...] = ()
+    warnings: tuple[str, ...] = ()
+
+    @property
+    def usable(self) -> bool:
+        return self.valid
+
+
+def validate_screen_observation(
+    observation: ScreenObservation,
+    *,
+    minimum_chart_confidence: float = 0.45,
+    minimum_overall_confidence: float = 0.55,
+    require_chart: bool = True,
+    require_timeframe: bool = False,
+    require_symbol: bool = False,
+) -> ScreenValidationResult:
+    """Validate evidence without correcting or inventing observations."""
+
+    if not 0.0 <= minimum_chart_confidence <= 1.0:
+        raise ValueError("minimum_chart_confidence must be in [0, 1]")
+    if not 0.0 <= minimum_overall_confidence <= 1.0:
+        raise ValueError("minimum_overall_confidence must be in [0, 1]")
+
+    reasons: list[str] = []
+    warnings: list[str] = []
+
+    chart = observation.chart
+    if require_chart and not chart.detected:
+        reasons.append("SCREEN_CHART_NOT_DETECTED")
+    if chart.detected:
+        if chart.width is None or chart.height is None or chart.width <= 0 or chart.height <= 0:
+            reasons.append("SCREEN_CHART_REGION_INVALID")
+        if chart.confidence < minimum_chart_confidence:
+            reasons.append("SCREEN_CHART_CONFIDENCE_LOW")
+
+    confidence = observation.confidence
+    if confidence.overall < minimum_overall_confidence:
+        reasons.append("SCREEN_OVERALL_CONFIDENCE_LOW")
+    if require_chart and confidence.chart < minimum_chart_confidence:
+        reasons.append("SCREEN_CONFIDENCE_CHART_LOW")
+
+    if require_symbol and not observation.symbol:
+        reasons.append("SCREEN_SYMBOL_MISSING")
+    if observation.symbol is not None:
+        symbol = observation.symbol.strip().upper()
+        if not symbol or len(symbol) > 24:
+            reasons.append("SCREEN_SYMBOL_INVALID")
+
+    if require_timeframe and not observation.timeframe:
+        reasons.append("SCREEN_TIMEFRAME_MISSING")
+    if observation.timeframe is not None:
+        normalized = normalize_timeframe(observation.timeframe)
+        if normalized is None:
+            reasons.append("SCREEN_TIMEFRAME_INVALID")
+        elif observation.timeframe != normalized:
+            warnings.append("SCREEN_TIMEFRAME_NOT_CANONICAL")
+
+    candle = observation.candles
+    total = candle.bullish + candle.bearish
+    if candle.bullish < 0 or candle.bearish < 0:
+        reasons.append("SCREEN_CANDLE_COUNT_INVALID")
+
+    if chart.detected and chart.width is not None and total > max(1, chart.width // 2):
+        reasons.append("SCREEN_CANDLE_DENSITY_IMPLAUSIBLE")
+
+    if observation.candle_evidence is not None:
+        evidence = observation.candle_evidence
+        if evidence.total != total:
+            reasons.append("SCREEN_CANDLE_EVIDENCE_INCONSISTENT")
+
+    if observation.timeframe_evidence is not None:
+        evidence = observation.timeframe_evidence
+        normalized = normalize_timeframe(evidence.value)
+        if normalized is None:
+            reasons.append("SCREEN_TIMEFRAME_EVIDENCE_INVALID")
+        elif normalized != evidence.value:
+            reasons.append("SCREEN_TIMEFRAME_EVIDENCE_NONCANONICAL")
+
+    if observation.ocr_result is not None:
+        status = observation.ocr_result.status
+        if status not in {"ok", "unavailable", "failed"}:
+            reasons.append("SCREEN_OCR_STATUS_INVALID")
+        if status in {"failed", "unavailable"}:
+            warnings.append(f"SCREEN_OCR_{status.upper()}")
+
+    return ScreenValidationResult(
+        valid=not reasons,
+        reasons=tuple(reasons),
+        warnings=tuple(warnings),
+    )
