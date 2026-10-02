@@ -138,7 +138,11 @@ def build_decision_explanation(
         )
         if component_ts is not None and pd.Timestamp(component_ts) > timestamp:
             raise ValueError("future explanation evidence rejected")
-        component_symbol = _field(component, "symbol", None)
+        component_symbol = _field(
+            component,
+            "symbol",
+            _field(_field(component, "request", None), "symbol", None),
+        )
         if component_symbol is not None and str(component_symbol).strip().upper() != str(symbol).strip().upper():
             raise ValueError("explanation symbol mismatch")
     strategy_direction = _enum_value(_field(strategy, "direction", None))
