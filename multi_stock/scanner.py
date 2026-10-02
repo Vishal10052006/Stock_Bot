@@ -233,13 +233,19 @@ class StockScannerStore:
             raise ValueError("scanner decision timestamp moved backwards")
 
         long_p, short_p, no_edge = _probabilities(prediction)
-        predicted_class = str(_get(prediction, "predicted_class"))
+        predicted_class = str(_get(prediction, "predicted_class", "")).strip()
         if predicted_class not in {
             "LONG_SUCCESS",
             "SHORT_SUCCESS",
             "NO_EDGE",
         }:
-            raise ValueError("prediction predicted_class is invalid")
+            predicted_class = (
+                "LONG_SUCCESS"
+                if long_p >= max(short_p, no_edge)
+                else "SHORT_SUCCESS"
+                if short_p >= no_edge
+                else "NO_EDGE"
+            )
 
         direction = _get(strategy, "direction", "NO_TRADE")
         strategy_value = str(getattr(direction, "value", direction))
