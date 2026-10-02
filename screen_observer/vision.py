@@ -131,12 +131,12 @@ def _as_rgb_array(image: Any):
 
 
 def recognize_chart(image: Any) -> tuple[bool, float]:
-    """S05 chart recognition using long plot/grid structure.
+    """S05 chart recognition using repeated long structures and candle geometry.
 
-    Text-heavy desktop UI can contain many short horizontal/vertical edges.
-    A chart is expected to contain repeated, long plot/grid structures, so
-    detection requires line segments that span a meaningful fraction of the
-    image rather than merely counting arbitrary Hough segments.
+    The detector intentionally rejects text-heavy desktop UI. It looks for
+    repeated long horizontal plot/grid structures and, when present, repeated
+    tall colored candle-like structures. It does not assume that either
+    grid orientation is always enabled.
     """
     try:
         import cv2
@@ -149,74 +149,59 @@ def recognize_chart(image: Any) -> tuple[bool, float]:
 
         gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
         edges = cv2.Canny(gray, 50, 150)
-
         edge_density = float(np.count_nonzero(edges)) / float(edges.size)
 
-        horizontal = cv2.HoughLinesP(
-            edges,
-            1,
-            np.pi / 180,
-            threshold=max(30, width // 10),
-            minLineLength=max(60, int(width * 0.25)),
-            maxLineGap=max(12, width // 80),
+        # Detect long, continuous horizontal structures. Morphological opening
+        # removes short text strokes while preserving chart grid/plot lines.
+        horizontal_kernel = cv2.getStructuringElement(
+            cv2.MORPH_RECT, (max(25, int(width * 0.25)), 1)
         )
-        vertical = cv2.HoughLinesP(
-            edges,
-            1,
-            np.pi / 180,
-            threshold=max(25, height // 10),
-            minLineLength=max(50, int(height * 0.25)),
-            maxLineGap=max(12, height // 80),
+        horizontal_lines = cv2.morphologyEx(
+            edges, cv2.MORPH_OPEN, horizontal_kernel
+        )
+        horizontal_rows = np.flatnonzero(
+            np.count_nonzero(horizontal_lines, axis=1) > 0
         )
 
-        def long_line_counts(lines):
-            horizontal_count = 0
-            vertical_count = 0
-            horizontal_positions: set[int] = set()
-            vertical_positions: set[int] = set()
+        def collapse_positions(values: np.ndarray, gap: int = 4) -> int:
+            groups = 0
+            previous: int | None = None
+            for value in values:
+                value = int(value)
+                if previous is None or value - previous > gap:
+                    groups += 1
+                previous = value
+            return groups
 
-            if lines is None:
-                return 0, 0, horizontal_positions, vertical_positions
+        repeated_horizontal = collapse_positions(horizontal_rows)
 
-            for x1, y1, x2, y2 in lines[:, 0]:
-                dx = int(x2) - int(x1)
-                dy = int(y2) - int(y1)
-                length = float((dx * dx + dy * dy) ** 0.5)
-                if length <= 0:
-                    continue
+        # Chart candles are typically taller than terminal/editor glyphs.
+        # Require several colored vertical structures before using this as
+        # chart evidence.
+        red_mask, green_mask = _color_masks(rgb)
+        colored = cv2.bitwise_or(red_mask, green_mask)
+        vertical_kernel = cv2.getStructuringElement(
+            cv2.MORPH_RECT, (3, max(9, min(31, height // 20)))
+        )
+        tall_colored = cv2.morphologyEx(
+            colored, cv2.MORPH_OPEN, vertical_kernel
+        )
+        contours, _ = cv2.findContours(
+            tall_colored, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
+        )
 
-                angle = abs(float(np.degrees(np.arctan2(dy, dx))))
-                if angle <= 3.0 or angle >= 177.0:
-                    horizontal_count += 1
-                    horizontal_positions.add(int(round((int(y1) + int(y2)) / 2)))
-                elif 87.0 <= angle <= 93.0:
-                    vertical_count += 1
-                    vertical_positions.add(int(round((int(x1) + int(x2)) / 2)))
-
-            return (
-                horizontal_count,
-                vertical_count,
-                horizontal_positions,
-                vertical_positions,
-            )
-
-        (
-            horizontal_count,
-            vertical_count,
-            horizontal_positions,
-            vertical_positions,
-        ) = long_line_counts(horizontal)
-
-        # HoughLinesP above is run separately for horizontal and vertical
-        # structure; recompute the vertical statistics from the vertical set.
-        _, vertical_count, _, vertical_positions = long_line_counts(vertical)
-
-        repeated_horizontal = len(horizontal_positions)
-        repeated_vertical = len(vertical_positions)
+        tall_colored_count = 0
+        for contour in contours:
+            x, y, contour_width, contour_height = cv2.boundingRect(contour)
+            if (
+                3 <= contour_width <= 32
+                and contour_height >= max(18, height // 25)
+            ):
+                tall_colored_count += 1
 
         horizontal_score = min(1.0, repeated_horizontal / 5.0)
-        vertical_score = min(1.0, repeated_vertical / 5.0)
-        structure_score = max(horizontal_score, vertical_score)
+        candle_structure_score = min(1.0, tall_colored_count / 6.0)
+        structure_score = max(horizontal_score, candle_structure_score)
 
         density_score = min(1.0, edge_density / 0.12)
         score = round(0.65 * structure_score + 0.35 * density_score, 4)
@@ -225,7 +210,7 @@ def recognize_chart(image: Any) -> tuple[bool, float]:
             0.008 <= edge_density <= 0.22
             and (
                 repeated_horizontal >= 3
-                or repeated_vertical >= 3
+                or tall_colored_count >= 6
             )
             and score >= 0.45
         )
