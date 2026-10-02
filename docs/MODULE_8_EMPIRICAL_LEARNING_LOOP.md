@@ -2,7 +2,7 @@
 
 ## Status
 
-**IMPLEMENTED — controlled evidence loop**
+**COMPLETE — controlled evidence loop + integrity hardening**
 
 Module 8 composes the existing evidence-driven learning boundaries. It does not
 create a second learning engine.
@@ -69,12 +69,26 @@ evidence remain required before consequential promotion.
 The public `learning` package exports `ExperimentPreparation` together with
 the self-learning orchestration contracts.
 
-## Verification
+## Final implementation state
 
-Targeted Module 8 tests:
+The defined Self-Learning roadmap through **SL-26** is implemented. Subsequent work on this branch is integrity hardening of the completed contracts, not a new numbered SL phase.
 
-`pytest -q tests/learning/test_self_learning_engine.py`
+### Integrity hardening completed after SL-26
 
-Repository regression:
+- Promotion review is bound to the candidate lifecycle and parent champion version.
+- Promotion decisions require distinct champion/challenger versions.
+- Eligible/promoted decisions require validation evidence; blocked and rollback records may remain evidence-free.
+- Candidate promotion decisions are bound to candidate identity, candidate fingerprint, challenger version, and parent champion version.
+- Validation runs require unique stage identities and an explicit `PROMOTION_GATE`.
+- Champion history requires fingerprints on every record and a continuous parent chain.
+- Promoted decision timestamps must be ISO-8601 and timezone-aware.
+- Existing Strategy, Risk, Safety, Execution, and broker authority boundaries remain unchanged.
 
-`pytest -q`
+### Verification
+
+The repository was verified after the previous hardening checkpoint with:
+
+- targeted Module 8 promotion/lifecycle/validation tests;
+- full repository regression: **2362 passed, 2 deselected, 12 warnings**.
+
+After the final timestamp-contract change, rerun the targeted and full commands before treating the latest commit as locally verified.
