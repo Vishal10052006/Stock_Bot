@@ -38,3 +38,36 @@ def test_missing_reason_is_not_fabricated():
     ts = pd.Timestamp("2026-10-02 10:00:00", tz="Asia/Kolkata")
     result = build_decision_explanation(ts, "RELIANCE.NS", strategy={"timestamp": ts, "direction": "LONG"})
     assert result.items == ()
+
+
+@pytest.mark.parametrize(
+    ("execution_status", "expected"),
+    [
+        ("BLOCKED", "EXECUTION_BLOCKED"),
+        ("REJECTED_BROKER", "EXECUTION_REJECTED"),
+        ("FILLED", "EXECUTION_FILLED"),
+        ("PARTIALLY_FILLED", "EXECUTION_PENDING"),
+        ("OPEN", "EXECUTION_PENDING"),
+        ("ACKNOWLEDGED", "EXECUTION_PENDING"),
+    ],
+)
+def test_execution_lifecycle_outcomes_are_explicit(execution_status, expected):
+    ts = pd.Timestamp("2026-10-02 10:00:00", tz="Asia/Kolkata")
+    result = build_decision_explanation(
+        ts,
+        "RELIANCE.NS",
+        strategy={"timestamp": ts, "symbol": "RELIANCE.NS", "direction": "LONG", "reason": "candidate"},
+        execution={"timestamp": ts, "symbol": "RELIANCE.NS", "status": execution_status, "reason": "observed execution state"},
+    )
+    assert result.outcome == expected
+
+
+def test_authorized_execution_is_not_reported_as_filled():
+    ts = pd.Timestamp("2026-10-02 10:00:00", tz="Asia/Kolkata")
+    result = build_decision_explanation(
+        ts,
+        "RELIANCE.NS",
+        strategy={"timestamp": ts, "symbol": "RELIANCE.NS", "direction": "LONG", "reason": "candidate"},
+        execution={"timestamp": ts, "symbol": "RELIANCE.NS", "status": "AUTHORIZED", "reason": "risk-approved authorization"},
+    )
+    assert result.outcome == "LONG"
