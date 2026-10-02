@@ -1,4 +1,6 @@
-"""Tests for champion activation and rollback integrity."""
+"""Tests for champion activation, promotion binding, and rollback integrity."""
+
+import json
 
 import pytest
 
@@ -32,19 +34,19 @@ def _decision(challenger="model-v1"):
     )
 
 
-def test_activation_rejects_naive_activation_timestamp(tmp_path):
-    decision = _decision()
-    with pytest.raises(ValueError, match="timezone-aware"):
-        ChampionStore(tmp_path / "champions.jsonl").activate(
-            _record(review_fp=decision.fingerprint)._replace() if False else ChampionRecord(
-                model_version="model-v1",
-                status="PROMOTED",
-                activated_at="2026-09-24T10:00:00",
-                experiment_id="EXP-1",
-                promotion_review_fingerprint=decision.fingerprint,
-            ),
-            promotion_decision=decision,
-        )
+def test_activation_requires_promoted_record(tmp_path):
+    store = ChampionStore(tmp_path / "champions.jsonl")
+    record = _record()
+    record = ChampionRecord(
+        model_version=record.model_version,
+        status="ELIGIBLE",
+        activated_at=record.activated_at,
+        experiment_id=record.experiment_id,
+        promotion_review_fingerprint=record.promotion_review_fingerprint,
+    )
+    with pytest.raises(ValueError, match="PROMOTED"):
+        store.activate(record)
+
 
 def test_activation_requires_promotion_decision(tmp_path):
     with pytest.raises(ValueError, match="promotion decision is required"):
@@ -69,16 +71,70 @@ def test_activation_requires_promoted_decision(tmp_path):
         )
 
 
+def test_activation_and_pointer_are_bound_to_history(tmp_path):
+    store = ChampionStore(tmp_path / "champions.jsonl")
+    decision = _decision("model-v1")
+    store.activate(
+        _record("model-v1", review_fp=decision.fingerprint),
+        promotion_decision=decision,
+    )
+    assert store.current() == "model-v1"
+
+    second = _decision("model-v2")
+    store.activate(
+        _record("model-v2", parent="model-v1", review_fp=second.fingerprint),
+        promotion_decision=second,
+    )
+    assert store.current() == "model-v2"
+    assert len(store.history()) == 2
+
+
+def test_activation_rejects_existing_pointer_drift(tmp_path):
+    store = ChampionStore(tmp_path / "champions.jsonl")
+    decision = _decision()
+    store.activate(_record(review_fp=decision.fingerprint), promotion_decision=decision)
+    store.pointer_path.write_text("tampered", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="pointer does not match history"):
+        store.current()
+
+    with pytest.raises(ValueError, match="pointer does not match history"):
+        store.activate(
+            _record("model-v2", parent="model-v1", review_fp=_decision("model-v2").fingerprint),
+            promotion_decision=_decision("model-v2"),
+        )
+
+
+def test_activation_rejects_naive_activation_timestamp(tmp_path):
+    decision = _decision()
+    naive = ChampionRecord(
+        model_version="model-v1",
+        status="PROMOTED",
+        activated_at="2026-09-24T10:00:00",
+        experiment_id="EXP-1",
+        promotion_review_fingerprint=decision.fingerprint,
+    )
+    with pytest.raises(ValueError, match="timezone-aware"):
+        ChampionStore(tmp_path / "champions.jsonl").activate(
+            naive,
+            promotion_decision=decision,
+        )
+
+
 def test_activation_binds_challenger_and_review_fingerprint(tmp_path):
     store = ChampionStore(tmp_path / "champions.jsonl")
     decision = _decision("model-v1")
     store.activate(_record("model-v1", review_fp=decision.fingerprint), promotion_decision=decision)
-    assert store.current() == "model-v1"
 
+    wrong_challenger = _decision("model-v1")
     with pytest.raises(ValueError, match="challenger"):
         store.activate(
-            _record("model-v2", parent="model-v1", review_fp=decision.fingerprint),
-            promotion_decision=decision,
+            _record(
+                "model-v2",
+                parent="model-v1",
+                review_fp=wrong_challenger.fingerprint,
+            ),
+            promotion_decision=_decision("model-v2"),
         )
 
 
@@ -104,6 +160,34 @@ def test_successor_requires_current_parent(tmp_path):
         )
 
 
+def test_rollback_updates_history_and_pointer(tmp_path):
+    store = ChampionStore(tmp_path / "champions.jsonl")
+    first = _decision("model-v1")
+    store.activate(_record("model-v1", review_fp=first.fingerprint), promotion_decision=first)
+    second = _decision("model-v2")
+    store.activate(
+        _record("model-v2", parent="model-v1", review_fp=second.fingerprint),
+        promotion_decision=second,
+    )
+
+    rolled = store.rollback(
+        reason="validated degradation",
+        updated_at="2026-09-24T11:00:00+05:30",
+    )
+    assert rolled.champion_version == "model-v1"
+    assert rolled.previous_verified_version == "model-v2"
+    assert store.current() == "model-v1"
+
+
+def test_pointer_without_history_is_rejected(tmp_path):
+    path = tmp_path / "champions.jsonl"
+    store = ChampionStore(path)
+    store.pointer_path.write_text("model-v1", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="pointer exists without history"):
+        store.current()
+
+
 def test_pointer_drift_is_detected(tmp_path):
     store = ChampionStore(tmp_path / "champions.jsonl")
     decision = _decision()
@@ -119,7 +203,6 @@ def test_history_requires_fingerprint(tmp_path):
     decision = _decision()
     store.activate(_record(review_fp=decision.fingerprint), promotion_decision=decision)
     line = store.history_path.read_text(encoding="utf-8").strip()
-    import json
     payload = json.loads(line)
     payload.pop("fingerprint")
     store.history_path.write_text(json.dumps(payload) + "\n", encoding="utf-8")
@@ -141,11 +224,9 @@ def test_history_rejects_tampered_parent_chain(tmp_path):
         promotion_decision=second,
     )
 
-    import json
     lines = store.history_path.read_text(encoding="utf-8").splitlines()
     payload = json.loads(lines[1])
     payload["parent_model_version"] = "tampered-parent"
-    from learning.self_learning_models import ChampionRecord
     forged = ChampionRecord(
         model_version=payload["model_version"],
         status=payload["status"],
