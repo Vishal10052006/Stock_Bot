@@ -4,6 +4,7 @@ from collections import Counter
 from typing import Any, Iterable, Mapping
 import pandas as pd
 from .contracts import MultiStockContext, MultiStockObservation, StockIntelligence
+from market.bot.universe import MarketUniverseConfig, build_market_universe
 
 class MultiStockIntelligence:
     """Aggregate validated stock-level context without trading authority."""
@@ -47,6 +48,38 @@ class MultiStockIntelligence:
                                  observation=observation,
                                  market_context=dict(market_context or {}),
                                  sector_context=dict(sector_context or {}))
+
+
+
+    def build_from_market_universe(
+        self,
+        *,
+        as_of,
+        timestamp: Any,
+        config: MarketUniverseConfig,
+        stock_contexts: Iterable[Any] = (),
+        security_master_adapter: Any = None,
+        bhavcopy_adapter: Any = None,
+        data_version: str = "unknown",
+        market_context: Mapping[str, Any] | None = None,
+        sector_context: Mapping[str, Any] | None = None,
+    ) -> MultiStockContext:
+        """Build from the authoritative point-in-time Market Bot universe."""
+        symbols, result = build_market_universe(
+            as_of=as_of,
+            config=config,
+            security_master_adapter=security_master_adapter,
+            bhavcopy_adapter=bhavcopy_adapter,
+        )
+        return self.build(
+            timestamp=timestamp,
+            universe_symbols=symbols,
+            stock_contexts=stock_contexts,
+            universe_version=result.snapshot.policy_version,
+            data_version=data_version,
+            market_context=market_context,
+            sector_context=sector_context,
+        )
 
     @staticmethod
     def _adapt(context: Any, timestamp: pd.Timestamp) -> StockIntelligence:
