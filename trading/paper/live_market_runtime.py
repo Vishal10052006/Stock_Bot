@@ -130,6 +130,8 @@ def build_live_market_paper_session(
         )
     if manifest.provenance.model_family != "logistic":
         raise ValueError("live paper runtime requires a logistic Phase-9 artifact")
+    if not manifest.provenance.calibration_version:
+        raise ValueError("live paper runtime requires a calibrated Phase-9 artifact")
 
     history = UpstoxHistoryProvider.from_env(mapper)
 
