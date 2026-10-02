@@ -230,3 +230,33 @@ def test_review_run_requires_candidate_artifact_and_evaluation_in_gate():
             challenger=candidate,
             validation_run=stripped_run,
         )
+
+
+def test_promotion_decision_rejects_same_champion_and_challenger():
+    with pytest.raises(ValueError, match="must differ"):
+        from self_learning.contracts import PromotionDecision, PromotionState
+
+        PromotionDecision(
+            candidate_id="C1",
+            candidate_fingerprint="b" * 64,
+            champion_version="model-v1",
+            challenger_version="model-v1",
+            state=PromotionState.ELIGIBLE,
+            reasons=("review",),
+            validation_fingerprints=("c" * 64,),
+        )
+
+
+def test_promotion_decision_requires_validation_evidence():
+    with pytest.raises(ValueError, match="validation_fingerprints"):
+        from self_learning.contracts import PromotionDecision, PromotionState
+
+        PromotionDecision(
+            candidate_id="C1",
+            candidate_fingerprint="b" * 64,
+            champion_version="model-v1",
+            challenger_version="model-v2",
+            state=PromotionState.ELIGIBLE,
+            reasons=("review",),
+            validation_fingerprints=(),
+        )
