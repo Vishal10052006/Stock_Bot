@@ -206,10 +206,14 @@ def recognize_chart(image: Any) -> tuple[bool, float]:
         density_score = min(1.0, edge_density / 0.12)
         score = round(0.65 * structure_score + 0.35 * density_score, 4)
 
+        # A few long UI separators are common in editors/terminals.
+        # Require a stronger repeated horizontal structure before accepting
+        # grid evidence alone. Candle geometry can still qualify a chart when
+        # grid lines are disabled.
         detected = (
             0.008 <= edge_density <= 0.22
             and (
-                repeated_horizontal >= 3
+                repeated_horizontal >= 5
                 or tall_colored_count >= 6
             )
             and score >= 0.45
