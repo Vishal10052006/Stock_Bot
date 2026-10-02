@@ -299,3 +299,35 @@ def test_experiment_definition_is_frozen_and_distinct_from_learning_state() -> N
     )
     assert len(definition.fingerprint()) == 64
     assert definition.allowed_change == ("model",)
+
+
+def test_self_learning_engine_observe_builds_causal_learning_cycle():
+    """Completed linked outcomes become immutable learning evidence."""
+    from learning.orchestrator import SelfLearningEngine
+
+    engine = SelfLearningEngine()
+    run = engine.observe(
+        (_decision("T1"),),
+        (_outcome("T1", pnl=-20.0),),
+        cycle_id="cycle-observe-1",
+    )
+
+    assert run.audit.valid is True
+    assert run.cycle.state is LearningState.HYPOTHESIS
+    assert run.cycle.decision is LearningDecision.REDESIGN
+    assert run.experiences
+    assert run.cycle.experience_fingerprints == tuple(
+        item.fingerprint for item in run.experiences
+    )
+
+
+def test_self_learning_engine_blocks_unlinked_observations():
+    """Unlinked decision/outcome evidence must fail closed."""
+    from learning.orchestrator import SelfLearningEngine
+
+    with pytest.raises(ValueError, match="experience audit"):
+        SelfLearningEngine().observe(
+            (_decision("T1"),),
+            (_outcome("T2", pnl=-20.0),),
+            cycle_id="cycle-invalid-1",
+        )
