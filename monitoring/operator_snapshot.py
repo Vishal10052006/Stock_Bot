@@ -16,6 +16,8 @@ import os
 
 import pandas as pd
 
+from v1_signal import build_v1_signal_from_decision
+
 
 def _probabilities(prediction: Any) -> dict[str, float]:
     table = getattr(prediction, "probabilities", None)
@@ -124,6 +126,14 @@ class OperatorSnapshotWriter:
             self.signal_count += 1
         self.prediction_count += 1
 
+        v1_signal = build_v1_signal_from_decision(
+            decision,
+            valid_until=timestamp + pd.Timedelta(minutes=5),
+            research_context=getattr(decision.prediction, "research_context", None),
+        )
+
+        # Market context is carried by the strategy/analysis boundary when
+        # available. The V1 adapter remains presentation-only.
         order_status = decision.paper_order_status
         if order_status == "FILLED":
             self.fill_count += 1
@@ -161,7 +171,11 @@ class OperatorSnapshotWriter:
                     prediction, "feature_version", self.feature_version
                 ),
             },
-            "views": {"scanner": self._scanner_view(decision, candle, probabilities)},
+            "views": {
+                "scanner": self._scanner_view(decision, candle, probabilities, v1_signal),
+                "v1_signal": v1_signal.as_dict(),
+            },
+            "v1_signal": v1_signal.as_dict(),
             "market": {
                 "status": "LIVE_PAPER_OBSERVED",
                 "symbol": str(candle.symbol).upper(),
@@ -217,7 +231,7 @@ class OperatorSnapshotWriter:
         self._write(payload)
 
 
-    def _scanner_view(self, decision: Any, candle: Any, probabilities: dict[str, float]) -> dict[str, Any]:
+    def _scanner_view(self, decision: Any, candle: Any, probabilities: dict[str, float], v1_signal: Any) -> dict[str, Any]:
         """Expose the latest decision through the existing observation-only scanner view."""
         prediction = decision.prediction
         strategy = decision.strategy
@@ -245,6 +259,17 @@ class OperatorSnapshotWriter:
                 "calibration_version": getattr(prediction, "calibration_version", self.calibration_version),
                 "feature_version": getattr(prediction, "feature_version", self.feature_version),
                 "signal_strength": max(probabilities["LONG_SUCCESS"], probabilities["SHORT_SUCCESS"]) - probabilities["NO_EDGE"],
+                "display_signal": v1_signal.signal.value,
+                "confidence": v1_signal.confidence,
+                "valid_until": v1_signal.valid_until.isoformat(),
+                "entry_reference": v1_signal.entry,
+                "stop_reference": v1_signal.stop_loss,
+                "target_reference": v1_signal.target,
+                "risk_reward": v1_signal.risk_reward,
+                "v1_signal_id": v1_signal.signal_id,
+                "v1_fingerprint": v1_signal.as_dict()["fingerprint"],
+                "v1_authority": v1_signal.authority,
+                "broker_execution": False,
                 "authority": "OBSERVATION_ONLY",
             }],
         }
