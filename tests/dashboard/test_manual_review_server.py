@@ -3,7 +3,7 @@ import json
 
 import pytest
 
-from dashboard.server import record_outcome, record_review
+from dashboard.server import DashboardConfigurationError, _validate_loopback_host, record_outcome, record_review
 from journal.manual_review import ManualOutcomeStatus, ManualReviewJournal, ManualReviewStore
 from v1_signal.contracts import V1Signal, V1SignalContract
 
@@ -29,6 +29,16 @@ def _signal(*, valid_until=None) -> V1SignalContract:
 
 def _snapshot(path, signal):
     path.write_text(json.dumps({"v1_signal": signal.as_dict()}), encoding="utf-8")
+
+
+def test_dashboard_server_accepts_only_loopback_hosts():
+    _validate_loopback_host("127.0.0.1")
+    _validate_loopback_host("::1")
+    _validate_loopback_host("localhost")
+    with pytest.raises(DashboardConfigurationError, match="loopback"):
+        _validate_loopback_host("0.0.0.0")
+    with pytest.raises(DashboardConfigurationError, match="loopback"):
+        _validate_loopback_host("192.168.1.10")
 
 
 def test_signal_snapshot_round_trip_revalidates_contract():

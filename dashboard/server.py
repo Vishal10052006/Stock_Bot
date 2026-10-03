@@ -15,6 +15,7 @@ import argparse
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import hashlib
+import ipaddress
 import json
 from pathlib import Path
 from typing import Any
@@ -32,6 +33,22 @@ from v1_signal.contracts import V1SignalContract
 
 class DashboardConfigurationError(RuntimeError):
     """Raised when a required dashboard runtime path is missing or invalid."""
+
+
+def _validate_loopback_host(host: str) -> None:
+    """Reject network-exposed dashboard binds; this surface is local-only."""
+    if host.lower() == "localhost":
+        return
+    try:
+        address = ipaddress.ip_address(host)
+    except ValueError as exc:
+        raise DashboardConfigurationError(
+            "dashboard host must be localhost or a loopback IP address"
+        ) from exc
+    if not address.is_loopback:
+        raise DashboardConfigurationError(
+            "dashboard host must be localhost or a loopback IP address"
+        )
 
 
 def _json_bytes(payload: Any) -> bytes:
@@ -255,6 +272,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
 
 
 def serve(*, host: str, port: int, snapshot_path: Path, journal_path: Path) -> None:
+    _validate_loopback_host(host)
     dashboard_path = Path(__file__).with_name("index.html")
     if not dashboard_path.exists():
         raise DashboardConfigurationError(f"dashboard index does not exist: {dashboard_path}")
