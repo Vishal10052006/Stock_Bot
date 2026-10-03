@@ -79,6 +79,7 @@ class OperatorSnapshotWriter:
                     "data_version": self.data_version,
                     "feature_version": self.feature_version,
                 },
+                "views": {"scanner": {"status": "NO_DATA", "timestamp": None, "rows": [], "authority": "OBSERVATION_ONLY"}},
                 "market": {
                     "status": "WAITING_FOR_MARKET",
                     "symbol": self.symbol.upper(),
@@ -160,6 +161,7 @@ class OperatorSnapshotWriter:
                     prediction, "feature_version", self.feature_version
                 ),
             },
+            "views": {"scanner": self._scanner_view(decision, candle, probabilities)},
             "market": {
                 "status": "LIVE_PAPER_OBSERVED",
                 "symbol": str(candle.symbol).upper(),
@@ -213,6 +215,39 @@ class OperatorSnapshotWriter:
             "alert_summary": {"total": 0, "by_severity": {}, "by_code": {}},
         }
         self._write(payload)
+
+
+    def _scanner_view(self, decision: Any, candle: Any, probabilities: dict[str, float]) -> dict[str, Any]:
+        """Expose the latest decision through the existing observation-only scanner view."""
+        prediction = decision.prediction
+        strategy = decision.strategy
+        direction = getattr(strategy.direction, "value", strategy.direction)
+        return {
+            "status": "READY",
+            "timestamp": pd.Timestamp(prediction.timestamp).isoformat(),
+            "authority": "OBSERVATION_ONLY",
+            "rows": [{
+                "timestamp": pd.Timestamp(prediction.timestamp).isoformat(),
+                "symbol": str(candle.symbol).upper(),
+                "price": float(candle.close),
+                "long_success": probabilities["LONG_SUCCESS"],
+                "short_success": probabilities["SHORT_SUCCESS"],
+                "no_edge": probabilities["NO_EDGE"],
+                "predicted_class": getattr(prediction, "predicted_class", None),
+                "regime": getattr(strategy, "regime", None),
+                "strategy": direction,
+                "strategy_reason": str(getattr(strategy, "rationale", "")),
+                "risk_status": str(decision.risk_status),
+                "risk_reason": str(decision.risk_reason),
+                "paper_order_status": decision.paper_order_status,
+                "trade_id": decision.trade_id,
+                "prediction_model_version": getattr(prediction, "model_version", self.model_version),
+                "calibration_version": getattr(prediction, "calibration_version", self.calibration_version),
+                "feature_version": getattr(prediction, "feature_version", self.feature_version),
+                "signal_strength": max(probabilities["LONG_SUCCESS"], probabilities["SHORT_SUCCESS"]) - probabilities["NO_EDGE"],
+                "authority": "OBSERVATION_ONLY",
+            }],
+        }
 
     def _pipeline(self, terminal_state: str) -> dict[str, dict[str, str]]:
         return {
