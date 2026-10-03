@@ -71,7 +71,7 @@ def test_live_paper_decision_becomes_canonical_buy():
     assert contract.risk_reward == 2.0
     assert contract.confidence == 0.70
     assert contract.prediction_evidence["probabilities"]["NO_EDGE"] == 0.10
-    assert contract.authority == "HUMAN_REVIEW_ONLY"
+    assert contract.authority == "MANUAL_REAL_MONEY_REVIEW"
     assert contract.broker_execution is False
     assert contract.fingerprint if hasattr(contract, "fingerprint") else contract.as_dict()["fingerprint"]
 
