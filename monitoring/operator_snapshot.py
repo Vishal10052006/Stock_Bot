@@ -68,7 +68,7 @@ class OperatorSnapshotWriter:
             raise ValueError("initial_equity must be positive when supplied")
 
     def write_initial(self) -> None:
-        """Write an explicit waiting state before the first live-paper candle."""
+        """Write an explicit waiting state before the first live-review candle."""
         self._write(
             {
                 "mode": "live_market_manual_review",
