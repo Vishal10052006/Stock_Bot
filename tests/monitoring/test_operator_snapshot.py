@@ -119,6 +119,27 @@ def test_operator_snapshot_starts_explicitly_waiting(tmp_path):
     assert payload["fingerprint"]
 
 
+def test_v1_operator_snapshot_fails_closed_without_live_account_context(tmp_path):
+    path = tmp_path / "operator_snapshot.json"
+    writer = OperatorSnapshotWriter(
+        path=path,
+        symbol="RELIANCE",
+        benchmark_symbol="NIFTY50",
+        model_version="phase9-logistic-v1",
+        calibration_version="calibration-v1",
+        data_version="upstox-live-v1",
+        feature_version="v1.0",
+        require_live_account_context=True,
+    )
+
+    decision = _decision()
+    with pytest.raises(ValueError, match="verified live account context"):
+        writer.observe(
+            decision,
+            SimpleNamespace(symbol="RELIANCE", close=2505.0),
+        )
+
+
 def test_operator_snapshot_publishes_verified_live_account_context(tmp_path):
     path = tmp_path / "operator_snapshot.json"
     writer = OperatorSnapshotWriter(
