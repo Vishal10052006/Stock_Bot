@@ -217,6 +217,204 @@ def _prediction_evidence(signal: LiveSignal) -> dict[str, Any]:
     }
 
 
+def _deterministic_signal_id(
+    *,
+    timestamp: pd.Timestamp,
+    symbol: str,
+    direction: StrategyDirection,
+    strategy_version: str,
+    entry: float | None,
+    stop: float | None,
+    target: float | None,
+) -> str:
+    """Create a stable ID when adapting a canonical paper decision."""
+    material = "|".join(
+        (
+            timestamp.isoformat(),
+            symbol.strip().upper(),
+            direction.value,
+            strategy_version,
+            str(entry),
+            str(stop),
+            str(target),
+        )
+    )
+    return "V1-" + hashlib.sha256(material.encode("utf-8")).hexdigest()[:24]
+
+
+def build_v1_signal_from_decision(
+    decision: Any,
+    *,
+    valid_until: pd.Timestamp,
+    research_context: Any | None = None,
+    market_context: Any | None = None,
+) -> V1SignalContract:
+    """Adapt the canonical live-paper Strategy/Risk result into V1.
+
+    This is a presentation adapter only. It reuses the already-authoritative
+    Prediction/Strategy/Risk outputs and cannot submit or authorize a broker
+    order.
+    """
+    if decision is None or not hasattr(decision, "prediction") or not hasattr(decision, "strategy"):
+        raise TypeError("decision must expose prediction and strategy")
+
+    prediction = decision.prediction
+    strategy = decision.strategy
+    timestamp = pd.Timestamp(strategy.timestamp)
+    if timestamp.tzinfo is None:
+        raise ValueError("decision timestamp must be timezone-aware")
+
+    direction = strategy.direction
+    signal = (
+        V1Signal.BUY
+        if direction is StrategyDirection.LONG
+        else V1Signal.SELL
+        if direction is StrategyDirection.SHORT
+        else V1Signal.WAIT
+    )
+
+    prediction_evidence = {
+        "class": getattr(prediction, "predicted_class", None),
+        "probabilities": _prediction_probabilities(prediction),
+        "probability": strategy.prediction_probability,
+        "margin": strategy.prediction_margin,
+        "model_version": getattr(prediction, "model_version", None),
+        "feature_version": getattr(prediction, "feature_version", None),
+        "calibration_version": getattr(prediction, "calibration_version", None),
+    }
+
+    technical = (
+        V1Evidence(
+            category="technical",
+            source="strategy-engine",
+            timestamp=timestamp,
+            status="SUPPORTING" if direction is not StrategyDirection.NO_TRADE else "NEUTRAL",
+            reason=strategy.rationale,
+            details={
+                "regime": strategy.regime,
+                "regime_probability": strategy.regime_probability,
+                "features": dict(strategy.features),
+            },
+        ),
+    )
+
+    research = ()
+    if research_context is not None:
+        research_ts = pd.Timestamp(research_context.as_of)
+        if research_ts.tzinfo is None:
+            raise ValueError("research context timestamp must be timezone-aware")
+        research = (
+            V1Evidence(
+                category="news_research",
+                source="research-runtime",
+                timestamp=research_ts,
+                status="SUPPORTING" if getattr(research_context, "research_stance", "") not in {"NEGATIVE", "BEARISH"} else "CONTRADICTING",
+                reason=f"Research stance={getattr(research_context, 'research_stance', 'UNKNOWN')}",
+                details={
+                    "research_score": getattr(research_context, "research_score", None),
+                    "research_confidence": getattr(research_context, "research_confidence", None),
+                    "evidence_count": getattr(research_context, "evidence_count", None),
+                    "source_count": getattr(research_context, "source_count", None),
+                    "conflict_score": getattr(research_context, "conflict_score", None),
+                    "research_version": getattr(research_context, "research_version", None),
+                },
+            ),
+        )
+
+    market = ()
+    if market_context is not None:
+        market_ts = pd.Timestamp(getattr(market_context, "timestamp", timestamp))
+        if market_ts.tzinfo is None:
+            raise ValueError("market context timestamp must be timezone-aware")
+        market = (
+            V1Evidence(
+                category="market_sector",
+                source="market-bot",
+                timestamp=market_ts,
+                status="OBSERVED",
+                reason="Market context used by the canonical analysis path.",
+                details={"context": _safe_mapping(market_context)},
+            ),
+        )
+
+    supporting = []
+    contradicting = []
+    if strategy.prediction_class and direction.value in {"LONG", "SHORT"}:
+        supporting.append(f"Prediction class {strategy.prediction_class} passed strategy evaluation.")
+    if strategy.regime:
+        supporting.append(f"Regime={strategy.regime} with probability={strategy.regime_probability}.")
+    if strategy.primary_reason is not None:
+        contradicting.append(strategy.primary_reason.value)
+
+    risk_conditions = [
+        f"Risk status={getattr(decision, 'risk_status', 'UNKNOWN')}.",
+    ]
+    if getattr(decision, "risk_reason", ""):
+        risk_conditions.append(str(decision.risk_reason))
+
+    return V1SignalContract(
+        signal_id=_deterministic_signal_id(
+            timestamp=timestamp,
+            symbol=strategy.symbol,
+            direction=direction,
+            strategy_version=strategy.strategy_version,
+            entry=strategy.entry_reference,
+            stop=strategy.stop_reference,
+            target=strategy.target_reference,
+        ),
+        timestamp=timestamp,
+        symbol=strategy.symbol,
+        signal=signal,
+        entry=strategy.entry_reference,
+        stop_loss=strategy.stop_reference,
+        target=strategy.target_reference,
+        risk_reward=_rr(direction, strategy.entry_reference, strategy.stop_reference, strategy.target_reference),
+        confidence=strategy.prediction_probability,
+        prediction_evidence=prediction_evidence,
+        valid_until=valid_until,
+        news_research_evidence=research,
+        technical_evidence=technical,
+        market_sector_evidence=market,
+        supporting_factors=tuple(supporting),
+        contradicting_factors=tuple(contradicting),
+        risk_conditions=tuple(risk_conditions),
+        provenance={
+            "strategy_version": strategy.strategy_version,
+            "prediction_model_version": str(getattr(prediction, "model_version", "")),
+            "feature_version": str(getattr(prediction, "feature_version", "")),
+            "data_version": str(strategy.provenance.get("data_version", "")),
+        },
+        authority="HUMAN_REVIEW_ONLY",
+        broker_execution=False,
+    )
+
+
+def _prediction_probabilities(prediction: Any) -> dict[str, float]:
+    """Return the real model probabilities without synthesizing a distribution."""
+    table = getattr(prediction, "probabilities", None)
+    if table is None or not hasattr(table, "iloc") or len(table) != 1:
+        raise ValueError("prediction probabilities must contain exactly one row")
+    row = table.iloc[0]
+    keys = ("LONG_SUCCESS", "SHORT_SUCCESS", "NO_EDGE")
+    values = {key: float(row[key]) for key in keys}
+    if any(not math.isfinite(value) or value < 0.0 or value > 1.0 for value in values.values()):
+        raise ValueError("prediction probabilities must be finite and in [0, 1]")
+    if abs(sum(values.values()) - 1.0) > 1e-6:
+        raise ValueError("prediction probabilities must sum to 1")
+    return values
+
+
+def _safe_mapping(value: Any) -> dict[str, Any]:
+    """Serialize simple context fields without inventing market semantics."""
+    if isinstance(value, Mapping):
+        return {str(key): value_item for key, value_item in value.items()}
+    result = {}
+    for key in ("benchmark", "regime", "regime_probability", "trend", "breadth", "volatility"):
+        if hasattr(value, key):
+            result[key] = getattr(value, key)
+    return result
+
+
 def build_v1_signal(
     live_signal: LiveSignal,
     *,
@@ -274,4 +472,4 @@ def build_v1_signal(
     )
 
 
-__all__ = ["V1Evidence", "V1Signal", "V1SignalContract", "build_v1_signal"]
+__all__ = ["V1Evidence", "V1Signal", "V1SignalContract", "build_v1_signal", "build_v1_signal_from_decision"]
