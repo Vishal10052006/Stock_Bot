@@ -34,8 +34,9 @@ state into the existing Risk Engine, including:
 - liquidity, market-data, system-readiness, and kill-switch state
 - an `as_of` timestamp and explicit source identifier
 
-The context must be timezone-aware and fresh for the prediction timestamp. The
-current V1 boundary uses a 30-second maximum context age by default.
+The context must be timezone-aware and fresh at the time it is observed. The
+maximum age is an explicit runtime configuration value; there is no source-code
+freshness default.
 
 **No paper-account value is substituted when the context is missing or stale.**
 The result becomes `RISK_CONTEXT_UNAVAILABLE` and cannot request manual BUY/SELL.
@@ -53,9 +54,12 @@ The result becomes `RISK_CONTEXT_UNAVAILABLE` and cannot request manual BUY/SELL
 
 ## Runtime rule
 
-The canonical orchestrator accepts an explicit risk-context provider. If no
-provider is configured, the V1 manual decision path remains blocked rather than
-using the virtual paper engine's initial equity as account state.
+The canonical orchestrator accepts an explicit risk-context provider. The live
+runtime now builds this provider from runtime configuration and observes the
+Upstox account through GET-only funds, positions, holdings, trades, profile,
+kill-switch, and market-status endpoints. No account value is embedded in the
+source code. If the provider is unavailable, the V1 manual decision path
+remains blocked rather than using virtual paper capital.
 
 The paper runtime may continue to exist for historical validation and testing.
 It is not the authority for the V1 manual real-money decision contract.
