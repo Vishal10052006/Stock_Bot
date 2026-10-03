@@ -7,6 +7,7 @@ import pandas as pd
 import pytest
 
 from trading.live.risk_context import LiveManualRiskContext
+from trading.live.manual_decision import _enrich_risk_context_from_indicators
 
 
 def _context(
@@ -87,6 +88,42 @@ def test_manual_decision_contains_no_synthetic_account_defaults() -> None:
         "kill_switch_active=False",
     ):
         assert synthetic not in source_text
+
+
+def test_live_risk_context_uses_canonical_atr() -> None:
+    context = _context(as_of=pd.Timestamp("2026-10-03T10:00:00+05:30"))
+    enriched = _enrich_risk_context_from_indicators(
+        context,
+        pd.Series({"timestamp": context.as_of, "atr_14": 2.5}),
+    )
+
+    assert enriched.atr == 2.5
+
+
+def test_live_risk_context_rejects_missing_canonical_atr() -> None:
+    context = _context(as_of=pd.Timestamp("2026-10-03T10:00:00+05:30"))
+
+    with pytest.raises(
+        ValueError,
+        match="Canonical ATR is unavailable",
+    ):
+        _enrich_risk_context_from_indicators(
+            context,
+            pd.Series({"timestamp": context.as_of, "close": 100.0}),
+        )
+
+
+def test_live_risk_context_rejects_invalid_canonical_atr() -> None:
+    context = _context(as_of=pd.Timestamp("2026-10-03T10:00:00+05:30"))
+
+    with pytest.raises(
+        ValueError,
+        match="Canonical ATR atr_14 is invalid",
+    ):
+        _enrich_risk_context_from_indicators(
+            context,
+            pd.Series({"timestamp": context.as_of, "atr_14": 0.0}),
+        )
 
 
 def test_live_manual_risk_context_requires_fresh_observed_state() -> None:
