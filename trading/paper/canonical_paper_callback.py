@@ -91,7 +91,7 @@ def build_live_money_decision(
                 timestamp=timestamp,
                 symbol=symbol,
                 direction=StrategyDirection.NO_TRADE,
-                strategy_version=risk_engine.config.strategy_version,
+                strategy_version=StrategyEngine().config.strategy_version,
                 rationale="Canonical regime is not yet available.",
             ),
             risk_status="NOT_ENTERED",
