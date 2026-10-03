@@ -256,7 +256,7 @@ class OperatorSnapshotWriter:
                 "strategy_reason": str(getattr(strategy, "rationale", "")),
                 "risk_status": str(decision.risk_status),
                 "risk_reason": str(decision.risk_reason),
-                "paper_order_status": decision.paper_order_status,
+                "paper_order_status": decision.manual_execution_status,
                 "trade_id": decision.trade_id,
                 "prediction_model_version": getattr(prediction, "model_version", self.model_version),
                 "calibration_version": getattr(prediction, "calibration_version", self.calibration_version),
@@ -291,11 +291,11 @@ class OperatorSnapshotWriter:
 
     def _health(self, status: str) -> list[dict[str, str]]:
         return [
-            {"component": "DATA", "status": status, "message": "Observed from canonical live-paper candle."},
+            {"component": "DATA", "status": status, "message": "Observed from canonical real-market candle."},
             {"component": "FEATURES", "status": status, "message": "Decision-time feature path observed."},
             {"component": "CAUSALITY", "status": "ENFORCED", "message": "Canonical causal boundary enforced."},
             {"component": "RISK", "status": status, "message": "Risk result observed; no dashboard authority."},
-            {"component": "EXECUTION", "status": "LOCKED", "message": "Paper-only execution; broker orders remain zero."},
+            {"component": "EXECUTION", "status": "LOCKED", "message": "Manual BUY/SELL only; broker automation remains disabled."},
             {"component": "MODEL", "status": status, "message": "Prediction output observed."},
         ]
 
