@@ -52,6 +52,7 @@ class OperatorSnapshotWriter:
     data_version: str
     feature_version: str
     initial_equity: float | None = None
+    require_live_account_context: bool = False
     events: list[dict[str, Any]] = field(default_factory=list)
     prediction_count: int = 0
     signal_count: int = 0
@@ -142,6 +143,10 @@ class OperatorSnapshotWriter:
             else "NO_MANUAL_ACTION"
         )
         risk_context = getattr(decision, "risk_context", None)
+        if self.require_live_account_context and risk_context is None:
+            raise ValueError(
+                "V1 manual-review snapshots require verified live account context"
+            )
         if risk_context is not None:
             performance = {
                 "status": "LIVE_ACCOUNT_OBSERVED",
