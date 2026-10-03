@@ -1,7 +1,7 @@
-"""Canonical real-market paper integration boundary.
+"""Canonical real-market manual decision integration boundary.
 
 Connects completed market candles to the existing Market Bot -> Analysis ->
-Prediction chain. A downstream Strategy/Risk/Paper callback is injectable so
+Prediction chain. A downstream Strategy/Risk/manual-decision callback is injectable so
 this layer coordinates existing authorities without duplicating them.
 """
 
@@ -22,7 +22,7 @@ from ml.models.logistic import LogisticOutcomeModel
 from ml.preprocessing.pipeline import FeaturePreprocessor
 from trading.ab30_pipeline import MarketAnalysisResult
 from trading.market_bot_pipeline import build_market_analysis_from_market_bot
-from trading.paper.canonical_paper_callback import execute_prediction_to_paper
+from trading.paper.canonical_paper_callback import build_live_money_decision
 from trading.paper.causal_history import CausalCandleHistory
 from trading.paper.live_loop import LivePaperEngine, LivePaperSessionResult
 from research.integration.analysis_contract import ResearchAnalysisContext
@@ -35,7 +35,7 @@ class CanonicalLivePaperError(RuntimeError):
 
 @dataclass(frozen=True, slots=True)
 class CanonicalLivePaperConfig:
-    """Immutable configuration for one canonical live-paper session."""
+    """Immutable configuration for one canonical real-money decision session."""
 
     symbol: str = "RELIANCE"
     model_version: str = "phase9-logistic-v1"
@@ -328,11 +328,13 @@ class CanonicalLivePaperOrchestrator:
             # is forwarded to observers. This preserves the existing seam.
             decision = callback_result if callback_result is not None else None
         else:
-            decision = execute_prediction_to_paper(
+            decision = build_live_money_decision(
                 prediction,
                 result,
                 candle,
-                self.paper_engine,
+                self.paper_engine.risk_engine,
+                available_equity=self.paper_engine.config.initial_equity,
+                day_start_equity=self.paper_engine.config.initial_equity,
             )
 
         if self.decision_observer is not None and decision is not None:

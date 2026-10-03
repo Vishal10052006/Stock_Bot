@@ -2,32 +2,31 @@ import json
 from pathlib import Path
 
 
-def test_ops_dashboard_assets_are_present_and_safe():
-    """Dashboard assets must remain static, parseable, and explicitly locked."""
+def test_v1_dashboard_is_static_read_only_and_canonical():
+    """The dashboard must present the V1 contract without order authority."""
     root = Path(__file__).resolve().parents[2]
     html = (root / "dashboard" / "index.html").read_text(encoding="utf-8")
+
+    assert "STOCK_BOT" in html
+    assert "VERSION 1 / REAL-MONEY MANUAL REVIEW" in html
+    assert "BROKER AUTOMATION: OFF" in html
+    assert "CANONICAL SIGNAL" in html
+    assert "Prediction evidence" in html
+    assert "News / Research" in html
+    assert "Technical" in html
+    assert "Fundamental" in html
+    assert "Market / Sector" in html
+    assert 'fetch("/api/snapshot"' in html
+    assert "order" not in html.lower() or "no order" in html.lower()
+
+
+def test_demo_snapshot_remains_observation_only():
+    """The legacy demo payload must not claim broker authority."""
+    root = Path(__file__).resolve().parents[2]
     snapshot = json.loads(
         (root / "dashboard" / "demo_snapshot.json").read_text(encoding="utf-8")
     )
 
-    assert "STOCK_BOT / OPS_CENTER" in html
-    assert "LIVE: LOCKED" in html
-    assert "NO ORDER AUTHORITY" in html
-    assert "MONITORINGRUNTIME.DASHBOARD()" in html
-    assert "telemetryBadge" in html
-    assert 'fetch("/api/snapshot"' in html
-    assert "LIVE PAPER / OBSERVED" in html
-
     assert snapshot["mode"] == "research_paper_demo"
     assert snapshot["metrics"]["execution.fill_count"] == 0
     assert snapshot["health"][4]["status"] == "LOCKED"
-
-
-def test_dashboard_includes_screen_reviewer_surface():
-    """The reviewer surface is present in the static dashboard asset."""
-    root = Path(__file__).resolve().parents[2]
-    html = (root / "dashboard" / "index.html").read_text(encoding="utf-8")
-
-    assert "SCREEN REVIEWER // OBSERVATION ONLY" in html
-    assert "screen_review" in html
-    assert "SCREEN ↔ MARKET RECONCILIATION" in html

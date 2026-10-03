@@ -1,8 +1,8 @@
-"""Authoritative operator snapshot writer for the read-only Ops Center.
+"""Authoritative operator snapshot writer for the real-money manual-review surface.
 
-This module adapts already-produced live-paper decisions into one atomic JSON
-snapshot. It does not calculate trading decisions, change Risk/Safety state,
-submit broker orders, or unlock live execution.
+This module adapts an already-produced live decision into one atomic JSON
+snapshot. It does not calculate trading decisions or submit broker orders.
+The BUY/SELL action remains manual.
 """
 
 from __future__ import annotations
@@ -15,6 +15,8 @@ import json
 import os
 
 import pandas as pd
+
+from v1_signal import build_v1_signal_from_decision
 
 
 def _probabilities(prediction: Any) -> dict[str, float]:
@@ -40,7 +42,7 @@ def _canonical(payload: dict[str, Any]) -> str:
 
 @dataclass(slots=True)
 class OperatorSnapshotWriter:
-    """Persist the latest real-market paper observation atomically."""
+    """Persist the latest real-market manual-review decision atomically."""
 
     path: Path
     symbol: str
@@ -68,7 +70,7 @@ class OperatorSnapshotWriter:
         """Write an explicit waiting state before the first live-paper candle."""
         self._write(
             {
-                "mode": "live_market_paper",
+                "mode": "live_market_manual_review",
                 "authority": "OBSERVATION_ONLY",
                 "timestamp": None,
                 "session": {
@@ -92,9 +94,9 @@ class OperatorSnapshotWriter:
                 "strategy": {"status": "WAITING"},
                 "risk": {"status": "STANDBY"},
                 "execution": {
-                    "mode": "PAPER_ONLY",
+                    "mode": "REAL_MONEY_MANUAL_REVIEW",
                     "broker_orders": 0,
-                    "live_locked": True,
+                    "automated_execution": False,
                 },
                 "performance": {
                     "initial_equity": self.initial_equity,
@@ -113,8 +115,8 @@ class OperatorSnapshotWriter:
             }
         )
 
-    def observe(self, decision: Any, candle: Any, paper_engine: Any) -> None:
-        """Publish one completed canonical live-paper decision."""
+    def observe(self, decision: Any, candle: Any, paper_engine: Any | None = None) -> None:
+        """Publish one completed canonical live-money manual-review decision."""
         prediction = decision.prediction
         timestamp = pd.Timestamp(prediction.timestamp)
         probabilities = _probabilities(prediction)
@@ -124,14 +126,25 @@ class OperatorSnapshotWriter:
             self.signal_count += 1
         self.prediction_count += 1
 
-        order_status = decision.paper_order_status
-        if order_status == "FILLED":
-            self.fill_count += 1
-
-        equity, realized_pnl, unrealized_pnl, gross_exposure = paper_engine.runtime.account_snapshot(
-            {str(candle.symbol).upper(): float(candle.close)}
+        v1_signal = build_v1_signal_from_decision(
+            decision,
+            valid_until=timestamp + pd.Timedelta(minutes=5),
+            research_context=getattr(decision, "research_context", None),
+            market_context=getattr(decision, "market_context", None),
         )
-        total_return = (float(equity) - self.initial_equity) / self.initial_equity
+
+        # Market context is carried by the strategy/analysis boundary when
+        # available. The V1 adapter remains presentation-only.
+        order_status = (
+            "MANUAL_BUY_SELL_REQUIRED"
+            if direction != "NO_TRADE" and decision.risk_status == "APPROVED"
+            else "NO_MANUAL_ACTION"
+        )
+        equity = self.initial_equity
+        realized_pnl = 0.0
+        unrealized_pnl = 0.0
+        gross_exposure = 0.0
+        total_return = 0.0
 
         event = {
             "timestamp": timestamp.isoformat(),
@@ -139,14 +152,14 @@ class OperatorSnapshotWriter:
             "message": (
                 f"Prediction={getattr(prediction, 'predicted_class', 'UNKNOWN')} "
                 f"Strategy={direction} Risk={decision.risk_status} "
-                f"Paper={order_status or 'NONE'}"
+                f"ManualExecution={order_status}"
             ),
         }
         self.events.append(event)
         self.events[:] = self.events[-100:]
 
         payload = {
-            "mode": "live_market_paper",
+            "mode": "live_market_manual_review",
             "authority": "OBSERVATION_ONLY",
             "timestamp": timestamp.isoformat(),
             "session": {
@@ -161,9 +174,13 @@ class OperatorSnapshotWriter:
                     prediction, "feature_version", self.feature_version
                 ),
             },
-            "views": {"scanner": self._scanner_view(decision, candle, probabilities)},
+            "views": {
+                "scanner": self._scanner_view(decision, candle, probabilities, v1_signal),
+                "v1_signal": v1_signal.as_dict(),
+            },
+            "v1_signal": v1_signal.as_dict(),
             "market": {
-                "status": "LIVE_PAPER_OBSERVED",
+                "status": "LIVE_MARKET_OBSERVED",
                 "symbol": str(candle.symbol).upper(),
                 "benchmark_symbol": self.benchmark_symbol.upper(),
                 "price": float(candle.close),
@@ -190,11 +207,11 @@ class OperatorSnapshotWriter:
                 "gross_exposure": float(gross_exposure),
             },
             "execution": {
-                "mode": "PAPER_ONLY",
-                "paper_order_status": order_status,
-                "trade_id": decision.trade_id,
+                "mode": "REAL_MONEY_MANUAL_REVIEW",
+                "manual_execution_status": "PENDING_MANUAL_BUY_SELL",
+                "trade_id": None,
                 "broker_orders": 0,
-                "live_locked": True,
+                "automated_execution": False,
             },
             "performance": {
                 "initial_equity": self.initial_equity,
@@ -207,7 +224,7 @@ class OperatorSnapshotWriter:
             "metrics": {
                 "model.prediction_count": self.prediction_count,
                 "strategy.signal_count": self.signal_count,
-                "execution.fill_count": self.fill_count,
+                "execution.manual_actions": 0,
             },
             "health": self._health("OBSERVED"),
             "events": list(self.events),
@@ -217,7 +234,7 @@ class OperatorSnapshotWriter:
         self._write(payload)
 
 
-    def _scanner_view(self, decision: Any, candle: Any, probabilities: dict[str, float]) -> dict[str, Any]:
+    def _scanner_view(self, decision: Any, candle: Any, probabilities: dict[str, float], v1_signal: Any) -> dict[str, Any]:
         """Expose the latest decision through the existing observation-only scanner view."""
         prediction = decision.prediction
         strategy = decision.strategy
@@ -239,12 +256,24 @@ class OperatorSnapshotWriter:
                 "strategy_reason": str(getattr(strategy, "rationale", "")),
                 "risk_status": str(decision.risk_status),
                 "risk_reason": str(decision.risk_reason),
-                "paper_order_status": decision.paper_order_status,
+                "manual_execution_status": decision.manual_execution_status,
                 "trade_id": decision.trade_id,
                 "prediction_model_version": getattr(prediction, "model_version", self.model_version),
                 "calibration_version": getattr(prediction, "calibration_version", self.calibration_version),
                 "feature_version": getattr(prediction, "feature_version", self.feature_version),
                 "signal_strength": max(probabilities["LONG_SUCCESS"], probabilities["SHORT_SUCCESS"]) - probabilities["NO_EDGE"],
+                "display_signal": v1_signal.signal.value,
+                "confidence": v1_signal.confidence,
+                "valid_until": v1_signal.valid_until.isoformat(),
+                "entry_reference": v1_signal.entry,
+                "stop_reference": v1_signal.stop_loss,
+                "target_reference": v1_signal.target,
+                "risk_reward": v1_signal.risk_reward,
+                "v1_signal_id": v1_signal.signal_id,
+                "v1_fingerprint": v1_signal.as_dict()["fingerprint"],
+                "v1_authority": v1_signal.authority,
+                "broker_execution": False,
+                "manual_execution": True,
                 "authority": "OBSERVATION_ONLY",
             }],
         }
@@ -257,16 +286,16 @@ class OperatorSnapshotWriter:
             "prediction": {"status": terminal_state, "authority": "OBSERVATION"},
             "strategy": {"status": terminal_state, "authority": "OBSERVATION"},
             "risk": {"status": terminal_state, "authority": "GATE"},
-            "execution": {"status": "PAPER_ONLY", "authority": "LOCKED"},
+            "execution": {"status": "MANUAL_REAL_MONEY", "authority": "HUMAN_REVIEW"},
         }
 
     def _health(self, status: str) -> list[dict[str, str]]:
         return [
-            {"component": "DATA", "status": status, "message": "Observed from canonical live-paper candle."},
+            {"component": "DATA", "status": status, "message": "Observed from canonical real-market candle."},
             {"component": "FEATURES", "status": status, "message": "Decision-time feature path observed."},
             {"component": "CAUSALITY", "status": "ENFORCED", "message": "Canonical causal boundary enforced."},
             {"component": "RISK", "status": status, "message": "Risk result observed; no dashboard authority."},
-            {"component": "EXECUTION", "status": "LOCKED", "message": "Paper-only execution; broker orders remain zero."},
+            {"component": "EXECUTION", "status": "LOCKED", "message": "Manual BUY/SELL only; broker automation remains disabled."},
             {"component": "MODEL", "status": status, "message": "Prediction output observed."},
         ]
 
