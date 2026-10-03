@@ -213,5 +213,8 @@ def test_v1_live_manual_review_pipeline_handoff_is_end_to_end(monkeypatch, tmp_p
     assert payload["execution"]["mode"] == "REAL_MONEY_MANUAL_REVIEW"
     assert payload["performance"]["status"] == "LIVE_ACCOUNT_OBSERVED"
     assert payload["performance"]["available_equity"] == 125000.0
-    assert payload["v1"]["manual_execution"] is True
-    assert payload["v1"]["broker_execution"] is False
+    assert payload["views"]["scanner"]["rows"][0]["manual_execution"] is True
+    assert payload["views"]["scanner"]["rows"][0]["broker_execution"] is False
+    assert payload["v1_signal"]["authority"] == "MANUAL_REAL_MONEY_REVIEW"
+    assert payload["execution"]["automated_execution"] is False
+    assert payload["execution"]["broker_orders"] == 0
