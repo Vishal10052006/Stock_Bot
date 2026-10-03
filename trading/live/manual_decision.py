@@ -194,6 +194,37 @@ def build_live_money_decision(
     row_data["symbol"] = symbol
     row = pd.Series(row_data)
 
+    # ATR is authoritative market-derived risk context. The account provider
+    # owns broker/account state; the canonical indicator row owns market
+    # volatility state. Never substitute a synthetic ATR.
+    atr_candidates = [
+        column
+        for column in row.index
+        if str(column).startswith("atr_")
+    ]
+    if not atr_candidates:
+        return _risk_context_block(
+            prediction,
+            analysis,
+            strategy_decision,
+            "Canonical ATR is unavailable at the decision timestamp.",
+        )
+    atr_column = "atr_14" if "atr_14" in atr_candidates else sorted(atr_candidates)[0]
+    atr_value = pd.to_numeric(pd.Series([row[atr_column]]), errors="coerce").iloc[0]
+    if pd.isna(atr_value) or not float(atr_value) > 0:
+        return _risk_context_block(
+            prediction,
+            analysis,
+            strategy_decision,
+            f"Canonical ATR {atr_column} is invalid at the decision timestamp.",
+        )
+    risk_context = risk_context.__class__(
+        **{
+            **risk_context.__dict__,
+            "atr": float(atr_value),
+        }
+    )
+
     try:
         build_candidate_from_strategy(strategy_decision, row)
     except (TypeError, ValueError) as exc:
