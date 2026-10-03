@@ -129,7 +129,8 @@ class OperatorSnapshotWriter:
         v1_signal = build_v1_signal_from_decision(
             decision,
             valid_until=timestamp + pd.Timedelta(minutes=5),
-            research_context=getattr(decision.prediction, "research_context", None),
+            research_context=getattr(decision, "research_context", None),
+            market_context=getattr(decision, "market_context", None),
         )
 
         # Market context is carried by the strategy/analysis boundary when
