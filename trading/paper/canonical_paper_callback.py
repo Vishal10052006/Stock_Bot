@@ -44,22 +44,27 @@ def _session_open(timestamp: pd.Timestamp) -> bool:
     return time(9, 15) <= local.time() < time(15, 15)
 
 
-def execute_prediction_to_paper(
+def build_live_money_decision(
     prediction: PredictionContext,
     analysis_result: MarketAnalysisResult,
     candle: Any,
-    paper_engine: LivePaperEngine,
+    risk_engine: RiskEngine,
     *,
-    strategy_engine: StrategyEngine | None = None,
-    risk_engine: RiskEngine | None = None,
+    available_equity: float,
+    day_start_equity: float,
 ) -> CanonicalPaperDecision:
-    """Evaluate canonical Prediction -> Strategy -> Risk -> Safety -> Paper."""
+    """Build a real-money manual BUY/SELL decision without submitting an order.
+
+    This is the live decision boundary used by V1. It performs Strategy and
+    Risk evaluation, but deliberately stops before any broker/order operation.
+    The human reviewer is responsible for the real-money BUY/SELL action.
+    """
     if not isinstance(prediction, PredictionContext):
         raise TypeError("prediction must be PredictionContext")
     if not isinstance(analysis_result, MarketAnalysisResult):
         raise TypeError("analysis_result must be MarketAnalysisResult")
-    if not isinstance(paper_engine, LivePaperEngine):
-        raise TypeError("paper_engine must be LivePaperEngine")
+    if not isinstance(risk_engine, RiskEngine):
+        raise TypeError("risk_engine must be RiskEngine")
 
     analysis = analysis_result.analysis
     timestamp = pd.Timestamp(prediction.timestamp)
@@ -86,7 +91,7 @@ def execute_prediction_to_paper(
                 timestamp=timestamp,
                 symbol=symbol,
                 direction=StrategyDirection.NO_TRADE,
-                strategy_version=paper_engine.strategy_engine.config.strategy_version,
+                strategy_version=risk_engine.config.strategy_version,
                 rationale="Canonical regime is not yet available.",
             ),
             risk_status="NOT_ENTERED",
@@ -97,9 +102,6 @@ def execute_prediction_to_paper(
             market_context=getattr(analysis, "market_context", None),
         )
 
-    regime = str(regime)
-    regime_probability = float(regime_probability)
-
     strategy_input = StrategyInput(
         timestamp=timestamp,
         symbol=symbol,
@@ -108,8 +110,8 @@ def execute_prediction_to_paper(
         analysis_context=analysis,
         market_context=getattr(analysis, "market_context", None),
         research_context=getattr(analysis, "research_context", None),
-        regime=regime,
-        regime_probability=regime_probability,
+        regime=str(regime),
+        regime_probability=float(regime_probability),
         versions={
             "analysis": getattr(analysis, "analysis_version", "v1.0"),
             "feature": getattr(analysis, "feature_version", "v1.0"),
@@ -122,9 +124,8 @@ def execute_prediction_to_paper(
         },
     )
 
-    strategy_engine = strategy_engine or paper_engine.strategy_engine
+    strategy_engine = StrategyEngine()
     strategy_decision, _trace = strategy_engine.decide(strategy_input)
-
     if strategy_decision.direction is StrategyDirection.NO_TRADE:
         return CanonicalPaperDecision(
             prediction=prediction,
@@ -133,6 +134,8 @@ def execute_prediction_to_paper(
             risk_reason=strategy_decision.rationale,
             paper_order_status=None,
             trade_id=None,
+            research_context=getattr(analysis, "research_context", None),
+            market_context=getattr(analysis, "market_context", None),
         )
 
     raw_row = analysis_result.indicators.loc[
@@ -157,47 +160,25 @@ def execute_prediction_to_paper(
             risk_reason=str(exc),
             paper_order_status=None,
             trade_id=None,
+            research_context=getattr(analysis, "research_context", None),
+            market_context=getattr(analysis, "market_context", None),
         )
-
-    safety = paper_engine.safety_gate.evaluate(
-        SafetyState(
-            stale_data=False,
-            data_quality_ok=True,
-            session_open=_session_open(timestamp),
-            live_execution_enabled=False,
-        )
-    )
-    if safety.block not in (SafetyBlock.NONE, SafetyBlock.LIVE_LOCKED):
-        return CanonicalPaperDecision(
-            prediction=prediction,
-            strategy=strategy_decision,
-            risk_status=safety.block.value,
-            risk_reason=safety.reason,
-            paper_order_status=None,
-            trade_id=None,
-        )
-
-    risk_engine = risk_engine or paper_engine.risk_engine
-    equity, realized_pnl, unrealized_pnl, gross_exposure = (
-        paper_engine.runtime.account_snapshot({symbol: float(candle.close)})
-    )
 
     assessment = evaluate_strategy_candidate_risk(
         strategy_decision,
         row,
         risk_engine,
-        available_equity=equity,
-        day_start_equity=paper_engine.config.initial_equity,
-        realized_pnl=realized_pnl,
-        unrealized_pnl=unrealized_pnl,
-        open_positions=len(paper_engine.runtime.positions),
-        trades_today=paper_engine.submitted_order_count,
-        gross_exposure=gross_exposure,
-        symbol_already_open=paper_engine.exit_engine.has_open_position(symbol),
+        available_equity=float(available_equity),
+        day_start_equity=float(day_start_equity),
+        realized_pnl=0.0,
+        unrealized_pnl=0.0,
+        open_positions=0,
+        trades_today=0,
+        gross_exposure=0.0,
+        symbol_already_open=False,
         liquidity_available=True,
         kill_switch_active=False,
     )
-
     risk_decision = assessment.decision
     if risk_decision.status is not RiskDecisionStatus.APPROVED:
         return CanonicalPaperDecision(
@@ -207,67 +188,17 @@ def execute_prediction_to_paper(
             risk_reason=risk_decision.reason,
             paper_order_status=None,
             trade_id=None,
+            research_context=getattr(analysis, "research_context", None),
+            market_context=getattr(analysis, "market_context", None),
         )
-
-    authorization = authorize_risk_decision(
-        risk_decision,
-        risk_decision_id=f"{timestamp.isoformat()}:{symbol}:{risk_decision.risk_version}",
-    )
-    if authorization.status is not ExecutionAuthorizationStatus.AUTHORIZED:
-        return CanonicalPaperDecision(
-            prediction=prediction,
-            strategy=strategy_decision,
-            risk_status=risk_decision.status.value,
-            risk_reason=authorization.reason,
-            paper_order_status=None,
-            trade_id=None,
-        )
-
-    order = paper_engine.runtime.submit(
-        authorization,
-        price=float(candle.close),
-        quantity=risk_decision.approved_quantity,
-    )
-    if order.status.value != "FILLED":
-        return CanonicalPaperDecision(
-            prediction=prediction,
-            strategy=strategy_decision,
-            risk_status=risk_decision.status.value,
-            risk_reason="Paper runtime rejected the authorized order.",
-            paper_order_status=order.status.value,
-            trade_id=None,
-        )
-
-    target_multiple = risk_engine.config.target_multiple_r
-    if candidate.direction.value == "LONG":
-        target_price = candidate.entry_price + candidate.stop_distance * target_multiple
-    else:
-        target_price = candidate.entry_price - candidate.stop_distance * target_multiple
-
-    trade_id = (
-        f"TR-{paper_engine.config.experiment_id}-"
-        f"{paper_engine.submitted_order_count + 1:03d}"
-    )
-
-    paper_engine.exit_engine.open_position(
-        order,
-        stop_price=candidate.stop_price,
-        target_price=target_price,
-        trade_id=trade_id,
-        strategy_version=strategy_decision.strategy_version,
-        model_version=prediction.model_version,
-        risk_version=risk_decision.risk_version,
-        regime=strategy_decision.regime,
-    )
-    paper_engine.register_submitted_order(order)
 
     return CanonicalPaperDecision(
         prediction=prediction,
         strategy=strategy_decision,
         risk_status=risk_decision.status.value,
         risk_reason=risk_decision.reason,
-        paper_order_status=order.status.value,
-        trade_id=trade_id,
+        paper_order_status="MANUAL_BUY_SELL_REQUIRED",
+        trade_id=None,
         research_context=getattr(analysis, "research_context", None),
         market_context=getattr(analysis, "market_context", None),
     )
@@ -275,5 +206,6 @@ def execute_prediction_to_paper(
 
 __all__ = [
     "CanonicalPaperDecision",
+    "build_live_money_decision",
     "execute_prediction_to_paper",
 ]
