@@ -58,7 +58,24 @@ function renderScanner(){
    root.innerHTML='<div class="box"><div class="ey">STATUS</div><div class="big yellow">'+esc(v.status||"NO_DATA")+'</div><div class="muted">Waiting for the real-market virtual-paper runtime.</div></div>';
    return;
  }
- root.innerHTML=rows.map(r=>'<div class="box" style="margin-bottom:6px"><div class="row"><span><b>'+esc(r.symbol)+'</b> • '+esc(r.regime)+'</span><span class="cyan">'+esc(r.timestamp)+'</span></div><div class="row"><span>↑ LONG '+(Number(r.long_success||0)*100).toFixed(1)+'%</span><span>↓ SHORT '+(Number(r.short_success||0)*100).toFixed(1)+'%</span><span>○ NO EDGE '+(Number(r.no_edge||0)*100).toFixed(1)+'%</span></div><div class="row"><span>Prediction: <b>'+esc(r.predicted_class)+'</b></span><span>Strategy: <b>'+esc(r.strategy)+'</b></span><span>Risk: <b>'+esc(r.risk_status)+'</b></span></div><div class="row"><span class="muted">'+esc(r.strategy_reason||r.risk_reason)+'</span><span>Paper: '+esc(r.paper_order_status||"NONE")+'</span></div></div>').join("");
+ root.innerHTML=rows.map(r=>{
+   const signal=String(r.display_signal||(
+     r.strategy==="LONG"?"BUY":r.strategy==="SHORT"?"SELL":"WAIT"
+   ));
+   const signalClass=signal==="BUY"?"green":signal==="SELL"?"red":"yellow";
+   const confidence=r.confidence==null?"—":(Number(r.confidence)*100).toFixed(1)+"%";
+   const rr=(r.entry_reference!=null&&r.stop_reference!=null&&r.target_reference!=null)
+     ? (Math.abs(Number(r.target_reference)-Number(r.entry_reference))/Math.abs(Number(r.entry_reference)-Number(r.stop_reference))).toFixed(2)+" R"
+     : "—";
+   return '<div class="box" style="margin-bottom:6px">'+
+     '<div class="row"><span><b>'+esc(r.symbol)+'</b> • '+esc(r.regime)+'</span><span class="cyan">'+esc(r.timestamp)+'</span></div>'+
+     '<div class="row"><span class="'+signalClass+'"><b>'+esc(signal)+'</b></span><span>Confidence: <b>'+esc(confidence)+'</b></span><span>Valid until: '+esc(r.valid_until||"—")+'</span></div>'+
+     '<div class="row"><span>Entry: <b>'+esc(r.entry_reference==null?"—":r.entry_reference)+'</b></span><span>SL: <b>'+esc(r.stop_reference==null?"—":r.stop_reference)+'</b></span><span>Target: <b>'+esc(r.target_reference==null?"—":r.target_reference)+'</b></span><span>R:R: <b>'+esc(rr)+'</b></span></div>'+
+     '<div class="row"><span>↑ LONG '+(Number(r.long_success||0)*100).toFixed(1)+'%</span><span>↓ SHORT '+(Number(r.short_success||0)*100).toFixed(1)+'%</span><span>○ NO EDGE '+(Number(r.no_edge||0)*100).toFixed(1)+'%</span></div>'+
+     '<div class="row"><span>Risk: <b>'+esc(r.risk_status)+'</b></span><span class="muted">'+esc(r.strategy_reason||r.risk_reason)+'</span><span>Paper: '+esc(r.paper_order_status||"NONE")+'</span></div>'+
+     '<div class="row"><span class="muted">V1 authority: HUMAN_REVIEW_ONLY • broker execution: disabled</span></div>'+
+   '</div>';
+ }).join("");
 }
 function renderTrace(id){
  const names=[["01","research","RESEARCH","Information Gathering"],["02","analysis","ANALYSIS","Feature + Context"],["03","market","MARKET","Regime / Flow"],["04","prediction","PREDICTION","Forecast / Probability"],["05","strategy","STRATEGY","Decision Logic"],["06","risk","RISK","Hard Limits"],["07","execution","EXECUTION","Paper / Broker"]];
