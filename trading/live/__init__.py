@@ -16,6 +16,11 @@ from .upstox_risk_context import (
     UpstoxManualRiskContextProvider,
     UpstoxReadOnlyAccountClient,
 )
+from .manual_review_runtime import (
+    LiveManualReviewConfig,
+    build_live_manual_review_runtime,
+    run_live_manual_review,
+)
 from .signal_engine import (
     LiveSignalBlockReason,
     LiveSignalEvent,
@@ -32,6 +37,9 @@ __all__ = [
     "LiveRiskContextUnavailable",
     "UpstoxManualRiskContextProvider",
     "UpstoxReadOnlyAccountClient",
+    "LiveManualReviewConfig",
+    "build_live_manual_review_runtime",
+    "run_live_manual_review",
     "LiveSignalBlockReason",
     "LiveSignalEvent",
     "LiveSignalEngine",
