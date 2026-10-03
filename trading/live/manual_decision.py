@@ -7,7 +7,7 @@ It never creates, submits, modifies, or cancels a broker order.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 import pandas as pd
@@ -57,6 +57,28 @@ def _risk_context_block(
         market_context=getattr(analysis, "market_context", None),
         risk_context=None,
     )
+
+
+def _enrich_risk_context_from_indicators(
+    risk_context: LiveManualRiskContext,
+    row: pd.Series,
+) -> LiveManualRiskContext:
+    """Attach only observed market-derived volatility to live Risk state."""
+    atr_candidates = [
+        column
+        for column in row.index
+        if str(column).startswith("atr_")
+    ]
+    if not atr_candidates:
+        raise ValueError("Canonical ATR is unavailable at the decision timestamp.")
+
+    atr_column = "atr_14" if "atr_14" in atr_candidates else sorted(atr_candidates)[0]
+    atr_value = pd.to_numeric(pd.Series([row[atr_column]]), errors="coerce").iloc[0]
+    if pd.isna(atr_value) or not float(atr_value) > 0:
+        raise ValueError(
+            f"Canonical ATR {atr_column} is invalid at the decision timestamp."
+        )
+    return replace(risk_context, atr=float(atr_value))
 
 
 def build_live_money_decision(
@@ -193,6 +215,16 @@ def build_live_money_decision(
     row_data["timestamp"] = timestamp
     row_data["symbol"] = symbol
     row = pd.Series(row_data)
+
+    try:
+        risk_context = _enrich_risk_context_from_indicators(risk_context, row)
+    except ValueError as exc:
+        return _risk_context_block(
+            prediction,
+            analysis,
+            strategy_decision,
+            str(exc),
+        )
 
     try:
         build_candidate_from_strategy(strategy_decision, row)
