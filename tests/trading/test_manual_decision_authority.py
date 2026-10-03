@@ -9,6 +9,40 @@ import pytest
 from trading.live.risk_context import LiveManualRiskContext
 
 
+def _context(
+    *,
+    as_of: pd.Timestamp,
+    max_age_seconds: float = 30.0,
+) -> LiveManualRiskContext:
+    return LiveManualRiskContext(
+        as_of=as_of,
+        source="manual_account_snapshot",
+        available_equity=100_000.0,
+        day_start_equity=100_000.0,
+        available_cash=50_000.0,
+        peak_equity=100_000.0,
+        realized_pnl=0.0,
+        unrealized_pnl=0.0,
+        open_positions=0,
+        trades_today=0,
+        gross_exposure=0.0,
+        symbol_already_open=False,
+        position_context=None,
+        liquidity_available=True,
+        kill_switch_active=False,
+        sector=None,
+        symbol_exposure={},
+        sector_exposure={},
+        pairwise_correlation={},
+        atr=None,
+        high_volatility=False,
+        market_data_valid=True,
+        system_ready=True,
+        kill_switch_state=None,
+        max_age_seconds=max_age_seconds,
+    )
+
+
 def test_v1_manual_decision_authority_lives_outside_paper_namespace() -> None:
     live = importlib.import_module("trading.live.manual_decision")
     legacy = importlib.import_module("trading.paper.canonical_paper_callback")
@@ -57,26 +91,32 @@ def test_manual_decision_contains_no_synthetic_account_defaults() -> None:
 
 def test_live_manual_risk_context_requires_fresh_observed_state() -> None:
     decision_time = pd.Timestamp("2026-10-03T10:00:00+05:30")
-    context = LiveManualRiskContext(
+    context = _context(
         as_of=decision_time - pd.Timedelta(seconds=10),
-        source="manual_account_snapshot",
-        available_equity=100_000.0,
-        day_start_equity=100_000.0,
     )
 
-    assert context.validation_error(decision_time) is None
+    assert (
+        context.validation_error(
+            observed_at=decision_time,
+            decision_timestamp=decision_time,
+        )
+        is None
+    )
 
 
 def test_live_manual_risk_context_blocks_stale_state() -> None:
     decision_time = pd.Timestamp("2026-10-03T10:00:00+05:30")
-    context = LiveManualRiskContext(
+    context = _context(
         as_of=decision_time - pd.Timedelta(seconds=31),
-        source="manual_account_snapshot",
-        available_equity=100_000.0,
-        day_start_equity=100_000.0,
     )
 
-    assert context.validation_error(decision_time) is not None
+    assert (
+        context.validation_error(
+            observed_at=decision_time,
+            decision_timestamp=decision_time,
+        )
+        is not None
+    )
 
 
 @pytest.mark.parametrize(
@@ -88,11 +128,36 @@ def test_live_manual_risk_context_blocks_stale_state() -> None:
     ],
 )
 def test_live_manual_risk_context_rejects_invalid_state(kwargs) -> None:
+    values = {
+        "available_equity": 100_000.0,
+        "day_start_equity": 100_000.0,
+        "available_cash": 50_000.0,
+        "peak_equity": 100_000.0,
+        "realized_pnl": 0.0,
+        "unrealized_pnl": 0.0,
+        "open_positions": 0,
+        "trades_today": 0,
+        "gross_exposure": 0.0,
+        "symbol_already_open": False,
+        "position_context": None,
+        "liquidity_available": True,
+        "kill_switch_active": False,
+        "sector": None,
+        "symbol_exposure": {},
+        "sector_exposure": {},
+        "pairwise_correlation": {},
+        "atr": None,
+        "high_volatility": False,
+        "market_data_valid": True,
+        "system_ready": True,
+        "kill_switch_state": None,
+        "max_age_seconds": 30.0,
+    }
+    values.update(kwargs)
+
     with pytest.raises(ValueError):
         LiveManualRiskContext(
             as_of=pd.Timestamp("2026-10-03T10:00:00+05:30"),
             source="manual_account_snapshot",
-            available_equity=kwargs.get("available_equity", 100_000.0),
-            day_start_equity=kwargs.get("day_start_equity", 100_000.0),
-            max_age_seconds=kwargs.get("max_age_seconds", 30.0),
+            **values,
         )
