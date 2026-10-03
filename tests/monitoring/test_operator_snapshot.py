@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from types import SimpleNamespace
 
 import pandas as pd
@@ -117,6 +119,38 @@ def test_operator_snapshot_starts_explicitly_waiting(tmp_path):
     assert payload["execution"]["broker_orders"] == 0
     assert payload["performance"]["total_return"] == 0.0
     assert payload["fingerprint"]
+
+
+def test_v1_operator_snapshot_fails_closed_without_live_account_context(tmp_path):
+    path = tmp_path / "operator_snapshot.json"
+    writer = OperatorSnapshotWriter(
+        path=path,
+        symbol="RELIANCE",
+        benchmark_symbol="NIFTY50",
+        model_version="phase9-logistic-v1",
+        calibration_version="calibration-v1",
+        data_version="upstox-live-v1",
+        feature_version="v1.0",
+        require_live_account_context=True,
+    )
+
+    decision = _decision()
+    decision_without_context = SimpleNamespace(
+        prediction=decision.prediction,
+        strategy=decision.strategy,
+        risk_status=decision.risk_status,
+        risk_reason=decision.risk_reason,
+        manual_execution_status=decision.manual_execution_status,
+        trade_id=decision.trade_id,
+        research_context=getattr(decision, "research_context", None),
+        market_context=getattr(decision, "market_context", None),
+        risk_context=None,
+    )
+    with pytest.raises(ValueError, match="verified live account context"):
+        writer.observe(
+            decision_without_context,
+            SimpleNamespace(symbol="RELIANCE", close=2505.0),
+        )
 
 
 def test_operator_snapshot_publishes_verified_live_account_context(tmp_path):
