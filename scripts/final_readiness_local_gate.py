@@ -110,10 +110,13 @@ def main() -> int:
 
     # M-24 uses the authoritative empirical paper report. It should only be
     # promoted by an actual PASS from its own validator.
+    # Use -m so the repository root is on sys.path; direct execution of the
+    # thin wrapper cannot resolve the top-level monitoring package reliably.
     results["monitoring_m24"] = _run(
         [
             sys.executable,
-            "scripts/trading/validate_monitoring_completion.py",
+            "-m",
+            "scripts.trading.validate_monitoring_completion",
         ]
     )
 
