@@ -25,7 +25,7 @@ from trading.strategy.models import StrategyDecision, StrategyDirection, Strateg
 
 
 @dataclass(frozen=True, slots=True)
-class CanonicalPaperDecision:
+class CanonicalLiveDecision:
     """Auditable downstream result for one candle."""
 
     prediction: PredictionContext
@@ -52,7 +52,7 @@ def build_live_money_decision(
     *,
     available_equity: float,
     day_start_equity: float,
-) -> CanonicalPaperDecision:
+) -> CanonicalLiveDecision:
     """Build a real-money manual BUY/SELL decision without submitting an order.
 
     This is the live decision boundary used by V1. It performs Strategy and
@@ -85,7 +85,7 @@ def build_live_money_decision(
     regime = regime_row.iloc[-1]["regime"]
     regime_probability = regime_row.iloc[-1]["regime_probability"]
     if pd.isna(regime) or pd.isna(regime_probability):
-        return CanonicalPaperDecision(
+        return CanonicalLiveDecision(
             prediction=prediction,
             strategy=StrategyDecision(
                 timestamp=timestamp,
@@ -127,7 +127,7 @@ def build_live_money_decision(
     strategy_engine = StrategyEngine()
     strategy_decision, _trace = strategy_engine.decide(strategy_input)
     if strategy_decision.direction is StrategyDirection.NO_TRADE:
-        return CanonicalPaperDecision(
+        return CanonicalLiveDecision(
             prediction=prediction,
             strategy=strategy_decision,
             risk_status="NOT_ENTERED",
@@ -153,7 +153,7 @@ def build_live_money_decision(
     try:
         candidate = build_candidate_from_strategy(strategy_decision, row)
     except (TypeError, ValueError) as exc:
-        return CanonicalPaperDecision(
+        return CanonicalLiveDecision(
             prediction=prediction,
             strategy=strategy_decision,
             risk_status="CANDIDATE_REJECTED",
@@ -181,7 +181,7 @@ def build_live_money_decision(
     )
     risk_decision = assessment.decision
     if risk_decision.status is not RiskDecisionStatus.APPROVED:
-        return CanonicalPaperDecision(
+        return CanonicalLiveDecision(
             prediction=prediction,
             strategy=strategy_decision,
             risk_status=risk_decision.status.value,
@@ -192,7 +192,7 @@ def build_live_money_decision(
             market_context=getattr(analysis, "market_context", None),
         )
 
-    return CanonicalPaperDecision(
+    return CanonicalLiveDecision(
         prediction=prediction,
         strategy=strategy_decision,
         risk_status=risk_decision.status.value,
@@ -205,7 +205,7 @@ def build_live_money_decision(
 
 
 __all__ = [
-    "CanonicalPaperDecision",
+    "CanonicalLiveDecision",
     "build_live_money_decision",
     "execute_prediction_to_paper",
 ]
