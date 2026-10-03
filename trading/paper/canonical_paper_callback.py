@@ -1,4 +1,4 @@
-"""Canonical Strategy -> Risk -> Safety -> Paper callback for live candles."""
+"""Canonical Strategy -> Risk decision callback for live market candles."""
 
 from __future__ import annotations
 
@@ -32,7 +32,7 @@ class CanonicalLiveDecision:
     strategy: StrategyDecision
     risk_status: str
     risk_reason: str
-    paper_order_status: str | None
+    manual_execution_status: str | None
     trade_id: str | None
     research_context: Any | None = None
     market_context: Any | None = None
@@ -96,7 +96,7 @@ def build_live_money_decision(
             ),
             risk_status="NOT_ENTERED",
             risk_reason="Canonical regime is not yet available.",
-            paper_order_status=None,
+            manual_execution_status=None,
             trade_id=None,
             research_context=getattr(analysis, "research_context", None),
             market_context=getattr(analysis, "market_context", None),
@@ -132,7 +132,7 @@ def build_live_money_decision(
             strategy=strategy_decision,
             risk_status="NOT_ENTERED",
             risk_reason=strategy_decision.rationale,
-            paper_order_status=None,
+            manual_execution_status=None,
             trade_id=None,
             research_context=getattr(analysis, "research_context", None),
             market_context=getattr(analysis, "market_context", None),
@@ -158,7 +158,7 @@ def build_live_money_decision(
             strategy=strategy_decision,
             risk_status="CANDIDATE_REJECTED",
             risk_reason=str(exc),
-            paper_order_status=None,
+            manual_execution_status=None,
             trade_id=None,
             research_context=getattr(analysis, "research_context", None),
             market_context=getattr(analysis, "market_context", None),
@@ -186,7 +186,7 @@ def build_live_money_decision(
             strategy=strategy_decision,
             risk_status=risk_decision.status.value,
             risk_reason=risk_decision.reason,
-            paper_order_status=None,
+            manual_execution_status=None,
             trade_id=None,
             research_context=getattr(analysis, "research_context", None),
             market_context=getattr(analysis, "market_context", None),
@@ -197,7 +197,7 @@ def build_live_money_decision(
         strategy=strategy_decision,
         risk_status=risk_decision.status.value,
         risk_reason=risk_decision.reason,
-        paper_order_status="MANUAL_BUY_SELL_REQUIRED",
+        manual_execution_status="MANUAL_BUY_SELL_REQUIRED",
         trade_id=None,
         research_context=getattr(analysis, "research_context", None),
         market_context=getattr(analysis, "market_context", None),
@@ -207,5 +207,4 @@ def build_live_money_decision(
 __all__ = [
     "CanonicalLiveDecision",
     "build_live_money_decision",
-    "execute_prediction_to_paper",
 ]
