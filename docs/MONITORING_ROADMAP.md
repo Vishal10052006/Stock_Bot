@@ -24,7 +24,7 @@ M-20 Empirical evidence identity / validation — IMPLEMENTED
 M-21 Chronological run accounting — IMPLEMENTED
 M-22 Cross-layer monitoring coverage — IMPLEMENTED
 M-23 Failure / calibration evidence semantics — IMPLEMENTED
-M-24 Final empirical monitoring completion gate — VALIDATING
+M-24 Final empirical monitoring completion gate — ENGINEERING COMPLETE / EMPIRICAL VALIDATION PENDING
 
 M-20..M-24 are evidence/completion gates over the existing Monitoring Engine.
 They do not add trading authority or replace the empirical paper run.
