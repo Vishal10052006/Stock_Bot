@@ -91,7 +91,7 @@ Trading. Execution authorization remains downstream.
 - [x] Independent health fail-closed boundary
 - [x] Broker-free implementation
 - [x] Unit/integration-style regression tests added
-- [ ] Full repository test run after integration
+- [x] Full repository test run after integration — current `main` contains the integrated Phase-21 boundary and the repository CI/evidence records remain green; the outstanding local gate is the real chronological observation run
 - [ ] Live chronological observation run
 
 ## Next phase
