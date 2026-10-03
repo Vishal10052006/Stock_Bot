@@ -297,6 +297,9 @@ class UpstoxManualRiskContextProvider:
         unrealized_pnl = sum(
             self._number(row.get("unrealised", 0.0), "position.unrealised")
             for row in position_rows
+        ) + sum(
+            self._number(row.get("day_change", 0.0), "holding.day_change")
+            for row in holding_rows
         )
 
         symbol_exposure = self._exposure_by_symbol(position_rows, holding_rows)
