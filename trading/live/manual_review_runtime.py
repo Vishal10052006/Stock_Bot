@@ -280,6 +280,7 @@ def build_live_manual_review_runtime(
             calibration_version=manifest.provenance.calibration_version,
             data_version=config.data_version,
             feature_version=config.feature_version,
+            require_live_account_context=True,
         )
         operator_writer.write_initial()
 
