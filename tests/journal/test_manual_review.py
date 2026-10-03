@@ -1,5 +1,6 @@
 """Focused tests for the V1 human-review evidence journal."""
 
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 
 import pytest
@@ -106,6 +107,45 @@ def test_outcome_requires_explicit_observation_and_links_to_review(tmp_path) -> 
     journal.record_outcome(outcome)
 
     assert journal.outcome_for_review(review.review_id) == outcome
+
+
+def test_concurrent_outcomes_allow_only_one_append_per_review(tmp_path) -> None:
+    store = ManualReviewStore(tmp_path / "manual_review.jsonl")
+    journal = ManualReviewJournal(store)
+    review = journal.record_review(
+        _signal(),
+        action=ManualReviewAction.ACCEPT,
+        reviewed_at=datetime(2026, 10, 3, 9, 16, tzinfo=timezone.utc),
+    )
+
+    def append_outcome(outcome_id: str) -> str:
+        outcome = ManualOutcomeRecord(
+            outcome_id=outcome_id,
+            review_id=review.review_id,
+            signal_id=review.signal_id,
+            observed_at=datetime(2026, 10, 3, 12, 0, tzinfo=timezone.utc),
+            status=ManualOutcomeStatus.NOT_EXECUTED,
+            execution_timestamp=None,
+            entry_price=None,
+            exit_timestamp=None,
+            exit_price=None,
+            quantity=None,
+            fees=None,
+            slippage_cost=None,
+            net_pnl=None,
+        )
+        try:
+            journal.record_outcome(outcome)
+            return "accepted"
+        except ValueError as exc:
+            assert "already exists" in str(exc)
+            return "rejected"
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(append_outcome, ("OUT-CONCURRENT-1", "OUT-CONCURRENT-2")))
+
+    assert sorted(results) == ["accepted", "rejected"]
+    assert len(journal.outcomes()) == 1
 
 
 def test_executed_outcome_cannot_be_created_without_explicit_execution_facts() -> None:
