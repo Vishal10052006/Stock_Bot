@@ -148,6 +148,9 @@ class LiveManualRiskContext:
         if observed.tzinfo is None or decision.tzinfo is None:
             return "risk context and decision timestamps must be timezone-aware"
 
+        if decision > observed:
+            return "decision timestamp is in the future relative to risk observation"
+
         if observed < self.as_of:
             return "risk context observation timestamp precedes its state timestamp"
 
