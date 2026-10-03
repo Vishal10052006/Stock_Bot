@@ -117,6 +117,8 @@ def main() -> int:
         ]
     )
 
+    # Provider evidence is intentionally not inferred from tests or docs.
+    # The operator must collect the real observations in the supported environment.
     results["provider_evidence"] = {
         "status": "PENDING",
         "reason": (
@@ -152,12 +154,15 @@ def main() -> int:
     # Missing empirical/provider evidence is a blocking readiness condition,
     # but it is not a software failure. Keep the process fail-closed without
     # misclassifying an evidence gap as a command error.
-    evidence_pending = (
+    cert08_pending = (
         results.get("cert08", {}).get("status") == "PENDING"
         if isinstance(results.get("cert08"), dict)
         else False
     )
-    return 1 if command_failures or evidence_pending else 0
+    # A completed repository-side audit may still report evidence blockers.
+    # Returning non-zero is reserved for an actual failed validation command
+    # or missing local paper-session input needed for CERT-08.
+    return 1 if command_failures or cert08_pending else 0
 
 
 if __name__ == "__main__":
