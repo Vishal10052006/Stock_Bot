@@ -175,7 +175,6 @@ def test_v1_live_manual_review_pipeline_handoff_is_end_to_end(monkeypatch, tmp_p
                 benchmark="NIFTY",
                 data_version="upstox-live-v1",
                 feature_version="v1.0",
-                require_live_account_context=True,
             )
         ),
         model=model,
