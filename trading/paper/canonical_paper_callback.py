@@ -34,6 +34,8 @@ class CanonicalPaperDecision:
     risk_reason: str
     paper_order_status: str | None
     trade_id: str | None
+    research_context: Any | None = None
+    market_context: Any | None = None
 
 
 def _session_open(timestamp: pd.Timestamp) -> bool:
