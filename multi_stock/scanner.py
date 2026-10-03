@@ -109,6 +109,11 @@ class StockScannerRow:
     signal_strength: float
     authority: str = "OBSERVATION_ONLY"
     provenance: Mapping[str, Any] = field(default_factory=dict)
+    # V1 human-review fields consumed directly by the dashboard.
+    display_signal: str = "WAIT"
+    confidence: float | None = None
+    valid_until: str | None = None
+    v1_fingerprint: str | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "timestamp", _timestamp(self.timestamp))
@@ -141,6 +146,12 @@ class StockScannerRow:
             raise ValueError("scanner signal_strength must be in [-1, 1]")
         if self.authority != "OBSERVATION_ONLY":
             raise ValueError("scanner is observation-only")
+        if self.display_signal not in {"BUY", "SELL", "WAIT"}:
+            raise ValueError("scanner display_signal is invalid")
+        if self.confidence is not None and not 0.0 <= self.confidence <= 1.0:
+            raise ValueError("scanner confidence must be in [0, 1]")
+        if self.valid_until is not None:
+            _timestamp(self.valid_until)
 
     def as_dict(self) -> dict[str, Any]:
         """Return a JSON-compatible payload."""
@@ -214,15 +225,43 @@ class StockScannerStore:
         price: float | None = None,
     ) -> StockScannerRow:
         """Record one canonical prediction/strategy/risk observation."""
+        # Prefer the canonical V1 contract when present. The scanner remains
+        # observational: it only projects already-authoritative fields.
+        v1_signal = _get(decision, "v1_signal")
+        if v1_signal is None and hasattr(decision, "signal") and hasattr(decision, "valid_until"):
+            v1_signal = decision
+
         prediction = _get(decision, "prediction")
         strategy = _get(decision, "strategy")
-        if prediction is None or strategy is None:
-            raise ValueError("decision must contain prediction and strategy")
 
-        timestamp = _timestamp(_get(prediction, "timestamp"))
-        symbol = str(
-            _get(prediction, "symbol", _get(strategy, "symbol", ""))
-        ).strip().upper()
+        if v1_signal is not None:
+            timestamp = _timestamp(_get(v1_signal, "timestamp"))
+            symbol = str(_get(v1_signal, "symbol", "")).strip().upper()
+            raw_signal = _get(v1_signal, "signal", "WAIT")
+            display_signal = str(getattr(raw_signal, "value", raw_signal))
+            confidence = _get(v1_signal, "confidence")
+            valid_until = _timestamp(_get(v1_signal, "valid_until"))
+            fingerprint = _get(v1_signal, "fingerprint")
+            provenance = _get(v1_signal, "provenance", {})
+        else:
+            if prediction is None or strategy is None:
+                raise ValueError("decision must contain prediction and strategy")
+            timestamp = _timestamp(_get(prediction, "timestamp"))
+            symbol = str(
+                _get(prediction, "symbol", _get(strategy, "symbol", ""))
+            ).strip().upper()
+            raw_direction = _get(strategy, "direction", "NO_TRADE")
+            direction = str(getattr(raw_direction, "value", raw_direction))
+            display_signal = (
+                "BUY" if direction == "LONG"
+                else "SELL" if direction == "SHORT"
+                else "WAIT"
+            )
+            confidence = _get(strategy, "prediction_probability")
+            valid_until = None
+            fingerprint = None
+            provenance = _get(prediction, "provenance", {})
+
         if not symbol:
             raise ValueError("decision symbol is required")
 
@@ -232,8 +271,20 @@ class StockScannerStore:
         ):
             raise ValueError("scanner decision timestamp moved backwards")
 
-        long_p, short_p, no_edge = _probabilities(prediction)
-        predicted_class = str(_get(prediction, "predicted_class", "")).strip()
+        if prediction is not None:
+            long_p, short_p, no_edge = _probabilities(prediction)
+            predicted_class = str(_get(prediction, "predicted_class", "")).strip()
+        else:
+            long_p, short_p, no_edge = (
+                (1.0, 0.0, 0.0) if display_signal == "BUY"
+                else (0.0, 1.0, 0.0) if display_signal == "SELL"
+                else (0.0, 0.0, 1.0)
+            )
+            predicted_class = (
+                "LONG_SUCCESS" if display_signal == "BUY"
+                else "SHORT_SUCCESS" if display_signal == "SELL"
+                else "NO_EDGE"
+            )
         if predicted_class not in {
             "LONG_SUCCESS",
             "SHORT_SUCCESS",
@@ -251,6 +302,31 @@ class StockScannerStore:
         strategy_value = str(getattr(direction, "value", direction))
         strategy_reason = str(_get(strategy, "rationale", ""))
 
+        # When the canonical V1 contract is supplied directly, project its
+        # authoritative review fields instead of inventing strategy values.
+        if v1_signal is not None:
+            strategy_value = (
+                "LONG" if display_signal == "BUY"
+                else "SHORT" if display_signal == "SELL"
+                else "NO_TRADE"
+            )
+            strategy_reason = str(
+                _get(v1_signal, "supporting_factors", ())
+                or _get(v1_signal, "risk_conditions", ())
+                or "Canonical V1 human-review signal."
+            )
+            v1_entry = _get(v1_signal, "entry")
+            v1_stop = _get(v1_signal, "stop_loss")
+            v1_target = _get(v1_signal, "target")
+            v1_risk_status = (
+                "APPROVED" if display_signal in {"BUY", "SELL"} else "WAIT"
+            )
+        else:
+            v1_entry = None
+            v1_stop = None
+            v1_target = None
+            v1_risk_status = None
+
         row = StockScannerRow(
             timestamp=timestamp,
             symbol=symbol,
@@ -262,18 +338,23 @@ class StockScannerStore:
             regime=_get(strategy, "regime"),
             strategy=strategy_value,
             strategy_reason=strategy_reason,
-            risk_status=str(_get(decision, "risk_status", "UNKNOWN")),
-            risk_reason=str(_get(decision, "risk_reason", "")),
+            risk_status=str(
+                _get(decision, "risk_status", v1_risk_status or "UNKNOWN")
+            ),
+            risk_reason=str(
+                _get(decision, "risk_reason", "")
+                or (_get(v1_signal, "risk_conditions", ()) if v1_signal is not None else "")
+            ),
             paper_order_status=_get(decision, "paper_order_status"),
             trade_id=_get(decision, "trade_id"),
             entry_reference=_numeric_or_none(
-                _get(strategy, "entry_reference")
+                _get(strategy, "entry_reference", v1_entry)
             ),
             stop_reference=_numeric_or_none(
-                _get(strategy, "stop_reference")
+                _get(strategy, "stop_reference", v1_stop)
             ),
             target_reference=_numeric_or_none(
-                _get(strategy, "target_reference")
+                _get(strategy, "target_reference", v1_target)
             ),
             prediction_model_version=str(
                 _get(prediction, "model_version", "unknown")
@@ -286,7 +367,11 @@ class StockScannerStore:
                 -1.0,
                 min(1.0, max(long_p, short_p) - no_edge),
             ),
-            provenance=_get(prediction, "provenance", {}),
+            provenance=provenance,
+            display_signal=display_signal,
+            confidence=None if confidence is None else _finite(confidence, "confidence"),
+            valid_until=valid_until,
+            v1_fingerprint=fingerprint,
         )
         self._rows[symbol] = row
         return row
