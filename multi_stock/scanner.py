@@ -302,6 +302,31 @@ class StockScannerStore:
         strategy_value = str(getattr(direction, "value", direction))
         strategy_reason = str(_get(strategy, "rationale", ""))
 
+        # When the canonical V1 contract is supplied directly, project its
+        # authoritative review fields instead of inventing strategy values.
+        if v1_signal is not None:
+            strategy_value = (
+                "LONG" if display_signal == "BUY"
+                else "SHORT" if display_signal == "SELL"
+                else "NO_TRADE"
+            )
+            strategy_reason = str(
+                _get(v1_signal, "supporting_factors", ())
+                or _get(v1_signal, "risk_conditions", ())
+                or "Canonical V1 human-review signal."
+            )
+            v1_entry = _get(v1_signal, "entry")
+            v1_stop = _get(v1_signal, "stop_loss")
+            v1_target = _get(v1_signal, "target")
+            v1_risk_status = (
+                "APPROVED" if display_signal in {"BUY", "SELL"} else "WAIT"
+            )
+        else:
+            v1_entry = None
+            v1_stop = None
+            v1_target = None
+            v1_risk_status = None
+
         row = StockScannerRow(
             timestamp=timestamp,
             symbol=symbol,
@@ -313,18 +338,23 @@ class StockScannerStore:
             regime=_get(strategy, "regime"),
             strategy=strategy_value,
             strategy_reason=strategy_reason,
-            risk_status=str(_get(decision, "risk_status", "UNKNOWN")),
-            risk_reason=str(_get(decision, "risk_reason", "")),
+            risk_status=str(
+                _get(decision, "risk_status", v1_risk_status or "UNKNOWN")
+            ),
+            risk_reason=str(
+                _get(decision, "risk_reason", "")
+                or (_get(v1_signal, "risk_conditions", ()) if v1_signal is not None else "")
+            ),
             paper_order_status=_get(decision, "paper_order_status"),
             trade_id=_get(decision, "trade_id"),
             entry_reference=_numeric_or_none(
-                _get(strategy, "entry_reference")
+                _get(strategy, "entry_reference", v1_entry)
             ),
             stop_reference=_numeric_or_none(
-                _get(strategy, "stop_reference")
+                _get(strategy, "stop_reference", v1_stop)
             ),
             target_reference=_numeric_or_none(
-                _get(strategy, "target_reference")
+                _get(strategy, "target_reference", v1_target)
             ),
             prediction_model_version=str(
                 _get(prediction, "model_version", "unknown")
