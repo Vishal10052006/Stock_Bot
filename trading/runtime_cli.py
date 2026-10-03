@@ -40,6 +40,10 @@ from trading.paper.live_market_runtime import (
     LiveMarketPaperConfig,
     run_live_market_paper_session,
 )
+from trading.live.manual_review_runtime import (
+    LiveManualReviewConfig,
+    run_live_manual_review,
+)
 
 
 class RuntimeMode(str, Enum):
@@ -50,6 +54,7 @@ class RuntimeMode(str, Enum):
     PAPER = "paper"
     READINESS = "readiness"
     LIVE_PAPER = "live-paper"
+    LIVE_MANUAL_REVIEW = "live-review"
     LIVE = "live"
 
 
@@ -71,6 +76,9 @@ class RuntimeConfig:
     session_id: str = "VIRTUAL-INTRADAY-001"
     initial_equity: float = 100_000.0
     max_candles: int | None = None
+    data_version: str | None = None
+    feature_version: str | None = None
+    operator_snapshot_path: Path | None = None
 
     def __post_init__(self) -> None:
         if not self.symbol.strip():
@@ -121,6 +129,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--session-id", default="VIRTUAL-INTRADAY-001")
     parser.add_argument("--initial-equity", type=float, default=100_000.0)
     parser.add_argument("--max-candles", type=int)
+    parser.add_argument("--data-version", help="Explicit data contract version for V1 manual-review mode.")
+    parser.add_argument("--feature-version", help="Explicit feature contract version for V1 manual-review mode.")
+    parser.add_argument("--operator-snapshot", help="Optional observation-only dashboard snapshot path for V1 manual-review mode.")
     parser.add_argument(
         "--confirm-live",
         action="store_true",
@@ -146,6 +157,9 @@ def _config_from_args(args: argparse.Namespace) -> RuntimeConfig:
         session_id=args.session_id.strip(),
         initial_equity=args.initial_equity,
         max_candles=args.max_candles,
+        data_version=args.data_version,
+        feature_version=args.feature_version,
+        operator_snapshot_path=Path(args.operator_snapshot) if args.operator_snapshot else None,
     )
 
 
@@ -304,6 +318,32 @@ def run_live_paper(config: RuntimeConfig) -> int:
     )
 
 
+def run_live_manual_review_mode(config: RuntimeConfig) -> int:
+    """Run the V1 real-market manual-review runtime without a paper account."""
+    if config.model_artifact is None:
+        raise ValueError("live-review mode requires --model-artifact")
+    if not config.model_sha256:
+        raise ValueError("live-review mode requires --model-sha256")
+    if not config.data_version:
+        raise ValueError("live-review mode requires --data-version")
+    if not config.feature_version:
+        raise ValueError("live-review mode requires --feature-version")
+
+    return run_live_manual_review(
+        LiveManualReviewConfig(
+            symbol=config.symbol,
+            benchmark_symbol=config.benchmark_symbol,
+            model_artifact=config.model_artifact,
+            model_sha256=config.model_sha256,
+            model_version=config.model_version,
+            data_version=config.data_version,
+            feature_version=config.feature_version,
+            max_candles=config.max_candles,
+            operator_snapshot_path=config.operator_snapshot_path,
+        )
+    )
+
+
 def run_readiness() -> int:
     """Print the current fail-closed live-readiness state."""
     gates = LiveReadinessInput(
@@ -368,6 +408,8 @@ def dispatch(config: RuntimeConfig) -> int:
         return run_paper(config)
     if config.mode is RuntimeMode.LIVE_PAPER:
         return run_live_paper(config)
+    if config.mode is RuntimeMode.LIVE_MANUAL_REVIEW:
+        return run_live_manual_review_mode(config)
     if config.mode is RuntimeMode.READINESS:
         return run_readiness()
     if config.mode is RuntimeMode.LIVE:
@@ -389,6 +431,7 @@ __all__ = [
     "main",
     "run_ceo_demo",
     "run_live_market_paper_session",
+    "run_live_manual_review_mode",
     "run_live_paper",
     "run_live",
     "run_paper",
