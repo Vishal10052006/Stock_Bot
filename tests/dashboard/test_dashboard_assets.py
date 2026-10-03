@@ -21,3 +21,9 @@ def test_ops_dashboard_assets_are_present_and_safe():
     assert snapshot["mode"] == "research_paper_demo"
     assert snapshot["metrics"]["execution.fill_count"] == 0
     assert snapshot["health"][4]["status"] == "LOCKED"
+
+
+def test_dashboard_includes_screen_reviewer_surface():
+    assert "SCREEN REVIEWER // OBSERVATION ONLY" in html
+    assert "screen_review" in html
+    assert "SCREEN ↔ MARKET RECONCILIATION" in html
