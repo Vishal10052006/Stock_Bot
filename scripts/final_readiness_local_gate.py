@@ -148,7 +148,16 @@ def main() -> int:
         if isinstance(value, dict)
         and value.get("returncode") not in (None, 0)
     ]
-    return 1 if command_failures else 0
+
+    # Missing empirical/provider evidence is a blocking readiness condition,
+    # but it is not a software failure. Keep the process fail-closed without
+    # misclassifying an evidence gap as a command error.
+    evidence_pending = (
+        results.get("cert08", {}).get("status") == "PENDING"
+        if isinstance(results.get("cert08"), dict)
+        else False
+    )
+    return 1 if command_failures or evidence_pending else 0
 
 
 if __name__ == "__main__":
