@@ -11,8 +11,9 @@ The contract is the single presentation boundary for V1. It contains the
 authoritative BUY/SELL/WAIT decision, trade levels, evidence, risk conditions,
 and provenance needed by the dashboard and human reviewer.
 
-It is deliberately broker-free: constructing or serializing this contract
-cannot place, submit, modify, or cancel a broker order.
+It is deliberately broker-free: the system produces the BUY/SELL/WAIT decision and
+trade levels for manual real-money execution; constructing or serializing this
+contract cannot place, submit, modify, or cancel a broker order.
 """
 
 from __future__ import annotations
@@ -90,7 +91,7 @@ class V1SignalContract:
     contradicting_factors: tuple[str, ...] = ()
     risk_conditions: tuple[str, ...] = ()
     provenance: Mapping[str, str] = field(default_factory=dict)
-    authority: str = "HUMAN_REVIEW_ONLY"
+    authority: str = "MANUAL_REAL_MONEY_REVIEW"
     broker_execution: bool = False
 
     def __post_init__(self) -> None:
@@ -118,8 +119,8 @@ class V1SignalContract:
             # execution authority or a fabricated risk/reward ratio.
             if self.broker_execution:
                 raise ValueError("WAIT signal cannot enable broker execution")
-        if self.authority != "HUMAN_REVIEW_ONLY":
-            raise ValueError("V1 signal authority must remain HUMAN_REVIEW_ONLY")
+        if self.authority != "MANUAL_REAL_MONEY_REVIEW":
+            raise ValueError("V1 signal authority must remain MANUAL_REAL_MONEY_REVIEW")
         if self.broker_execution:
             raise ValueError("V1 contract must never authorize broker execution")
         if not isinstance(self.prediction_evidence, Mapping):
@@ -177,7 +178,7 @@ class V1SignalContract:
         payload["risk_reward"] = self.risk_reward
         payload["is_expired"] = self.is_expired
         payload["broker_execution"] = False
-        payload["authority"] = "HUMAN_REVIEW_ONLY"
+        payload["authority"] = "MANUAL_REAL_MONEY_REVIEW"
 
         canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
         payload["fingerprint"] = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
@@ -385,7 +386,7 @@ def build_v1_signal_from_decision(
             "feature_version": str(getattr(prediction, "feature_version", "")),
             "data_version": str(strategy.provenance.get("data_version", "")),
         },
-        authority="HUMAN_REVIEW_ONLY",
+        authority="MANUAL_REAL_MONEY_REVIEW",
         broker_execution=False,
     )
 
@@ -468,7 +469,7 @@ def build_v1_signal(
             + ([live_signal.risk_reason] if live_signal.risk_reason else [])
         ),
         provenance=live_signal.provenance,
-        authority="HUMAN_REVIEW_ONLY",
+        authority="MANUAL_REAL_MONEY_REVIEW",
         broker_execution=False,
     )
 
