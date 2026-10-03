@@ -184,6 +184,57 @@ class V1SignalContract:
         payload["fingerprint"] = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
         return payload
 
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> "V1SignalContract":
+        """Rehydrate a canonical signal from an already-published JSON snapshot.
+
+        The snapshot is treated as an untrusted transport representation. The
+        contract constructor re-runs all invariants, including timestamps,
+        evidence causality, authority, and broker-execution locking.
+        """
+        if not isinstance(data, Mapping):
+            raise TypeError("V1 signal payload must be a mapping")
+
+        def evidence_group(key: str) -> tuple[V1Evidence, ...]:
+            raw = data.get(key, ())
+            if not isinstance(raw, (list, tuple)):
+                raise ValueError(f"{key} must be a sequence")
+            return tuple(
+                V1Evidence(
+                    category=str(item["category"]),
+                    source=str(item["source"]),
+                    timestamp=pd.Timestamp(item["timestamp"]),
+                    status=str(item["status"]),
+                    reason=str(item["reason"]),
+                    details=dict(item.get("details", {})),
+                )
+                for item in raw
+            )
+
+        return cls(
+            signal_id=str(data["signal_id"]),
+            timestamp=pd.Timestamp(data["timestamp"]),
+            symbol=str(data["symbol"]),
+            signal=V1Signal(str(data["signal"])),
+            entry=None if data.get("entry") is None else float(data["entry"]),
+            stop_loss=None if data.get("stop_loss") is None else float(data["stop_loss"]),
+            target=None if data.get("target") is None else float(data["target"]),
+            risk_reward=None if data.get("risk_reward") is None else float(data["risk_reward"]),
+            confidence=None if data.get("confidence") is None else float(data["confidence"]),
+            prediction_evidence=dict(data.get("prediction_evidence", {})),
+            valid_until=pd.Timestamp(data["valid_until"]),
+            news_research_evidence=evidence_group("news_research_evidence"),
+            technical_evidence=evidence_group("technical_evidence"),
+            fundamental_evidence=evidence_group("fundamental_evidence"),
+            market_sector_evidence=evidence_group("market_sector_evidence"),
+            supporting_factors=tuple(data.get("supporting_factors", ())),
+            contradicting_factors=tuple(data.get("contradicting_factors", ())),
+            risk_conditions=tuple(data.get("risk_conditions", ())),
+            provenance={str(k): str(v) for k, v in dict(data.get("provenance", {})).items()},
+            authority=str(data.get("authority", "MANUAL_REAL_MONEY_REVIEW")),
+            broker_execution=bool(data.get("broker_execution", False)),
+        )
+
 
 def _finite(value: float, field_name: str) -> bool:
     """Return True only for finite numeric values."""
