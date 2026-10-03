@@ -22,7 +22,7 @@ from ml.models.logistic import LogisticOutcomeModel
 from ml.preprocessing.pipeline import FeaturePreprocessor
 from trading.ab30_pipeline import MarketAnalysisResult
 from trading.market_bot_pipeline import build_market_analysis_from_market_bot
-from trading.paper.canonical_paper_callback import build_live_money_decision
+from trading.live.manual_decision import build_live_money_decision
 from trading.paper.causal_history import CausalCandleHistory
 from trading.paper.live_loop import LivePaperEngine, LivePaperSessionResult
 from research.integration.analysis_contract import ResearchAnalysisContext
