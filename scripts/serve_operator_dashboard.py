@@ -27,10 +27,11 @@ def load_snapshot(path: Path) -> dict:
     return data
 
 
-def make_handler(snapshot_path: Path, dashboard_dir: Path):
+def make_handler(snapshot_path: Path, dashboard_dir: Path, review_snapshot_path: Path | None = None):
     """Create a request handler bound to immutable paths."""
     dashboard_root = Path(dashboard_dir).resolve()
     snapshot_file = Path(snapshot_path).resolve()
+    review_file = Path(review_snapshot_path).resolve() if review_snapshot_path else None
 
     class OperatorHandler(SimpleHTTPRequestHandler):
         """Serve dashboard assets and the observation-only snapshot API."""
@@ -49,6 +50,18 @@ def make_handler(snapshot_path: Path, dashboard_dir: Path):
                 except (OSError, ValueError, json.JSONDecodeError) as exc:
                     self.send_error(500, f"invalid snapshot: {exc}")
                     return
+
+                if review_file is not None and review_file.exists():
+                    try:
+                        review = json.loads(review_file.read_text(encoding="utf-8"))
+                        if isinstance(review, dict):
+                            payload["screen_review"] = review
+                    except (OSError, ValueError, json.JSONDecodeError):
+                        payload["screen_review"] = {
+                            "status": "UNAVAILABLE",
+                            "severity": "WARNING",
+                            "authority": "OBSERVATION_ONLY",
+                        }
 
                 body = json.dumps(payload, sort_keys=True).encode("utf-8")
                 self.send_response(200)
@@ -73,6 +86,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--snapshot", type=Path, required=True)
     parser.add_argument("--dashboard-dir", type=Path, default=Path("dashboard"))
+    parser.add_argument("--review-snapshot", type=Path)
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8765)
     return parser
@@ -93,7 +107,7 @@ def main(argv: list[str] | None = None) -> int:
 
     server = ThreadingHTTPServer(
         (args.host, args.port),
-        make_handler(snapshot_path, dashboard_dir),
+        make_handler(snapshot_path, dashboard_dir, args.review_snapshot),
     )
     print(f"STOCK_BOT dashboard: http://{args.host}:{args.port}/")
     print(f"Snapshot source: {snapshot_path}")
