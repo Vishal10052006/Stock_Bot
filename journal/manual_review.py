@@ -16,6 +16,7 @@ from enum import Enum
 import hashlib
 import json
 import math
+import threading
 from pathlib import Path
 from typing import Any, Mapping, Union
 
@@ -331,34 +332,43 @@ class ManualReviewStore:
 
     def __init__(self, path: str | Path) -> None:
         self.path = Path(path)
+        self._append_lock = threading.RLock()
 
     def append(self, record: ManualReviewEvent) -> None:
         if not isinstance(record, (ManualReviewRecord, ManualOutcomeRecord)):
             raise TypeError("record must be a ManualReviewRecord or ManualOutcomeRecord")
-        key = (record.__class__.__name__, getattr(record, "review_id", None), getattr(record, "outcome_id", None))
-        existing = {
-            (
-                item.__class__.__name__,
-                getattr(item, "review_id", None),
-                getattr(item, "outcome_id", None),
+        # The dashboard uses ThreadingHTTPServer. Serialize the read/check/write
+        # sequence so concurrent outcome submissions cannot both pass the
+        # one-outcome-per-review invariant before either append completes.
+        with self._append_lock:
+            events = self.read_events()
+            key = (
+                record.__class__.__name__,
+                getattr(record, "review_id", None),
+                getattr(record, "outcome_id", None),
             )
-            for item in self.read_events()
-        }
-        if key in existing:
-            raise ValueError("duplicate manual-review event")
-        if isinstance(record, ManualOutcomeRecord):
-            if any(
+            existing = {
+                (
+                    item.__class__.__name__,
+                    getattr(item, "review_id", None),
+                    getattr(item, "outcome_id", None),
+                )
+                for item in events
+            }
+            if key in existing:
+                raise ValueError("duplicate manual-review event")
+            if isinstance(record, ManualOutcomeRecord) and any(
                 isinstance(item, ManualOutcomeRecord)
                 and item.review_id == record.review_id
-                for item in self.read_events()
+                for item in events
             ):
                 raise ValueError(
                     f"manual outcome already exists for review_id {record.review_id}"
                 )
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        with self.path.open("a", encoding="utf-8") as handle:
-            handle.write(json.dumps(record.to_dict(), sort_keys=True, separators=(",", ":")))
-            handle.write("\n")
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            with self.path.open("a", encoding="utf-8") as handle:
+                handle.write(json.dumps(record.to_dict(), sort_keys=True, separators=(",", ":")))
+                handle.write("\n")
 
     def read_events(self) -> tuple[ManualReviewEvent, ...]:
         if not self.path.exists():
