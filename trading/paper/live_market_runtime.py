@@ -27,6 +27,7 @@ from market.data.validation import MarketEventValidator
 from ml.prediction.artifacts import load_phase9_logistic_bundle
 from multi_stock.scanner import StockScannerStore
 from monitoring.operator_snapshot import OperatorSnapshotWriter
+from trading.live.upstox_risk_context import UpstoxManualRiskContextProvider
 from trading.paper.canonical_live_orchestrator import (
     CanonicalLivePaperConfig,
     CanonicalLivePaperOrchestrator,
@@ -69,6 +70,38 @@ def _load_runtime_instrument_mapper() -> UpstoxInstrumentMapper:
         mapping.update(context_mapping)
 
     return UpstoxInstrumentMapper(mapping)
+
+
+def _required_env(name: str) -> str:
+    """Read a required runtime setting without embedding live account values."""
+    value = os.getenv(name, "").strip()
+    if not value:
+        raise ValueError(f"{name} is required for live risk observation")
+    return value
+
+
+def _load_live_risk_context_provider() -> UpstoxManualRiskContextProvider:
+    """Build the read-only live account observer entirely from runtime config."""
+    try:
+        max_age_seconds = float(_required_env("STOCK_BOT_RISK_CONTEXT_MAX_AGE_SECONDS"))
+        timeout_seconds = float(_required_env("STOCK_BOT_RISK_CONTEXT_TIMEOUT_SECONDS"))
+    except ValueError as exc:
+        raise ValueError(
+            "STOCK_BOT_RISK_CONTEXT_MAX_AGE_SECONDS and "
+            "STOCK_BOT_RISK_CONTEXT_TIMEOUT_SECONDS must be numeric"
+        ) from exc
+
+    return UpstoxManualRiskContextProvider.from_env(
+        day_state_path=Path(_required_env("STOCK_BOT_RISK_DAY_STATE_PATH")),
+        api_base_url=_required_env("STOCK_BOT_RISK_API_BASE_URL"),
+        exchange=_required_env("STOCK_BOT_RISK_EXCHANGE"),
+        segment=_required_env("STOCK_BOT_RISK_SEGMENT"),
+        timezone_name=_required_env("STOCK_BOT_RISK_TIMEZONE"),
+        max_age_seconds=max_age_seconds,
+        source=_required_env("STOCK_BOT_RISK_CONTEXT_SOURCE"),
+        timeout_seconds=timeout_seconds,
+        access_token_env=_required_env("STOCK_BOT_RISK_ACCESS_TOKEN_ENV"),
+    )
 
 
 def _load_live_research_providers() -> tuple:
@@ -238,6 +271,8 @@ def build_live_market_paper_session(
             provenance={"provider": "upstox-historical-v3+intraday-v3"},
         )
 
+    live_risk_context_provider = _load_live_risk_context_provider()
+
     paper_engine = LivePaperEngine(
         LivePaperSessionConfig(
             experiment_id=config.session_id,
@@ -298,6 +333,7 @@ def build_live_market_paper_session(
             as_of=cutoff.to_pydatetime(),
         ),
         research_runtime=research_runtime,
+        risk_context_provider=live_risk_context_provider,
     )
 
     return VirtualIntradaySession(
