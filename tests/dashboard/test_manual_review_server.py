@@ -21,7 +21,7 @@ def _signal(*, valid_until=None) -> V1SignalContract:
         risk_reward=2.0,
         confidence=0.8,
         prediction_evidence={"probabilities": {"LONG_SUCCESS": 0.8, "SHORT_SUCCESS": 0.1, "NO_EDGE": 0.1}},
-        valid_until=valid_until or datetime(2026, 10, 3, 18, 0, tzinfo=timezone.utc),
+        valid_until=valid_until or datetime(2099, 1, 1, 0, 0, tzinfo=timezone.utc),
         technical_evidence=(),
         provenance={"strategy_version": "test"},
     )
