@@ -175,6 +175,7 @@ class V1SignalContract:
             ]
 
         payload["risk_reward"] = self.risk_reward
+        payload["is_expired"] = self.is_expired
         payload["broker_execution"] = False
         payload["authority"] = "HUMAN_REVIEW_ONLY"
 
