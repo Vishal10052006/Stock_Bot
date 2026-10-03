@@ -21,6 +21,8 @@ from trading.strategy.candidate_adapter import build_candidate_from_strategy
 from trading.strategy.engine import StrategyEngine
 from trading.strategy.models import StrategyDecision, StrategyDirection, StrategyInput
 
+from .risk_context import LiveManualRiskContext
+
 
 @dataclass(frozen=True, slots=True)
 class CanonicalLiveDecision:
@@ -36,20 +38,38 @@ class CanonicalLiveDecision:
     market_context: Any | None = None
 
 
+def _risk_context_block(
+    prediction: PredictionContext,
+    analysis: Any,
+    strategy: StrategyDecision,
+    reason: str,
+) -> CanonicalLiveDecision:
+    """Build a safe non-actionable decision when account state is unavailable."""
+    return CanonicalLiveDecision(
+        prediction=prediction,
+        strategy=strategy,
+        risk_status="RISK_CONTEXT_UNAVAILABLE",
+        risk_reason=reason,
+        manual_execution_status=None,
+        trade_id=None,
+        research_context=getattr(analysis, "research_context", None),
+        market_context=getattr(analysis, "market_context", None),
+    )
+
+
 def build_live_money_decision(
     prediction: PredictionContext,
     analysis_result: MarketAnalysisResult,
     candle: Any,
     risk_engine: RiskEngine,
     *,
-    available_equity: float,
-    day_start_equity: float,
+    risk_context: LiveManualRiskContext | None,
 ) -> CanonicalLiveDecision:
     """Evaluate Strategy and Risk for a real-money manual review.
 
-    The returned decision is informational/authoritative for the V1 review
-    boundary only. No broker client, order ID, fill, or execution command is
-    accepted by this function.
+    A verified decision-time LiveManualRiskContext is mandatory for an
+    actionable result. Missing or stale account state produces a safety block;
+    this function never substitutes paper-account defaults or synthetic state.
     """
     if not isinstance(prediction, PredictionContext):
         raise TypeError("prediction must be PredictionContext")
@@ -61,6 +81,13 @@ def build_live_money_decision(
     analysis = analysis_result.analysis
     timestamp = pd.Timestamp(prediction.timestamp)
     symbol = prediction.symbol
+
+    candle_timestamp = pd.Timestamp(getattr(candle, "timestamp", None))
+    candle_symbol = str(getattr(candle, "symbol", "")).strip().upper()
+    if candle_timestamp != timestamp or candle_symbol != symbol.upper():
+        raise ValueError(
+            "candle must match prediction timestamp and symbol exactly"
+        )
 
     feature_row = analysis_result.features.loc[
         pd.to_datetime(analysis_result.features["timestamp"], utc=True) == timestamp
@@ -130,6 +157,23 @@ def build_live_money_decision(
             market_context=getattr(analysis, "market_context", None),
         )
 
+    if risk_context is None:
+        return _risk_context_block(
+            prediction,
+            analysis,
+            strategy_decision,
+            "Decision-time account/portfolio risk context was not supplied.",
+        )
+
+    context_error = risk_context.validation_error(timestamp)
+    if context_error is not None:
+        return _risk_context_block(
+            prediction,
+            analysis,
+            strategy_decision,
+            context_error,
+        )
+
     raw_row = analysis_result.indicators.loc[
         pd.to_datetime(analysis_result.indicators["timestamp"], utc=True) == timestamp
     ]
@@ -160,16 +204,28 @@ def build_live_money_decision(
         strategy_decision,
         row,
         risk_engine,
-        available_equity=float(available_equity),
-        day_start_equity=float(day_start_equity),
-        realized_pnl=0.0,
-        unrealized_pnl=0.0,
-        open_positions=0,
-        trades_today=0,
-        gross_exposure=0.0,
-        symbol_already_open=False,
-        liquidity_available=True,
-        kill_switch_active=False,
+        available_equity=risk_context.available_equity,
+        day_start_equity=risk_context.day_start_equity,
+        available_cash=risk_context.available_cash,
+        peak_equity=risk_context.peak_equity,
+        realized_pnl=risk_context.realized_pnl,
+        unrealized_pnl=risk_context.unrealized_pnl,
+        open_positions=risk_context.open_positions,
+        trades_today=risk_context.trades_today,
+        gross_exposure=risk_context.gross_exposure,
+        symbol_already_open=risk_context.symbol_already_open,
+        position_context=risk_context.position_context,
+        liquidity_available=risk_context.liquidity_available,
+        kill_switch_active=risk_context.kill_switch_active,
+        sector=risk_context.sector,
+        symbol_exposure=risk_context.symbol_exposure,
+        sector_exposure=risk_context.sector_exposure,
+        pairwise_correlation=risk_context.pairwise_correlation,
+        atr=risk_context.atr,
+        high_volatility=risk_context.high_volatility,
+        market_data_valid=risk_context.market_data_valid,
+        system_ready=risk_context.system_ready,
+        kill_switch_state=risk_context.kill_switch_state,
     )
     risk_decision = assessment.decision
     if risk_decision.status is not RiskDecisionStatus.APPROVED:
@@ -198,5 +254,6 @@ def build_live_money_decision(
 
 __all__ = [
     "CanonicalLiveDecision",
+    "LiveManualRiskContext",
     "build_live_money_decision",
 ]
