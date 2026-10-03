@@ -206,6 +206,7 @@ def build_live_money_decision(
             trade_id=None,
             research_context=getattr(analysis, "research_context", None),
             market_context=getattr(analysis, "market_context", None),
+            risk_context=risk_context,
         )
 
     assessment = evaluate_strategy_candidate_risk(
@@ -246,6 +247,7 @@ def build_live_money_decision(
             trade_id=None,
             research_context=getattr(analysis, "research_context", None),
             market_context=getattr(analysis, "market_context", None),
+            risk_context=risk_context,
         )
 
     return CanonicalLiveDecision(
