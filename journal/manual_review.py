@@ -419,6 +419,10 @@ class ManualReviewJournal:
     def outcomes(self) -> tuple[ManualOutcomeRecord, ...]:
         return self.store.outcomes()
 
+    def outcome_for_review(self, review_id: str) -> ManualOutcomeRecord | None:
+        """Return the unique manually observed outcome linked to a review."""
+        return self.store.outcome_for_review(review_id)
+
 
 __all__ = [
     "ManualOutcomeRecord",
