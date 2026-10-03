@@ -108,7 +108,7 @@ def build_parser() -> argparse.ArgumentParser:
         default=RuntimeMode.CEO_DEMO.value,
         help="Runtime mode. Default preserves the legacy CEO demo.",
     )
-    parser.add_argument("--symbol", default="RELIANCE")
+    parser.add_argument("--symbol", help="Explicit symbol for the selected runtime.")
     parser.add_argument(
         "--candles",
         type=int,
@@ -124,8 +124,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--price-column", default="close")
     parser.add_argument("--model-artifact", help="Verified Phase-9 Logistic artifact for live-paper mode.")
     parser.add_argument("--model-sha256", help="Expected SHA-256 identity of the model artifact.")
-    parser.add_argument("--model-version", default="phase9-logistic-v1")
-    parser.add_argument("--benchmark-symbol", default="NIFTY50")
+    parser.add_argument("--model-version", help="Explicit model version for the selected runtime.")
+    parser.add_argument("--benchmark-symbol", help="Explicit benchmark symbol for the selected runtime.")
     parser.add_argument("--session-id", default="VIRTUAL-INTRADAY-001")
     parser.add_argument("--initial-equity", type=float, default=100_000.0)
     parser.add_argument("--max-candles", type=int)
