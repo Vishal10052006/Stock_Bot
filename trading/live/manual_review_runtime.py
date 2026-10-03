@@ -35,6 +35,7 @@ from trading.paper.canonical_live_orchestrator import (
     CanonicalLivePaperOrchestrator,
 )
 from trading.paper.upstox_history import UpstoxHistoryProvider
+from monitoring.operator_snapshot import OperatorSnapshotWriter
 from trading.risk.engine import RiskEngine
 
 from .upstox_risk_context import UpstoxManualRiskContextProvider
@@ -268,14 +269,23 @@ def build_live_manual_review_runtime(
     risk_engine = RiskEngine()
     scanner_store = StockScannerStore()
     operator_snapshot_path = config.operator_snapshot_path
+    operator_writer = None
+    if operator_snapshot_path is not None:
+        operator_writer = OperatorSnapshotWriter(
+            path=operator_snapshot_path,
+            symbol=config.symbol,
+            benchmark_symbol=config.benchmark_symbol,
+            model_version=config.model_version,
+            calibration_version=manifest.provenance.calibration_version,
+            data_version=config.data_version,
+            feature_version=config.feature_version,
+        )
+        operator_writer.write_initial()
 
     def observe_decision(decision, candle):
         scanner_store.observe(decision, price=float(candle.close))
-        if operator_snapshot_path is not None:
-            scanner_store.write_json(
-                operator_snapshot_path,
-                mode="live_market_manual_review",
-            )
+        if operator_writer is not None:
+            operator_writer.observe(decision, candle)
 
     return CanonicalLivePaperOrchestrator(
         decision_observer=observe_decision,
