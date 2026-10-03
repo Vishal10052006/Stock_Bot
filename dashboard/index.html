@@ -21,6 +21,7 @@ main{max-width:1180px;margin:28px auto;padding:0 20px}.grid{display:grid;grid-te
 .state{font-weight:700}.ok{color:var(--green)}.warn{color:var(--yellow)}
 pre{white-space:pre-wrap;overflow:auto;max-height:330px;background:#080c11;border:1px solid var(--line);border-radius:9px;padding:12px;color:#9cacb8;font:11px ui-monospace,monospace}
 .empty{text-align:center;padding:48px 10px;color:var(--muted)}
+.actions{display:flex;gap:10px;flex-wrap:wrap}.btn{border:1px solid var(--line);border-radius:9px;padding:10px 14px;background:#111a22;color:#e8eef3;font-weight:800;cursor:pointer}.btn:disabled{opacity:.45;cursor:not-allowed}.btn.accept{border-color:#285f3b;color:var(--green)}.btn.reject{border-color:#69313a;color:var(--red)}.formgrid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}.field{display:flex;flex-direction:column;gap:5px}.field label{font-size:11px;color:var(--muted)}.field input,.field select,.field textarea{width:100%;border:1px solid var(--line);border-radius:8px;background:#080c11;color:#e8eef3;padding:9px}.field textarea{min-height:70px;resize:vertical}.fullfield{grid-column:1/-1}.review-status{margin-top:10px;font-size:12px}.review-list{display:grid;gap:7px}.review-item{border:1px solid var(--line);border-radius:8px;padding:9px;font-size:12px}
 footer{max-width:1180px;margin:18px auto 40px;padding:0 20px;color:var(--muted);font:11px ui-monospace,monospace}
 @media(max-width:800px){.grid{grid-template-columns:1fr}.levels{grid-template-columns:repeat(2,1fr)}header{padding:0 14px}.sub{display:none}}
 </style>
@@ -37,6 +38,7 @@ footer{max-width:1180px;margin:18px auto 40px;padding:0 20px;color:var(--muted);
 <script>
 "use strict";
 const root=document.getElementById("root"),fresh=document.getElementById("fresh");
+let currentSignalId="";
 const esc=v=>String(v??"—").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const pct=v=>v==null?"—":(Number(v)*100).toFixed(1)+"%";
 const price=v=>v==null?"—":Number(v).toFixed(2);
@@ -52,6 +54,7 @@ function render(s){
    root.className="empty";root.textContent=(s.views&&s.views.scanner&&s.views.scanner.status)||"Waiting for the canonical V1 signal…";return;
  }
  const sig=String(v.signal||"WAIT"), cls=sig==="BUY"?"BUY":sig==="SELL"?"SELL":"WAIT";
+ currentSignalId=String(v.signal_id||"");
  const probs=v.prediction_evidence&&v.prediction_evidence.probabilities||{};
  const p={LONG_SUCCESS:probs.LONG_SUCCESS,SHORT_SUCCESS:probs.SHORT_SUCCESS,NO_EDGE:probs.NO_EDGE};
  const risk=(v.risk_conditions||[]).map(x=>'<div class="pill">'+esc(x)+'</div>').join("");
@@ -66,16 +69,73 @@ function render(s){
  '</section>'+
  '<section class="panel"><div class="kicker">REVIEW GATES</div><div class="section"><h2>Risk conditions</h2><div class="pills">'+(risk||'<span class="muted">None recorded.</span>')+'</div></div><div class="section"><h2>Supporting factors</h2>'+pills(v.supporting_factors,"support")+'</div><div class="section"><h2>Contradicting factors</h2>'+pills(v.contradicting_factors,"contra")+'</div><div class="section"><h2>Identity</h2><div class="kv"><b>Signal ID</b><span>'+esc(v.signal_id)+'</span></div><div class="kv"><b>Fingerprint</b><span>'+esc(v.fingerprint)+'</span></div></div></section>'+
  '<section class="panel full"><div class="kicker">EVIDENCE CHAIN</div><div class="section"><h2>News / Research</h2>'+evidence(v.news_research_evidence)+'</div><div class="section"><h2>Technical</h2>'+evidence(v.technical_evidence)+'</div><div class="section"><h2>Fundamental</h2>'+evidence(v.fundamental_evidence)+'</div><div class="section"><h2>Market / Sector</h2>'+evidence(v.market_sector_evidence)+'</div></section>'+
+ '<section class="panel full"><div class="kicker">HUMAN REVIEW</div><div class="section"><div class="actions"><button class="btn accept" onclick="submitReview('ACCEPT')">ACCEPT SIGNAL</button><button class="btn reject" onclick="submitReview('REJECT')">REJECT SIGNAL</button></div><div class="field" style="margin-top:10px"><label>Review note</label><textarea id="reviewNote" placeholder="Optional reason for your decision"></textarea></div><div id="reviewStatus" class="review-status muted">No review recorded in this session.</div></div><div class="section"><h2>Manual outcome evidence</h2><div class="formgrid"><div class="field"><label>Status</label><select id="outcomeStatus"><option value="NOT_EXECUTED">NOT_EXECUTED</option><option value="EXECUTED">EXECUTED</option><option value="CLOSED">CLOSED</option></select></div><div class="field"><label>Observed at (ISO 8601)</label><input id="observedAt" placeholder="2026-10-03T10:00:00+05:30"></div><div class="field"><label>Execution timestamp</label><input id="executionTimestamp"></div><div class="field"><label>Entry price</label><input id="entryPrice" type="number" step="any"></div><div class="field"><label>Exit timestamp</label><input id="exitTimestamp"></div><div class="field"><label>Exit price</label><input id="exitPrice" type="number" step="any"></div><div class="field"><label>Quantity</label><input id="quantity" type="number" step="any"></div><div class="field"><label>Fees</label><input id="fees" type="number" step="any"></div><div class="field"><label>Slippage cost</label><input id="slippageCost" type="number" step="any"></div><div class="field"><label>Net P&amp;L</label><input id="netPnl" type="number" step="any"></div><div class="field fullfield"><label>Outcome note</label><textarea id="outcomeNote" placeholder="Operator-supplied observation only"></textarea></div></div><div class="actions" style="margin-top:10px"><button class="btn" onclick="submitOutcome()">RECORD OUTCOME</button></div><div id="outcomeStatusMessage" class="review-status muted"></div></div><div class="section"><h2>Recorded evidence</h2><div id="reviewList" class="review-list"><span class="muted">Loading…</span></div></div></section>'+
  '<section class="panel"><div class="kicker">MODEL / DATA PROVENANCE</div><div class="section">'+prov+'</div></section>'+
  '<section class="panel"><div class="kicker">RAW CANONICAL CONTRACT</div><pre>'+esc(JSON.stringify(v,null,2))+'</pre></section>';
  fresh.textContent=v.is_expired?"EXPIRED":"VALID";
  fresh.className="badge "+(v.is_expired?"locked":"");
 }
+
+async function submitReview(action){
+ const status=document.getElementById("reviewStatus");
+ try{
+   const response=await fetch("/api/review",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action,reviewed_at:new Date().toISOString(),review_note:document.getElementById("reviewNote").value})});
+   const data=await response.json();
+   if(!response.ok)throw new Error(data.error||"review failed");
+   status.textContent=action+" recorded: "+data.review_id;
+   status.className="review-status ok";
+   await loadReviews();
+ }catch(error){status.textContent=String(error.message||error);status.className="review-status warn";}
+}
+function outcomePayload(){
+ const value=id=>document.getElementById(id).value;
+ const reviews=[...document.querySelectorAll(".review-item[data-review-id][data-signal-id]")].filter(item=>item.dataset.signalId===currentSignalId);
+ return {
+   review_id:reviews.length?reviews[reviews.length-1].dataset.reviewId:"",
+   observed_at:value("observedAt"),
+   status:value("outcomeStatus"),
+   execution_timestamp:value("executionTimestamp")||null,
+   entry_price:value("entryPrice")||null,
+   exit_timestamp:value("exitTimestamp")||null,
+   exit_price:value("exitPrice")||null,
+   quantity:value("quantity")||null,
+   fees:value("fees")||null,
+   slippage_cost:value("slippageCost")||null,
+   net_pnl:value("netPnl")||null,
+   note:value("outcomeNote")
+ };
+}
+async function submitOutcome(){
+ const status=document.getElementById("outcomeStatusMessage");
+ try{
+   const response=await fetch("/api/outcome",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(outcomePayload())});
+   const data=await response.json();
+   if(!response.ok)throw new Error(data.error||"outcome failed");
+   status.textContent="Outcome recorded: "+data.outcome_id;
+   status.className="review-status ok";
+   await loadReviews();
+ }catch(error){status.textContent=String(error.message||error);status.className="review-status warn";}
+}
+async function loadReviews(){
+ try{
+   const response=await fetch("/api/reviews",{cache:"no-store"});
+   if(!response.ok)return;
+   const data=await response.json();
+   const list=document.getElementById("reviewList");
+   const reviews=data.reviews||[], outcomes=data.outcomes||[];
+   if(!reviews.length&&!outcomes.length){list.innerHTML='<span class="muted">No review evidence recorded.</span>';return;}
+   list.innerHTML=reviews.map(item=>{
+     const linked=outcomes.filter(x=>x.review_id===item.review_id);
+     return '<div class="review-item" data-review-id="'+esc(item.review_id)+'" data-signal-id="'+esc(item.signal_id)+'"><b>'+esc(item.action)+'</b> · '+esc(item.reviewed_at)+' · '+esc(item.signal)+' '+esc(item.symbol)+'<br><span class="muted">'+esc(item.review_note||"No note")+'</span>'+(linked.length?'<br><span class="ok">Outcome: '+esc(linked[0].status)+'</span>':'')+'</div>';
+   }).join("");
+ }catch(_e){}
+}
+
 async function poll(){
  try{const r=await fetch("/api/snapshot",{cache:"no-store"});if(!r.ok)return;const s=await r.json();render(s)}
  catch(_e){}
 }
-if(location.protocol!=="file:"){poll();setInterval(poll,2000)}
+if(location.protocol!=="file:"){poll();loadReviews();setInterval(poll,2000);setInterval(loadReviews,3000)}
 </script>
 </body>
 </html>

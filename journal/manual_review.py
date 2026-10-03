@@ -346,6 +346,15 @@ class ManualReviewStore:
         }
         if key in existing:
             raise ValueError("duplicate manual-review event")
+        if isinstance(record, ManualOutcomeRecord):
+            if any(
+                isinstance(item, ManualOutcomeRecord)
+                and item.review_id == record.review_id
+                for item in self.read_events()
+            ):
+                raise ValueError(
+                    f"manual outcome already exists for review_id {record.review_id}"
+                )
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self.path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(record.to_dict(), sort_keys=True, separators=(",", ":")))
