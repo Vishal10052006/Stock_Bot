@@ -94,7 +94,7 @@ class OperatorSnapshotWriter:
                 "strategy": {"status": "WAITING"},
                 "risk": {"status": "STANDBY"},
                 "execution": {
-                    "mode": "PAPER_ONLY",
+                    "mode": "REAL_MONEY_MANUAL_REVIEW",
                     "broker_orders": 0,
                     "live_locked": True,
                 },
@@ -206,8 +206,8 @@ class OperatorSnapshotWriter:
             },
             "execution": {
                 "mode": "PAPER_ONLY",
-                "paper_order_status": order_status,
-                "trade_id": decision.trade_id,
+                "manual_execution_status": "PENDING_MANUAL_BUY_SELL",
+                "trade_id": None,
                 "broker_orders": 0,
                 "live_locked": True,
             },
@@ -222,7 +222,7 @@ class OperatorSnapshotWriter:
             "metrics": {
                 "model.prediction_count": self.prediction_count,
                 "strategy.signal_count": self.signal_count,
-                "execution.fill_count": self.fill_count,
+                "execution.manual_actions": 0,
             },
             "health": self._health("OBSERVED"),
             "events": list(self.events),
@@ -271,6 +271,7 @@ class OperatorSnapshotWriter:
                 "v1_fingerprint": v1_signal.as_dict()["fingerprint"],
                 "v1_authority": v1_signal.authority,
                 "broker_execution": False,
+                "manual_execution": True,
                 "authority": "OBSERVATION_ONLY",
             }],
         }
@@ -283,7 +284,7 @@ class OperatorSnapshotWriter:
             "prediction": {"status": terminal_state, "authority": "OBSERVATION"},
             "strategy": {"status": terminal_state, "authority": "OBSERVATION"},
             "risk": {"status": terminal_state, "authority": "GATE"},
-            "execution": {"status": "PAPER_ONLY", "authority": "LOCKED"},
+            "execution": {"status": "MANUAL_REAL_MONEY", "authority": "HUMAN_REVIEW"},
         }
 
     def _health(self, status: str) -> list[dict[str, str]]:
