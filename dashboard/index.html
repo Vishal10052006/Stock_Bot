@@ -38,6 +38,7 @@ footer{max-width:1180px;margin:18px auto 40px;padding:0 20px;color:var(--muted);
 <script>
 "use strict";
 const root=document.getElementById("root"),fresh=document.getElementById("fresh");
+let currentSignalId="";
 const esc=v=>String(v??"—").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const pct=v=>v==null?"—":(Number(v)*100).toFixed(1)+"%";
 const price=v=>v==null?"—":Number(v).toFixed(2);
@@ -53,6 +54,7 @@ function render(s){
    root.className="empty";root.textContent=(s.views&&s.views.scanner&&s.views.scanner.status)||"Waiting for the canonical V1 signal…";return;
  }
  const sig=String(v.signal||"WAIT"), cls=sig==="BUY"?"BUY":sig==="SELL"?"SELL":"WAIT";
+ currentSignalId=String(v.signal_id||"");
  const probs=v.prediction_evidence&&v.prediction_evidence.probabilities||{};
  const p={LONG_SUCCESS:probs.LONG_SUCCESS,SHORT_SUCCESS:probs.SHORT_SUCCESS,NO_EDGE:probs.NO_EDGE};
  const risk=(v.risk_conditions||[]).map(x=>'<div class="pill">'+esc(x)+'</div>').join("");
@@ -87,7 +89,7 @@ async function submitReview(action){
 }
 function outcomePayload(){
  const value=id=>document.getElementById(id).value;
- const reviews=document.querySelectorAll(".review-item[data-review-id]");
+ const reviews=[...document.querySelectorAll(".review-item[data-review-id][data-signal-id]")].filter(item=>item.dataset.signalId===currentSignalId);
  return {
    review_id:reviews.length?reviews[reviews.length-1].dataset.reviewId:"",
    observed_at:value("observedAt"),
@@ -124,7 +126,7 @@ async function loadReviews(){
    if(!reviews.length&&!outcomes.length){list.innerHTML='<span class="muted">No review evidence recorded.</span>';return;}
    list.innerHTML=reviews.map(item=>{
      const linked=outcomes.filter(x=>x.review_id===item.review_id);
-     return '<div class="review-item" data-review-id="'+esc(item.review_id)+'"><b>'+esc(item.action)+'</b> · '+esc(item.reviewed_at)+' · '+esc(item.signal)+' '+esc(item.symbol)+'<br><span class="muted">'+esc(item.review_note||"No note")+'</span>'+(linked.length?'<br><span class="ok">Outcome: '+esc(linked[0].status)+'</span>':'')+'</div>';
+     return '<div class="review-item" data-review-id="'+esc(item.review_id)+'" data-signal-id="'+esc(item.signal_id)+'"><b>'+esc(item.action)+'</b> · '+esc(item.reviewed_at)+' · '+esc(item.signal)+' '+esc(item.symbol)+'<br><span class="muted">'+esc(item.review_note||"No note")+'</span>'+(linked.length?'<br><span class="ok">Outcome: '+esc(linked[0].status)+'</span>':'')+'</div>';
    }).join("");
  }catch(_e){}
 }
