@@ -64,6 +64,8 @@ remains blocked rather than using virtual paper capital.
 The paper runtime may continue to exist for historical validation and testing.
 It is not the authority for the V1 manual real-money decision contract.
 
+The canonical real-market runtime is now exposed through trading.live.manual_review_runtime. It does not construct a virtual account, does not accept an initial-equity value, and does not create paper fills. It consumes the read-only Upstox risk-context provider plus an explicit RiskEngine and publishes observation-only dashboard state. The legacy paper orchestrator remains a compatibility implementation detail for the shared causal pipeline and for the historical paper path; the manual-review runtime attaches no paper engine.
+
 ## Verification
 
 `tests/trading/test_manual_decision_authority.py` verifies that:
@@ -71,4 +73,5 @@ It is not the authority for the V1 manual real-money decision contract.
 1. the V1 decision implementation lives outside `trading.paper`;
 2. no broker/order surface is exposed;
 3. synthetic account-state defaults are absent from the manual decision path;
-4. stale or invalid live risk context is rejected.
+4. stale or invalid live risk context is rejected;
+5. the V1 manual-review runtime attaches no virtual/paper account.
