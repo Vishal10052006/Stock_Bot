@@ -96,7 +96,7 @@ class OperatorSnapshotWriter:
                 "execution": {
                     "mode": "REAL_MONEY_MANUAL_REVIEW",
                     "broker_orders": 0,
-                    "live_locked": True,
+                    "automated_execution": False,
                 },
                 "performance": {
                     "initial_equity": self.initial_equity,
@@ -159,7 +159,7 @@ class OperatorSnapshotWriter:
         self.events[:] = self.events[-100:]
 
         payload = {
-            "mode": "live_market_paper",
+            "mode": "live_market_manual_review",
             "authority": "OBSERVATION_ONLY",
             "timestamp": timestamp.isoformat(),
             "session": {
@@ -180,7 +180,7 @@ class OperatorSnapshotWriter:
             },
             "v1_signal": v1_signal.as_dict(),
             "market": {
-                "status": "LIVE_PAPER_OBSERVED",
+                "status": "LIVE_MARKET_OBSERVED",
                 "symbol": str(candle.symbol).upper(),
                 "benchmark_symbol": self.benchmark_symbol.upper(),
                 "price": float(candle.close),
@@ -207,11 +207,11 @@ class OperatorSnapshotWriter:
                 "gross_exposure": float(gross_exposure),
             },
             "execution": {
-                "mode": "PAPER_ONLY",
+                "mode": "REAL_MONEY_MANUAL_REVIEW",
                 "manual_execution_status": "PENDING_MANUAL_BUY_SELL",
                 "trade_id": None,
                 "broker_orders": 0,
-                "live_locked": True,
+                "automated_execution": False,
             },
             "performance": {
                 "initial_equity": self.initial_equity,
@@ -256,7 +256,7 @@ class OperatorSnapshotWriter:
                 "strategy_reason": str(getattr(strategy, "rationale", "")),
                 "risk_status": str(decision.risk_status),
                 "risk_reason": str(decision.risk_reason),
-                "paper_order_status": decision.manual_execution_status,
+                "manual_execution_status": decision.manual_execution_status,
                 "trade_id": decision.trade_id,
                 "prediction_model_version": getattr(prediction, "model_version", self.model_version),
                 "calibration_version": getattr(prediction, "calibration_version", self.calibration_version),
