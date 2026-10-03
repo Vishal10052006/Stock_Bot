@@ -22,7 +22,7 @@ from ml.models.logistic import LogisticOutcomeModel
 from ml.preprocessing.pipeline import FeaturePreprocessor
 from trading.ab30_pipeline import MarketAnalysisResult
 from trading.market_bot_pipeline import build_market_analysis_from_market_bot
-from trading.live.manual_decision import build_live_money_decision
+from trading.live.manual_decision import LiveManualRiskContext, build_live_money_decision
 from trading.paper.causal_history import CausalCandleHistory
 from trading.paper.live_loop import LivePaperEngine, LivePaperSessionResult
 from research.integration.analysis_contract import ResearchAnalysisContext
@@ -83,6 +83,7 @@ class CanonicalLivePaperOrchestrator:
     config: CanonicalLivePaperConfig = CanonicalLivePaperConfig()
     research_context_provider: Callable[[pd.Timestamp], ResearchAnalysisContext] | None = None
     research_runtime: LiveResearchRuntime | None = None
+    risk_context_provider: Callable[[pd.Timestamp, str], LiveManualRiskContext] | None = None
 
     def __post_init__(self) -> None:
         """Reject incompatible dependencies before any network activity."""
@@ -328,13 +329,23 @@ class CanonicalLivePaperOrchestrator:
             # is forwarded to observers. This preserves the existing seam.
             decision = callback_result if callback_result is not None else None
         else:
+            risk_context = None
+            if self.risk_context_provider is not None:
+                risk_context = self.risk_context_provider(
+                    pd.Timestamp(prediction.timestamp),
+                    prediction.symbol,
+                )
+                if not isinstance(risk_context, LiveManualRiskContext):
+                    raise CanonicalLivePaperError(
+                        "risk context provider must return LiveManualRiskContext"
+                    )
+
             decision = build_live_money_decision(
                 prediction,
                 result,
                 candle,
                 self.paper_engine.risk_engine,
-                available_equity=self.paper_engine.config.initial_equity,
-                day_start_equity=self.paper_engine.config.initial_equity,
+                risk_context=risk_context,
             )
 
         if self.decision_observer is not None and decision is not None:
