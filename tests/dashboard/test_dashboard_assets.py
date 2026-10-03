@@ -8,8 +8,8 @@ def test_v1_dashboard_is_static_read_only_and_canonical():
     html = (root / "dashboard" / "index.html").read_text(encoding="utf-8")
 
     assert "STOCK_BOT" in html
-    assert "VERSION 1 / HUMAN REVIEW" in html
-    assert "BROKER EXECUTION: DISABLED" in html
+    assert "VERSION 1 / REAL-MONEY MANUAL REVIEW" in html
+    assert "BROKER AUTOMATION: OFF" in html
     assert "CANONICAL SIGNAL" in html
     assert "Prediction evidence" in html
     assert "News / Research" in html
