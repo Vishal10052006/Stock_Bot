@@ -7,7 +7,7 @@ It never creates, submits, modifies, or cancels a broker order.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 import pandas as pd
@@ -218,12 +218,7 @@ def build_live_money_decision(
             strategy_decision,
             f"Canonical ATR {atr_column} is invalid at the decision timestamp.",
         )
-    risk_context = risk_context.__class__(
-        **{
-            **risk_context.__dict__,
-            "atr": float(atr_value),
-        }
-    )
+    risk_context = replace(risk_context, atr=float(atr_value))
 
     try:
         build_candidate_from_strategy(strategy_decision, row)
