@@ -142,9 +142,35 @@ def build_parser() -> argparse.ArgumentParser:
 
 def _config_from_args(args: argparse.Namespace) -> RuntimeConfig:
     """Translate argparse output into immutable runtime configuration."""
+    mode = RuntimeMode(args.mode)
+    missing_identity = []
+    if not args.symbol or not args.symbol.strip():
+        missing_identity.append("symbol")
+    if not args.benchmark_symbol or not args.benchmark_symbol.strip():
+        missing_identity.append("benchmark-symbol")
+    if not args.model_version or not args.model_version.strip():
+        missing_identity.append("model-version")
+    if mode is RuntimeMode.LIVE_MANUAL_REVIEW and missing_identity:
+        raise ValueError(
+            "live-review requires explicit runtime identity: "
+            + ", ".join(missing_identity)
+        )
+
+    symbol = args.symbol.strip().upper() if args.symbol and args.symbol.strip() else "RELIANCE"
+    benchmark_symbol = (
+        args.benchmark_symbol.strip().upper()
+        if args.benchmark_symbol and args.benchmark_symbol.strip()
+        else "NIFTY50"
+    )
+    model_version = (
+        args.model_version.strip()
+        if args.model_version and args.model_version.strip()
+        else "phase9-logistic-v1"
+    )
+
     return RuntimeConfig(
-        mode=RuntimeMode(args.mode),
-        symbol=args.symbol.strip().upper(),
+        mode=mode,
+        symbol=symbol,
         candles=args.candles,
         input_path=Path(args.input_path) if args.input_path else None,
         quantity=args.quantity,
@@ -152,8 +178,8 @@ def _config_from_args(args: argparse.Namespace) -> RuntimeConfig:
         confirm_live=args.confirm_live,
         model_artifact=Path(args.model_artifact) if args.model_artifact else None,
         model_sha256=args.model_sha256,
-        model_version=args.model_version,
-        benchmark_symbol=args.benchmark_symbol.strip().upper(),
+        model_version=model_version,
+        benchmark_symbol=benchmark_symbol,
         session_id=args.session_id.strip(),
         initial_equity=args.initial_equity,
         max_candles=args.max_candles,
