@@ -26,6 +26,7 @@ from market.data.realtime_pipeline import RealtimeMarketDataPipeline
 from market.data.validation import MarketEventValidator
 from ml.prediction.artifacts import load_phase9_logistic_bundle
 from multi_stock.scanner import StockScannerStore
+from monitoring.operator_snapshot import OperatorSnapshotWriter
 from trading.paper.canonical_live_orchestrator import (
     CanonicalLivePaperConfig,
     CanonicalLivePaperOrchestrator,
@@ -253,11 +254,24 @@ def build_live_market_paper_session(
         config.operator_snapshot_path
         or config.output_dir / config.session_id / "operator_snapshot.json"
     )
+    # Keep the existing observation-only scanner contract and publish the
+    # richer authoritative operator snapshot to the same read-only endpoint.
     scanner_store.write_json(operator_snapshot_path)
+    operator_writer = OperatorSnapshotWriter(
+        path=operator_snapshot_path,
+        symbol=config.symbol,
+        benchmark_symbol=config.benchmark_symbol,
+        model_version=config.model_version,
+        calibration_version=manifest.provenance.calibration_version,
+        data_version=config.data_version,
+        feature_version=config.feature_version,
+        initial_equity=config.initial_equity,
+    )
+    operator_writer.write_initial()
 
     def observe_decision(decision, candle):
         scanner_store.observe(decision, price=float(candle.close))
-        scanner_store.write_json(operator_snapshot_path)
+        operator_writer.observe(decision, candle, paper_engine)
 
     orchestrator = CanonicalLivePaperOrchestrator(
         decision_observer=observe_decision,

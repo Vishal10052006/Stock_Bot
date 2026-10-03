@@ -18,7 +18,7 @@ main{min-width:0}.top{height:43px;border-bottom:1px solid var(--l);display:flex;
 <button class="active" data-tab="scanner">STOCK SCANNER</button><button data-tab="overview">OVERVIEW</button><button data-tab="agents">AGENTS</button><button data-tab="trace">PIPELINE TRACE</button><button data-tab="decision">DECISION INSPECTOR</button><button data-tab="models">MODEL OBSERVABILITY</button><button data-tab="health">SYSTEM HEALTH</button><button data-tab="learning">LEARNING LOOP</button><button data-tab="events">EVENT LOG</button>
 </div><div class="sidefoot">OPS UI v0.2<br>OBSERVATIONAL ONLY<br>NO ORDER AUTHORITY</div></aside>
 <main>
-<header class="top"><div class="title">STOCK_BOT / OPS_CENTER</div><div class="badges"><span class="badge yellow">● TELEMETRY: DEMO</span><span class="badge green">◉ CAUSALITY: ENFORCED</span><span class="badge">ENV: RESEARCH/PAPER</span><span class="badge">MKT: NSE</span><span class="badge">TF: 5M</span><span class="badge red">LIVE: LOCKED</span></div><div class="spacer"></div><div class="clock" id="clock"></div><div class="toolbar"><label class="file">LOAD JSON<input id="file" type="file" accept=".json,application/json"></label><button id="replay">REPLAY STEP</button><button id="demo">DEMO</button></div></header>
+<header class="top"><div class="title">STOCK_BOT / OPS_CENTER</div><div class="badges"><span class="badge yellow" id="telemetryBadge">● TELEMETRY: WAITING</span><span class="badge green" id="causalityBadge">◉ CAUSALITY: ENFORCED</span><span class="badge" id="envBadge">ENV: RESEARCH/PAPER</span><span class="badge" id="marketBadge">MKT: NSE</span><span class="badge" id="timeframeBadge">TF: 5M</span><span class="badge red" id="liveBadge">LIVE: LOCKED</span></div><div class="spacer"></div><div class="clock" id="clock"></div><div class="toolbar"><label class="file">LOAD JSON<input id="file" type="file" accept=".json,application/json"></label><button id="replay">REPLAY STEP</button><button id="demo">DEMO</button></div></header>
 <section class="content">
 <div class="strip"><div class="box"><div class="ey">FOCUS SYMBOL</div><div class="big cyan" id="focus">RELIANCE • 10:45 IST [M5]</div></div><div class="box"><div class="ey">TOTAL LATENCY</div><div class="big" id="latency">3.4ms</div></div><div class="box"><div class="ey">PIPELINE STATE</div><div class="big green" id="pipeline">CASCADE / REPLAY</div></div><div class="box"><div class="ey">TRADING AUTHORITY</div><div class="big red">LOCKED</div></div></div>
 <div class="banner"><span class="dot"></span><b>PIPELINE CASCADE</b><span>MonitoringRuntime telemetry surface</span><span class="cyan">CONTRACT RB-12.1</span><span class="lock red">LIVE TRADING: LOCKED / PAPER ONLY</span></div>
@@ -60,13 +60,61 @@ function renderScanner(){
  }
  root.innerHTML=rows.map(r=>'<div class="box" style="margin-bottom:6px"><div class="row"><span><b>'+esc(r.symbol)+'</b> • '+esc(r.regime)+'</span><span class="cyan">'+esc(r.timestamp)+'</span></div><div class="row"><span>↑ LONG '+(Number(r.long_success||0)*100).toFixed(1)+'%</span><span>↓ SHORT '+(Number(r.short_success||0)*100).toFixed(1)+'%</span><span>○ NO EDGE '+(Number(r.no_edge||0)*100).toFixed(1)+'%</span></div><div class="row"><span>Prediction: <b>'+esc(r.predicted_class)+'</b></span><span>Strategy: <b>'+esc(r.strategy)+'</b></span><span>Risk: <b>'+esc(r.risk_status)+'</b></span></div><div class="row"><span class="muted">'+esc(r.strategy_reason||r.risk_reason)+'</span><span>Paper: '+esc(r.paper_order_status||"NONE")+'</span></div></div>').join("");
 }
-function renderTrace(id){$(id).innerHTML=phases.map(p=>'<div class="node"><b>'+p[0]+'</b><strong>'+p[1]+'</strong><span class="'+(p[2].includes("LOCKED")?"red":p[2].includes("WAIT")?"yellow":"green")+'">'+p[2]+'</span><span>'+p[3]+'</span><div class="meter"><i style="width:'+(p[2].includes("COMPLETE")||p[2].includes("FROZEN")?"100":p[2].includes("ACTIVE")?"78":p[2].includes("IMPLEMENTED")?"90":"24")+'%"></i></div></div>').join("")}
+function renderTrace(id){
+ const names=[["01","research","RESEARCH","Information Gathering"],["02","analysis","ANALYSIS","Feature + Context"],["03","market","MARKET","Regime / Flow"],["04","prediction","PREDICTION","Forecast / Probability"],["05","strategy","STRATEGY","Decision Logic"],["06","risk","RISK","Hard Limits"],["07","execution","EXECUTION","Paper / Broker"]];
+ const live=snapshot.pipeline||{};
+ $(id).innerHTML=names.map(p=>{
+   const item=live[p[1]]||{};
+   const state=String(item.status||phases[Number(p[0])-1][2]);
+   const authority=String(item.authority||"");
+   const cls=state.includes("LOCK")||authority==="LOCKED"?"red":state.includes("WAIT")||state.includes("STANDBY")?"yellow":"green";
+   const width=state.includes("LOCK")?"24":state.includes("WAIT")?"24":state.includes("OBSERVED")||state.includes("COMPLETE")||state.includes("FROZEN")?"100":"70";
+   return '<div class="node"><b>'+p[0]+'</b><strong>'+p[2]+'</strong><span class="'+cls+'">'+esc(state)+'</span><span>'+esc(authority||p[3])+'</span><div class="meter"><i style="width:'+width+'%"></i></div></div>';
+ }).join("")
+}
 function renderAgents(id){$(id).innerHTML=agents.map(a=>'<div class="agent"><div class="agenttop"><span>'+a[0]+'</span><b class="agentname">'+a[1]+'</b><span class="state '+(a[2].includes("LOCKED")?"red":a[2].includes("WAIT")?"yellow":"green")+'">'+a[2]+'</span></div><div class="kvgrid">'+["DOCS","CAUSAL OBS","OOS FOLDS","STATUS"].map((x,i)=>'<div class="kv"><b>'+x+'</b><span>'+a[i+3]+'</span></div>').join("")+'</div></div>').join("")}
 function renderLearning(id){$(id).innerHTML=learn.map(s=>'<div class="stage"><b>'+s[0]+'</b><strong>'+s[1]+'</strong><span>'+s[2]+'</span><span>'+s[3]+'</span></div>').join("")}
-function renderFeed(id){$(id).innerHTML=events.map(e=>'<div class="event"><span class="muted">'+e[0]+'</span><span class="tag">'+e[1]+'</span><span>'+e[2]+'</span><span class="'+(e[3]==="LOCKED"?"red":"muted")+'">'+e[3]+'</span></div>').join("")}
-function renderHealth(id){$(id).innerHTML=health.map(h=>'<div class="health"><b>'+h[0]+'</b><span class="'+(h[1]==="HEALTHY"?"green":h[1]==="LOCKED"?"red":"yellow")+'">● '+h[1]+'</span><span class="muted">'+h[2]+'</span></div>').join("")}
+function renderFeed(id){
+ const live=Array.isArray(snapshot.events)&&snapshot.events.length?snapshot.events:null;
+ if(!live){$(id).innerHTML=events.map(e=>'<div class="event"><span class="muted">'+e[0]+'</span><span class="tag">'+e[1]+'</span><span>'+e[2]+'</span><span class="'+(e[3]==="LOCKED"?"red":"muted")+'">'+e[3]+'</span></div>').join("");return}
+ $(id).innerHTML=live.slice().reverse().map(e=>'<div class="event"><span class="muted">'+esc(e.timestamp||"")+'</span><span class="tag">'+esc(e.component||"SYS")+'</span><span>'+esc(e.message||"")+'</span><span class="muted">OBSERVED</span></div>').join("")
+}
+function renderHealth(id){
+ const source=Array.isArray(snapshot.health)&&snapshot.health.length?snapshot.health:health.map(x=>({component:x[0],status:x[1],message:x[2]}));
+ $(id).innerHTML=source.map(h=>{
+   const state=String(h.status||"UNKNOWN");
+   const cls=state==="LOCKED"?"red":state==="HEALTHY"||state==="ENFORCED"||state==="OBSERVED"?"green":"yellow";
+   return '<div class="health"><b>'+esc(h.component)+'</b><span class="'+cls+'">● '+esc(state)+'</span><span class="muted">'+esc(h.message)+'</span></div>';
+ }).join("")
+}
 function renderMetrics(){const m=snapshot.metrics||{};document.getElementById("modelMetrics").innerHTML=Object.entries(m).map(x=>'<div class="event"><span class="tag">'+x[0]+'</span><span></span><span>'+x[1]+'</span><span></span></div>').join("")||'<span class="muted">No telemetry.</span>'}
-function render(){renderScanner();document.getElementById("focus").textContent=(snapshot.focus_symbol||"RELIANCE")+" • "+(snapshot.decision_time||"10:45 IST")+" [M5]";document.getElementById("latency").textContent=(snapshot.total_latency_ms??3.4)+"ms";document.getElementById("pipeline").textContent=snapshot.pipeline_state||"CASCADE / REPLAY";document.getElementById("raw").textContent=JSON.stringify(snapshot,null,2);renderTrace("trace");renderTrace("trace2");renderAgents("agents");renderAgents("agents2");renderLearning("learning");renderLearning("learning2");renderFeed("feed");renderFeed("feed2");renderHealth("health");renderHealth("health2");renderMetrics();document.getElementById("decision").textContent=JSON.stringify({symbol:snapshot.focus_symbol||"RELIANCE",decision_time:snapshot.decision_time||"10:45:00+05:30",pipeline:"research→analysis→market→prediction→strategy→risk→execution",trade_authority:"LOCKED",mode:"paper_only",metrics:snapshot.metrics||{}},null,2)}
+function render(){
+ renderScanner();
+ const symbol=snapshot.market?.symbol||snapshot.focus_symbol||"RELIANCE";
+ const decisionTime=snapshot.market?.decision_time||snapshot.decision_time||"WAITING";
+ document.getElementById("focus").textContent=symbol+" • "+decisionTime+" [M5]";
+ document.getElementById("latency").textContent=snapshot.total_latency_ms==null?"—":snapshot.total_latency_ms+"ms";
+ document.getElementById("pipeline").textContent=snapshot.mode==="live_market_paper"?"LIVE PAPER / OBSERVED":(snapshot.pipeline_state||"CASCADE / REPLAY");
+ document.getElementById("telemetryBadge").textContent="● TELEMETRY: "+(snapshot.mode==="live_market_paper"?"LIVE PAPER":"DEMO");
+ document.getElementById("envBadge").textContent="ENV: "+(snapshot.mode==="live_market_paper"?"LIVE PAPER":"RESEARCH/PAPER");
+ document.getElementById("marketBadge").textContent="MKT: "+(snapshot.market?.benchmark_symbol||"NSE");
+ document.getElementById("timeframeBadge").textContent="TF: 5M";
+ document.getElementById("liveBadge").textContent="LIVE: LOCKED";
+ document.getElementById("raw").textContent=JSON.stringify(snapshot,null,2);
+ renderTrace("trace");renderTrace("trace2");
+ renderAgents("agents");renderAgents("agents2");
+ renderLearning("learning");renderLearning("learning2");
+ renderFeed("feed");renderFeed("feed2");
+ renderHealth("health");renderHealth("health2");renderMetrics();
+ document.getElementById("decision").textContent=JSON.stringify({
+   symbol:symbol,
+   decision_time:decisionTime,
+   pipeline:"research→analysis→market→prediction→strategy→risk→execution",
+   trade_authority:"LOCKED",
+   mode:snapshot.mode||"research_paper_demo",
+   metrics:snapshot.metrics||{}
+ },null,2)
+}
 document.querySelectorAll(".nav button").forEach(b=>b.addEventListener("click",function(){document.querySelectorAll(".nav button").forEach(x=>x.classList.remove("active"));this.classList.add("active");document.querySelectorAll(".tab").forEach(x=>x.classList.add("hidden"));document.getElementById("tab-"+this.dataset.tab).classList.remove("hidden")}));
 async function pollSnapshot(){
  try{
