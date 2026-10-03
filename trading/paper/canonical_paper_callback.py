@@ -93,6 +93,8 @@ def execute_prediction_to_paper(
             risk_reason="Canonical regime is not yet available.",
             paper_order_status=None,
             trade_id=None,
+            research_context=getattr(analysis, "research_context", None),
+            market_context=getattr(analysis, "market_context", None),
         )
 
     regime = str(regime)
@@ -266,6 +268,8 @@ def execute_prediction_to_paper(
         risk_reason=risk_decision.reason,
         paper_order_status=order.status.value,
         trade_id=trade_id,
+        research_context=getattr(analysis, "research_context", None),
+        market_context=getattr(analysis, "market_context", None),
     )
 
 
