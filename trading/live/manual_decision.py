@@ -36,6 +36,7 @@ class CanonicalLiveDecision:
     trade_id: str | None
     research_context: Any | None = None
     market_context: Any | None = None
+    risk_context: LiveManualRiskContext | None = None
 
 
 def _risk_context_block(
@@ -54,6 +55,7 @@ def _risk_context_block(
         trade_id=None,
         research_context=getattr(analysis, "research_context", None),
         market_context=getattr(analysis, "market_context", None),
+        risk_context=None,
     )
 
 
@@ -119,6 +121,7 @@ def build_live_money_decision(
             trade_id=None,
             research_context=getattr(analysis, "research_context", None),
             market_context=getattr(analysis, "market_context", None),
+            risk_context=None,
         )
 
     strategy_input = StrategyInput(
@@ -155,6 +158,7 @@ def build_live_money_decision(
             trade_id=None,
             research_context=getattr(analysis, "research_context", None),
             market_context=getattr(analysis, "market_context", None),
+            risk_context=None,
         )
 
     if risk_context is None:
@@ -202,6 +206,7 @@ def build_live_money_decision(
             trade_id=None,
             research_context=getattr(analysis, "research_context", None),
             market_context=getattr(analysis, "market_context", None),
+            risk_context=risk_context,
         )
 
     assessment = evaluate_strategy_candidate_risk(
@@ -242,6 +247,7 @@ def build_live_money_decision(
             trade_id=None,
             research_context=getattr(analysis, "research_context", None),
             market_context=getattr(analysis, "market_context", None),
+            risk_context=risk_context,
         )
 
     return CanonicalLiveDecision(
@@ -253,6 +259,7 @@ def build_live_money_decision(
         trade_id=None,
         research_context=getattr(analysis, "research_context", None),
         market_context=getattr(analysis, "market_context", None),
+        risk_context=risk_context,
     )
 
 

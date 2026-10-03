@@ -51,7 +51,7 @@ class OperatorSnapshotWriter:
     calibration_version: str | None
     data_version: str
     feature_version: str
-    initial_equity: float
+    initial_equity: float | None = None
     events: list[dict[str, Any]] = field(default_factory=list)
     prediction_count: int = 0
     signal_count: int = 0
@@ -63,8 +63,8 @@ class OperatorSnapshotWriter:
             raise ValueError("symbol must not be empty")
         if not self.benchmark_symbol.strip():
             raise ValueError("benchmark_symbol must not be empty")
-        if self.initial_equity <= 0:
-            raise ValueError("initial_equity must be positive")
+        if self.initial_equity is not None and self.initial_equity <= 0:
+            raise ValueError("initial_equity must be positive when supplied")
 
     def write_initial(self) -> None:
         """Write an explicit waiting state before the first live-paper candle."""
@@ -99,9 +99,10 @@ class OperatorSnapshotWriter:
                     "automated_execution": False,
                 },
                 "performance": {
+                    "status": "PAPER_ACCOUNT_CONFIGURED" if self.initial_equity is not None else "ACCOUNT_STATE_UNAVAILABLE",
                     "initial_equity": self.initial_equity,
                     "equity": self.initial_equity,
-                    "total_return": 0.0,
+                    "total_return": 0.0 if self.initial_equity is not None else None,
                 },
                 "metrics": {
                     "model.prediction_count": 0,
@@ -140,11 +141,39 @@ class OperatorSnapshotWriter:
             if direction != "NO_TRADE" and decision.risk_status == "APPROVED"
             else "NO_MANUAL_ACTION"
         )
-        equity = self.initial_equity
-        realized_pnl = 0.0
-        unrealized_pnl = 0.0
-        gross_exposure = 0.0
-        total_return = 0.0
+        risk_context = getattr(decision, "risk_context", None)
+        if risk_context is not None:
+            performance = {
+                "status": "LIVE_ACCOUNT_OBSERVED",
+                "available_equity": float(risk_context.available_equity),
+                "day_start_equity": float(risk_context.day_start_equity),
+                "available_cash": float(risk_context.available_cash),
+                "peak_equity": float(risk_context.peak_equity),
+                "realized_pnl": float(risk_context.realized_pnl),
+                "unrealized_pnl": float(risk_context.unrealized_pnl),
+                "gross_exposure": float(risk_context.gross_exposure),
+                "open_positions": int(risk_context.open_positions),
+                "trades_today": int(risk_context.trades_today),
+                "as_of": pd.Timestamp(risk_context.as_of).isoformat(),
+                "source": str(risk_context.source),
+            }
+            equity = None
+            realized_pnl = float(risk_context.realized_pnl)
+            unrealized_pnl = float(risk_context.unrealized_pnl)
+            gross_exposure = float(risk_context.gross_exposure)
+            total_return = None
+        else:
+            performance = {
+                "status": "PAPER_ACCOUNT_CONFIGURED" if self.initial_equity is not None else "ACCOUNT_STATE_UNAVAILABLE",
+                "initial_equity": self.initial_equity,
+                "equity": self.initial_equity,
+                "total_return": 0.0 if self.initial_equity is not None else None,
+            }
+            equity = self.initial_equity
+            realized_pnl = 0.0
+            unrealized_pnl = 0.0
+            gross_exposure = 0.0
+            total_return = 0.0 if self.initial_equity is not None else None
 
         event = {
             "timestamp": timestamp.isoformat(),
@@ -213,13 +242,12 @@ class OperatorSnapshotWriter:
                 "broker_orders": 0,
                 "automated_execution": False,
             },
-            "performance": {
-                "initial_equity": self.initial_equity,
-                "equity": float(equity),
+            "performance": performance | {
+                "equity": None if equity is None else float(equity),
                 "realized_pnl": float(realized_pnl),
                 "unrealized_pnl": float(unrealized_pnl),
                 "gross_exposure": float(gross_exposure),
-                "total_return": float(total_return),
+                "total_return": None if total_return is None else float(total_return),
             },
             "metrics": {
                 "model.prediction_count": self.prediction_count,
