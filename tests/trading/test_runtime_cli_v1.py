@@ -60,12 +60,12 @@ def test_v1_live_review_cli_requires_explicit_runtime_identity(tmp_path: Path) -
         model_version="phase9-logistic-v1",
     )
 
-    with pytest.raises(ValueError, match="data_version"):
+    with pytest.raises(ValueError, match="data-version"):
         runtime_cli.dispatch(
             RuntimeConfig(**base, data_version="", feature_version="features-v1")
         )
 
-    with pytest.raises(ValueError, match="feature_version"):
+    with pytest.raises(ValueError, match="feature-version"):
         runtime_cli.dispatch(
             RuntimeConfig(**base, data_version="upstox-live-v1", feature_version="")
         )
