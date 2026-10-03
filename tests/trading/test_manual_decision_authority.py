@@ -104,6 +104,21 @@ def test_live_manual_risk_context_requires_fresh_observed_state() -> None:
     )
 
 
+def test_live_manual_risk_context_blocks_future_decision_timestamp() -> None:
+    observed_at = pd.Timestamp("2026-10-03T10:00:00+05:30")
+    context = _context(
+        as_of=observed_at - pd.Timedelta(seconds=1),
+    )
+
+    assert (
+        context.validation_error(
+            observed_at=observed_at,
+            decision_timestamp=observed_at + pd.Timedelta(seconds=1),
+        )
+        == "decision timestamp is in the future relative to risk observation"
+    )
+
+
 def test_live_manual_risk_context_blocks_stale_state() -> None:
     decision_time = pd.Timestamp("2026-10-03T10:00:00+05:30")
     context = _context(
