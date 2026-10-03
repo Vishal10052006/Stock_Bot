@@ -165,7 +165,11 @@ def build_live_money_decision(
             "Decision-time account/portfolio risk context was not supplied.",
         )
 
-    context_error = risk_context.validation_error(timestamp)
+    observed_at = pd.Timestamp.now(tz="UTC")
+    context_error = risk_context.validation_error(
+        observed_at=observed_at,
+        decision_timestamp=timestamp,
+    )
     if context_error is not None:
         return _risk_context_block(
             prediction,
