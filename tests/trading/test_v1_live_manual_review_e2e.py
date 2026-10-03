@@ -22,6 +22,7 @@ from trading.live.risk_context import LiveManualRiskContext
 from trading.paper.causal_history import CausalCandleHistory
 from trading.paper.canonical_live_orchestrator import CanonicalLivePaperOrchestrator
 from trading.risk.engine import RiskEngine
+from trading.strategy.models import StrategyDirection
 
 
 IST = ZoneInfo("Asia/Kolkata")
@@ -133,7 +134,9 @@ def test_v1_live_manual_review_pipeline_handoff_is_end_to_end(monkeypatch, tmp_p
             strategy=SimpleNamespace(
                 timestamp=prediction.timestamp,
                 symbol=prediction.symbol,
-                direction=SimpleNamespace(value="NO_TRADE"),
+                direction=StrategyDirection.NO_TRADE,
+                prediction_probability=None,
+                prediction_margin=None,
             ),
             risk_status="APPROVED",
             risk_reason="Test risk gate approved.",
