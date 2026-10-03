@@ -66,9 +66,11 @@ class OperatorSnapshotWriter:
             raise ValueError("benchmark_symbol must not be empty")
         if self.initial_equity is not None and self.initial_equity <= 0:
             raise ValueError("initial_equity must be positive when supplied")
+        if self.require_live_account_context and self.initial_equity is not None:
+            raise ValueError("V1 manual-review snapshots cannot accept synthetic initial_equity")
 
     def write_initial(self) -> None:
-        """Write an explicit waiting state before the first live-paper candle."""
+        """Write an explicit waiting state before the first live-review candle."""
         self._write(
             {
                 "mode": "live_market_manual_review",
@@ -99,12 +101,21 @@ class OperatorSnapshotWriter:
                     "broker_orders": 0,
                     "automated_execution": False,
                 },
-                "performance": {
-                    "status": "PAPER_ACCOUNT_CONFIGURED" if self.initial_equity is not None else "ACCOUNT_STATE_UNAVAILABLE",
-                    "initial_equity": self.initial_equity,
-                    "equity": self.initial_equity,
-                    "total_return": 0.0 if self.initial_equity is not None else None,
-                },
+                "performance": (
+                    {
+                        "status": "ACCOUNT_STATE_UNAVAILABLE",
+                        "initial_equity": None,
+                        "equity": None,
+                        "total_return": None,
+                    }
+                    if self.require_live_account_context
+                    else {
+                        "status": "PAPER_ACCOUNT_CONFIGURED" if self.initial_equity is not None else "ACCOUNT_STATE_UNAVAILABLE",
+                        "initial_equity": self.initial_equity,
+                        "equity": self.initial_equity,
+                        "total_return": 0.0 if self.initial_equity is not None else None,
+                    }
+                ),
                 "metrics": {
                     "model.prediction_count": 0,
                     "strategy.signal_count": 0,

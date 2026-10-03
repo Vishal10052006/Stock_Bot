@@ -230,3 +230,40 @@ def test_operator_snapshot_contains_only_observed_manual_review_state(tmp_path):
     assert payload["health"][2]["status"] == "ENFORCED"
     assert payload["events"]
     assert payload["fingerprint"]
+
+
+def test_v1_operator_snapshot_rejects_synthetic_initial_equity(tmp_path):
+    with pytest.raises(ValueError, match="synthetic initial_equity"):
+        OperatorSnapshotWriter(
+            path=tmp_path / "operator_snapshot.json",
+            symbol="RELIANCE",
+            benchmark_symbol="NIFTY50",
+            model_version="phase9-logistic-v1",
+            calibration_version="calibration-v1",
+            data_version="upstox-live-v1",
+            feature_version="v1.0",
+            initial_equity=100000.0,
+            require_live_account_context=True,
+        )
+
+
+def test_v1_operator_snapshot_waiting_state_has_no_synthetic_equity(tmp_path):
+    path = tmp_path / "operator_snapshot.json"
+    writer = OperatorSnapshotWriter(
+        path=path,
+        symbol="RELIANCE",
+        benchmark_symbol="NIFTY50",
+        model_version="phase9-logistic-v1",
+        calibration_version="calibration-v1",
+        data_version="upstox-live-v1",
+        feature_version="v1.0",
+        require_live_account_context=True,
+    )
+    writer.write_initial()
+
+    import json
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    assert payload["performance"]["status"] == "ACCOUNT_STATE_UNAVAILABLE"
+    assert payload["performance"]["initial_equity"] is None
+    assert payload["performance"]["equity"] is None
+    assert payload["performance"]["total_return"] is None

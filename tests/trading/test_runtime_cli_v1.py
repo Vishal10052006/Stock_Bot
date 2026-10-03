@@ -69,3 +69,28 @@ def test_v1_live_review_cli_requires_explicit_runtime_identity(tmp_path: Path) -
         runtime_cli.dispatch(
             RuntimeConfig(**base, data_version="upstox-live-v1", feature_version="")
         )
+
+
+def test_v1_parser_rejects_missing_symbol_benchmark_and_model_version() -> None:
+    parser = runtime_cli.build_parser()
+    with pytest.raises(ValueError, match="symbol"):
+        runtime_cli._config_from_args(parser.parse_args(["--mode", "live-review"]))
+
+    with pytest.raises(ValueError, match="benchmark-symbol"):
+        runtime_cli._config_from_args(
+            parser.parse_args([
+                "--mode", "live-review",
+                "--symbol", "RELIANCE",
+                "--model-version", "phase9-logistic-v1",
+                "--benchmark-symbol", "",
+            ])
+        )
+
+    with pytest.raises(ValueError, match="model-version"):
+        runtime_cli._config_from_args(
+            parser.parse_args([
+                "--mode", "live-review",
+                "--symbol", "RELIANCE",
+                "--benchmark-symbol", "NIFTY50",
+            ])
+        )
