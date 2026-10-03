@@ -71,7 +71,7 @@ def test_builds_buy_contract_with_trade_levels_and_rr():
     assert contract.target is not None
     assert contract.risk_reward is not None
     assert contract.risk_reward > 0
-    assert contract.authority == "HUMAN_REVIEW_ONLY"
+    assert contract.authority == "MANUAL_REAL_MONEY_REVIEW"
     assert contract.broker_execution is False
 
     payload = contract.as_dict()
