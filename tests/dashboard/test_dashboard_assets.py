@@ -24,6 +24,10 @@ def test_ops_dashboard_assets_are_present_and_safe():
 
 
 def test_dashboard_includes_screen_reviewer_surface():
+    """The reviewer surface is present in the static dashboard asset."""
+    root = Path(__file__).resolve().parents[2]
+    html = (root / "dashboard" / "index.html").read_text(encoding="utf-8")
+
     assert "SCREEN REVIEWER // OBSERVATION ONLY" in html
     assert "screen_review" in html
     assert "SCREEN ↔ MARKET RECONCILIATION" in html
