@@ -1,8 +1,8 @@
-"""Authoritative operator snapshot writer for the read-only Ops Center.
+"""Authoritative operator snapshot writer for the real-money manual-review surface.
 
-This module adapts already-produced live-paper decisions into one atomic JSON
-snapshot. It does not calculate trading decisions, change Risk/Safety state,
-submit broker orders, or unlock live execution.
+This module adapts an already-produced live decision into one atomic JSON
+snapshot. It does not calculate trading decisions or submit broker orders.
+The BUY/SELL action remains manual.
 """
 
 from __future__ import annotations
@@ -42,7 +42,7 @@ def _canonical(payload: dict[str, Any]) -> str:
 
 @dataclass(slots=True)
 class OperatorSnapshotWriter:
-    """Persist the latest real-market paper observation atomically."""
+    """Persist the latest real-market manual-review decision atomically."""
 
     path: Path
     symbol: str
@@ -70,7 +70,7 @@ class OperatorSnapshotWriter:
         """Write an explicit waiting state before the first live-paper candle."""
         self._write(
             {
-                "mode": "live_market_paper",
+                "mode": "live_market_manual_review",
                 "authority": "OBSERVATION_ONLY",
                 "timestamp": None,
                 "session": {
@@ -115,8 +115,8 @@ class OperatorSnapshotWriter:
             }
         )
 
-    def observe(self, decision: Any, candle: Any, paper_engine: Any) -> None:
-        """Publish one completed canonical live-paper decision."""
+    def observe(self, decision: Any, candle: Any, paper_engine: Any | None = None) -> None:
+        """Publish one completed canonical live-money manual-review decision."""
         prediction = decision.prediction
         timestamp = pd.Timestamp(prediction.timestamp)
         probabilities = _probabilities(prediction)
@@ -135,14 +135,16 @@ class OperatorSnapshotWriter:
 
         # Market context is carried by the strategy/analysis boundary when
         # available. The V1 adapter remains presentation-only.
-        order_status = decision.paper_order_status
-        if order_status == "FILLED":
-            self.fill_count += 1
-
-        equity, realized_pnl, unrealized_pnl, gross_exposure = paper_engine.runtime.account_snapshot(
-            {str(candle.symbol).upper(): float(candle.close)}
+        order_status = (
+            "MANUAL_BUY_SELL_REQUIRED"
+            if direction != "NO_TRADE" and decision.risk_status == "APPROVED"
+            else "NO_MANUAL_ACTION"
         )
-        total_return = (float(equity) - self.initial_equity) / self.initial_equity
+        equity = self.initial_equity
+        realized_pnl = 0.0
+        unrealized_pnl = 0.0
+        gross_exposure = 0.0
+        total_return = 0.0
 
         event = {
             "timestamp": timestamp.isoformat(),
@@ -150,7 +152,7 @@ class OperatorSnapshotWriter:
             "message": (
                 f"Prediction={getattr(prediction, 'predicted_class', 'UNKNOWN')} "
                 f"Strategy={direction} Risk={decision.risk_status} "
-                f"Paper={order_status or 'NONE'}"
+                f"ManualExecution={order_status}"
             ),
         }
         self.events.append(event)
