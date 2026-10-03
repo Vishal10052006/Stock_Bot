@@ -27,13 +27,13 @@ footer{max-width:1180px;margin:18px auto 40px;padding:0 20px;color:var(--muted);
 </head>
 <body>
 <header>
-  <div class="brand">STOCK_BOT</div><div class="sub">VERSION 1 / HUMAN REVIEW</div><div class="spacer"></div>
-  <span class="badge locked">BROKER EXECUTION: DISABLED</span><span class="badge" id="fresh">WAITING</span>
+  <div class="brand">STOCK_BOT</div><div class="sub">VERSION 1 / REAL-MONEY MANUAL REVIEW</div><div class="spacer"></div>
+  <span class="badge locked">MANUAL BUY/SELL • BROKER AUTOMATION: OFF</span><span class="badge" id="fresh">WAITING</span>
 </header>
 <main>
-  <div id="root" class="empty">Waiting for the canonical V1 signal…</div>
+  <div id="root" class="empty">Waiting for the canonical V1 real-money decision…</div>
 </main>
-<footer>READ-ONLY OBSERVATION SURFACE • BUY/SELL/WAIT IS PRESENTED FOR HUMAN REVIEW ONLY • NO ORDER COMMANDS</footer>
+<footer>REAL-MONEY DECISION SUPPORT • BUY/SELL/WAIT FOR MANUAL EXECUTION • NO BROKER ORDER COMMANDS</footer>
 <script>
 "use strict";
 const root=document.getElementById("root"),fresh=document.getElementById("fresh");
