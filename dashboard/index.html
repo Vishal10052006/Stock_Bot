@@ -39,6 +39,7 @@ footer{max-width:1180px;margin:18px auto 40px;padding:0 20px;color:var(--muted);
 "use strict";
 const root=document.getElementById("root"),fresh=document.getElementById("fresh");
 let currentSignalId="";
+let renderedSignalFingerprint="";
 const esc=v=>String(v??"—").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const pct=v=>v==null?"—":(Number(v)*100).toFixed(1)+"%";
 const price=v=>v==null?"—":Number(v).toFixed(2);
@@ -55,6 +56,13 @@ function render(s){
  }
  const sig=String(v.signal||"WAIT"), cls=sig==="BUY"?"BUY":sig==="SELL"?"SELL":"WAIT";
  currentSignalId=String(v.signal_id||"");
+ const fingerprint=String(v.fingerprint||"");
+ if(renderedSignalFingerprint===fingerprint){
+   fresh.textContent=v.is_expired?"EXPIRED":"VALID";
+   fresh.className="badge "+(v.is_expired?"locked":"");
+   return;
+ }
+ renderedSignalFingerprint=fingerprint;
  const probs=v.prediction_evidence&&v.prediction_evidence.probabilities||{};
  const p={LONG_SUCCESS:probs.LONG_SUCCESS,SHORT_SUCCESS:probs.SHORT_SUCCESS,NO_EDGE:probs.NO_EDGE};
  const risk=(v.risk_conditions||[]).map(x=>'<div class="pill">'+esc(x)+'</div>').join("");
