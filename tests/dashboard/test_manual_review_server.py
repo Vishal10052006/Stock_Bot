@@ -21,7 +21,7 @@ def _signal(*, valid_until=None) -> V1SignalContract:
         risk_reward=2.0,
         confidence=0.8,
         prediction_evidence={"probabilities": {"LONG_SUCCESS": 0.8, "SHORT_SUCCESS": 0.1, "NO_EDGE": 0.1}},
-        valid_until=valid_until or datetime(2026, 10, 3, 10, 0, tzinfo=timezone.utc),
+        valid_until=valid_until or datetime(2026, 10, 3, 18, 0, tzinfo=timezone.utc),
         technical_evidence=(),
         provenance={"strategy_version": "test"},
     )
@@ -64,7 +64,7 @@ def test_dashboard_rejects_accepting_expired_signal(tmp_path):
     snapshot = tmp_path / "snapshot.json"
     _snapshot(
         snapshot,
-        _signal(valid_until=datetime(2026, 10, 3, 8, 59, tzinfo=timezone.utc)),
+        _signal(valid_until=datetime(2026, 10, 3, 9, 30, tzinfo=timezone.utc)),
     )
     journal = ManualReviewJournal(ManualReviewStore(tmp_path / "journal.jsonl"))
 
@@ -73,7 +73,7 @@ def test_dashboard_rejects_accepting_expired_signal(tmp_path):
             snapshot_path=snapshot,
             journal=journal,
             action="ACCEPT",
-            reviewed_at=datetime(2026, 10, 3, 9, 5, tzinfo=timezone.utc),
+            reviewed_at=datetime(2026, 10, 3, 10, 0, tzinfo=timezone.utc),
             review_note="Too late.",
         )
 
