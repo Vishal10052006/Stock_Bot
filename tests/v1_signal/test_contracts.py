@@ -6,6 +6,7 @@ import pandas as pd
 import pytest
 
 from live_signal import LiveRiskState, LiveSignalEngine, LiveSignalInput, SignalFreshnessPolicy
+from multi_stock import StockScannerStore
 from v1_signal import V1Evidence, V1Signal, build_v1_signal
 
 
@@ -149,3 +150,20 @@ def test_contract_cannot_enable_broker_execution():
             valid_until=pd.Timestamp("2026-09-27T09:35:00Z"),
             broker_execution=True,
         )
+
+
+def test_scanner_consumes_canonical_v1_contract():
+    contract = build_v1_signal(
+        _live_signal(),
+        valid_until=pd.Timestamp("2026-09-27T09:35:00Z"),
+        supporting_factors=("Prediction and strategy aligned.",),
+        risk_conditions=("Risk gate approved.",),
+    )
+    row = StockScannerStore().observe({"v1_signal": contract})
+    assert row.display_signal == "BUY"
+    assert row.confidence == contract.confidence
+    assert row.valid_until == contract.valid_until.isoformat()
+    assert row.entry_reference == contract.entry
+    assert row.stop_reference == contract.stop_loss
+    assert row.target_reference == contract.target
+    assert row.authority == "OBSERVATION_ONLY"
