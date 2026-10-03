@@ -25,6 +25,7 @@ from trading.market_bot_pipeline import build_market_analysis_from_market_bot
 from trading.live.manual_decision import LiveManualRiskContext, build_live_money_decision
 from trading.paper.causal_history import CausalCandleHistory
 from trading.paper.live_loop import LivePaperEngine, LivePaperSessionResult
+from trading.risk.engine import RiskEngine
 from research.integration.analysis_contract import ResearchAnalysisContext
 from research.live.runtime import LiveResearchRuntime
 
@@ -72,7 +73,7 @@ class CanonicalLivePaperOrchestrator:
     market_bot: MarketBot
     model: LogisticOutcomeModel
     preprocessor: FeaturePreprocessor
-    paper_engine: LivePaperEngine
+    paper_engine: LivePaperEngine | None
     benchmark_history_provider: Callable[[pd.Timestamp], pd.DataFrame]
     benchmark_context_provider: Callable[[pd.Timestamp, pd.DataFrame], MarketContext]
     calibrator: IsotonicProbabilityCalibrator | None = None
@@ -84,6 +85,7 @@ class CanonicalLivePaperOrchestrator:
     research_context_provider: Callable[[pd.Timestamp], ResearchAnalysisContext] | None = None
     research_runtime: LiveResearchRuntime | None = None
     risk_context_provider: Callable[[pd.Timestamp, str], LiveManualRiskContext] | None = None
+    risk_engine: RiskEngine | None = None
 
     def __post_init__(self) -> None:
         """Reject incompatible dependencies before any network activity."""
@@ -95,8 +97,10 @@ class CanonicalLivePaperOrchestrator:
             raise TypeError("model must be LogisticOutcomeModel")
         if not isinstance(self.preprocessor, FeaturePreprocessor):
             raise TypeError("preprocessor must be FeaturePreprocessor")
-        if not isinstance(self.paper_engine, LivePaperEngine):
-            raise TypeError("paper_engine must be LivePaperEngine")
+        if self.paper_engine is not None and not isinstance(self.paper_engine, LivePaperEngine):
+            raise TypeError("paper_engine must be LivePaperEngine when supplied")
+        if self.paper_engine is None and not isinstance(self.risk_engine, RiskEngine):
+            raise TypeError("risk_engine is required when paper_engine is not supplied")
         if not self.model.is_fitted:
             raise CanonicalLivePaperError("model must be fitted before paper inference")
         if not self.preprocessor.is_fitted:
@@ -115,14 +119,15 @@ class CanonicalLivePaperOrchestrator:
             )
 
         expected_symbol = self.config.symbol.strip().upper()
-        if self.paper_engine.config.symbol != expected_symbol:
-            raise CanonicalLivePaperError(
-                "paper engine symbol must match orchestrator"
-            )
-        if self.paper_engine.config.target_trades != self.config.target_trades:
-            raise CanonicalLivePaperError(
-                "paper engine target_trades must match orchestrator"
-            )
+        if self.paper_engine is not None:
+            if self.paper_engine.config.symbol != expected_symbol:
+                raise CanonicalLivePaperError(
+                    "paper engine symbol must match orchestrator"
+                )
+            if self.paper_engine.config.target_trades != self.config.target_trades:
+                raise CanonicalLivePaperError(
+                    "paper engine target_trades must match orchestrator"
+                )
         if self.history is not None and self.history.symbol.strip().upper() != expected_symbol:
             raise CanonicalLivePaperError(
                 "candle history symbol must match orchestrator"
@@ -340,11 +345,18 @@ class CanonicalLivePaperOrchestrator:
                         "risk context provider must return LiveManualRiskContext"
                     )
 
+            risk_engine = self.risk_engine
+            if risk_engine is None and self.paper_engine is not None:
+                risk_engine = self.paper_engine.risk_engine
+            if risk_engine is None:
+                raise CanonicalLivePaperError(
+                    "risk engine is not configured for the canonical decision path"
+                )
             decision = build_live_money_decision(
                 prediction,
                 result,
                 candle,
-                self.paper_engine.risk_engine,
+                risk_engine,
                 risk_context=risk_context,
             )
 
@@ -352,6 +364,47 @@ class CanonicalLivePaperOrchestrator:
             self.decision_observer(decision, candle)
 
         return prediction
+
+    def run_manual_review(
+        self,
+        symbols: Iterable[str],
+        *,
+        max_candles: int | None = None,
+    ) -> int:
+        """Run the real-market manual-review loop without a paper account."""
+        if self.paper_engine is not None:
+            raise CanonicalLivePaperError(
+                "manual-review runtime must not attach a paper engine"
+            )
+        if max_candles is not None and max_candles <= 0:
+            raise ValueError("max_candles must be positive when supplied")
+
+        requested = tuple(
+            symbol.strip().upper()
+            for symbol in symbols
+            if symbol.strip()
+        )
+        expected = (self.config.symbol.strip().upper(),)
+        if requested != expected:
+            raise CanonicalLivePaperError(
+                "canonical manual-review runtime requires exactly one configured symbol"
+            )
+
+        if self.research_runtime is not None:
+            self.research_runtime.start()
+        self.market_data.start(requested)
+        produced = 0
+        try:
+            for candle in self.market_data.run():
+                self.process_candle(candle)
+                produced += 1
+                if max_candles is not None and produced >= max_candles:
+                    break
+        finally:
+            self.market_data.stop()
+            if self.research_runtime is not None:
+                self.research_runtime.stop()
+        return produced
 
     def run(self, symbols: Iterable[str]) -> LivePaperSessionResult:
         """Consume the realtime candle stream and finalize the paper session."""

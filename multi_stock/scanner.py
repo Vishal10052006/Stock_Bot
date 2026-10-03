@@ -393,15 +393,27 @@ class StockScannerStore:
             status="READY" if rows else "NO_DATA",
         )
 
-    def write_json(self, path: Path) -> StockScannerSnapshot:
-        """Atomically persist an observation-only operator snapshot."""
+    def write_json(
+        self,
+        path: Path,
+        *,
+        mode: str = "live_market_paper",
+    ) -> StockScannerSnapshot:
+        """Atomically persist an observation-only operator snapshot.
+
+        ``mode`` is explicit so the scanner never silently relabels a
+        real-market manual-review runtime as a paper session.
+        """
         snapshot = self.snapshot()
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
 
+        if not mode.strip():
+            raise ValueError("snapshot mode must not be empty")
+
         payload = {
             "timestamp": datetime.now(timezone.utc).isoformat(),
-            "mode": "live_market_paper",
+            "mode": mode.strip(),
             "authority": "OBSERVATION_ONLY",
             "focus_symbol": snapshot.rows[0].symbol if snapshot.rows else None,
             "views": {"scanner": snapshot.as_dict()},
