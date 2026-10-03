@@ -202,7 +202,7 @@ def test_v1_live_manual_review_pipeline_handoff_is_end_to_end(monkeypatch, tmp_p
 
     payload = json.loads(snapshot_path.read_text(encoding="utf-8"))
     assert payload["mode"] == "live_market_manual_review"
-    assert payload["execution"] == "REAL_MONEY_MANUAL_REVIEW"
+    assert payload["execution"]["mode"] == "REAL_MONEY_MANUAL_REVIEW"
     assert payload["performance"]["status"] == "LIVE_ACCOUNT_OBSERVED"
     assert payload["performance"]["available_equity"] == 125000.0
     assert payload["v1"]["manual_execution"] is True
