@@ -182,8 +182,15 @@ def test_operator_snapshot_contains_only_observed_manual_review_state(tmp_path):
     assert payload["risk"]["status"] == "APPROVED"
     assert payload["execution"]["manual_execution_status"] == "PENDING_MANUAL_BUY_SELL"
     assert payload["execution"]["broker_orders"] == 0
-    assert payload["performance"]["equity"] == 100000.0
-    assert payload["performance"]["total_return"] == 0.0
+    assert payload["performance"]["status"] == "LIVE_ACCOUNT_OBSERVED"
+    assert payload["performance"]["available_equity"] == 125000.0
+    assert payload["performance"]["day_start_equity"] == 120000.0
+    assert payload["performance"]["available_cash"] == 80000.0
+    assert payload["performance"]["realized_pnl"] == 1500.0
+    assert payload["performance"]["unrealized_pnl"] == 3500.0
+    assert payload["performance"]["gross_exposure"] == 45000.0
+    assert payload["performance"]["open_positions"] == 2
+    assert payload["performance"]["trades_today"] == 3
     assert payload["metrics"]["model.prediction_count"] == 1
     assert payload["metrics"]["execution.manual_actions"] == 0
     assert payload["health"][2]["status"] == "ENFORCED"
